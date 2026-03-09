@@ -5,6 +5,7 @@ import { EstoquePage } from '@/components/modules/EstoquePage';
 import { FinanceiroPage } from '@/components/modules/FinanceiroPage';
 import { CadastroPage } from '@/components/modules/CadastroPage';
 import { MarketingPage } from '@/components/modules/MarketingPage';
+import { AtualizarDadosPage } from '@/components/modules/AtualizarDadosPage';
 import type { ModuleName } from '@/lib/types';
 
 const Index = () => {
@@ -13,6 +14,7 @@ const Index = () => {
   const renderModule = () => {
     switch (activeModule) {
       case 'dashboard': return <DashboardPage />;
+      case 'atualizar': return <AtualizarDadosPage />;
       case 'estoque': return <EstoquePage />;
       case 'financeiro': return <FinanceiroPage />;
       case 'cadastro': return <CadastroPage />;

@@ -1,4 +1,4 @@
-import { BarChart3, Package, DollarSign, FileText, Megaphone, Settings } from 'lucide-react';
+import { BarChart3, Package, DollarSign, FileText, Megaphone, RefreshCw, Settings } from 'lucide-react';
 import type { ModuleName } from '@/lib/types';
 
 interface AppSidebarProps {
@@ -8,6 +8,7 @@ interface AppSidebarProps {
 
 const modules = [
   { id: 'dashboard' as ModuleName, label: 'Dashboard', icon: BarChart3 },
+  { id: 'atualizar' as ModuleName, label: 'Atualizar Dados', icon: RefreshCw },
   { id: 'estoque' as ModuleName, label: 'Estoque', icon: Package },
   { id: 'financeiro' as ModuleName, label: 'Financeiro', icon: DollarSign },
   { id: 'cadastro' as ModuleName, label: 'Ficha Técnica', icon: FileText },
