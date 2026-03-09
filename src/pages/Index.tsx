@@ -1,12 +1,31 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from 'react';
+import { AppSidebar } from '@/components/layout/AppSidebar';
+import { DashboardPage } from '@/components/modules/DashboardPage';
+import { EstoquePage } from '@/components/modules/EstoquePage';
+import { FinanceiroPage } from '@/components/modules/FinanceiroPage';
+import { CadastroPage } from '@/components/modules/CadastroPage';
+import { MarketingPage } from '@/components/modules/MarketingPage';
+import type { ModuleName } from '@/lib/types';
 
 const Index = () => {
+  const [activeModule, setActiveModule] = useState<ModuleName>('dashboard');
+
+  const renderModule = () => {
+    switch (activeModule) {
+      case 'dashboard': return <DashboardPage />;
+      case 'estoque': return <EstoquePage />;
+      case 'financeiro': return <FinanceiroPage />;
+      case 'cadastro': return <CadastroPage />;
+      case 'marketing': return <MarketingPage />;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <AppSidebar activeModule={activeModule} onModuleChange={setActiveModule} />
+      <main className="ml-64 p-8">
+        {renderModule()}
+      </main>
     </div>
   );
 };
