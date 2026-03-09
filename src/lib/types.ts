@@ -79,4 +79,43 @@ export interface AdsMetric {
   cpc: number;
 }
 
-export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing';
+export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar';
+
+export type MarketplaceId = 'ml1' | 'ml2' | 'ml3' | 'ml4' | 'tiny' | 'shopee' | 'amazon';
+
+export interface MarketplaceAccount {
+  id: MarketplaceId;
+  nome: string;
+  plataforma: string;
+  loja: string;
+  status: 'connected' | 'disconnected' | 'syncing';
+  ultimaSync?: string;
+  totalPedidos?: number;
+  faturamento?: number;
+}
+
+export interface Order {
+  id: string;
+  marketplace: MarketplaceId;
+  numeroPedido: string;
+  data: string;
+  comprador: string;
+  sku: string;
+  produto: string;
+  quantidade: number;
+  valorTotal: number;
+  statusPedido: 'pendente' | 'pago' | 'enviado' | 'entregue' | 'cancelado';
+  frete: number;
+  taxas: number;
+}
+
+export interface AdsCampaign {
+  campanha: string;
+  roasObjetivo: number;
+  investimento: number;
+  receita: number;
+  roasRealizado: number;
+  orcamentoDiario: number;
+  status: 'ativo' | 'pausado' | 'ajustar';
+  recomendacao: string;
+}
