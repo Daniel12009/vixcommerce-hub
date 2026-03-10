@@ -49,7 +49,8 @@ export function AtualizarDadosPage() {
       totalPedidos: 0,
       faturamento: 0,
     }]);
-    setNewAccount({ nome: '', plataforma: '', loja: '' });
+    setNewAccount({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
+    setShowSecrets(false);
     setDialogOpen(false);
   };
 
