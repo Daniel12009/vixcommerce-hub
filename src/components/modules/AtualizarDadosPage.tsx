@@ -169,6 +169,7 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
           <TabsTrigger value="ads">Performance Ads</TabsTrigger>
           <TabsTrigger value="graficos">Gráficos</TabsTrigger>
+          <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
         </TabsList>
 
         {/* Tab: Contas */}
