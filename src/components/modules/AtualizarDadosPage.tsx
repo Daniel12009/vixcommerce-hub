@@ -190,9 +190,14 @@ export function AtualizarDadosPage() {
                   )}
 
                   {account.status === 'disconnected' && (
-                    <button className="w-full mt-2 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors">
-                      Conectar Conta
-                    </button>
+                    <div className="flex gap-2 mt-2">
+                      <button className="flex-1 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors">
+                        Conectar Conta
+                      </button>
+                      <button onClick={() => handleRemoveAccount(account.id)} className="px-3 py-2 rounded-lg border border-[hsl(var(--vix-danger)/0.3)] text-[hsl(var(--vix-danger))] text-xs font-medium hover:bg-[hsl(var(--vix-danger)/0.1)] transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
               );
