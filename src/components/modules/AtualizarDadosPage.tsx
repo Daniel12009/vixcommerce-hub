@@ -132,10 +132,92 @@ export function AtualizarDadosPage() {
                     <Label>ID da Loja</Label>
                     <Input placeholder="Ex: VIXSTORE_PREM" value={newAccount.loja} onChange={e => setNewAccount(p => ({ ...p, loja: e.target.value }))} />
                   </div>
-                  <button onClick={handleAddAccount} disabled={!newAccount.nome || !newAccount.plataforma || !newAccount.loja} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                    <Plus className="w-4 h-4" />
-                    Adicionar
-                  </button>
+
+                  {/* Campos de API para Mercado Livre */}
+                  {newAccount.plataforma === 'Mercado Livre' && (
+                    <div className="space-y-3 pt-2 border-t border-border">
+                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <Key className="w-4 h-4 text-primary" />
+                        Credenciais da API (Mercado Livre)
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Obtenha as credenciais em{' '}
+                        <a href="https://developers.mercadolivre.com.br" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                          developers.mercadolivre.com.br
+                        </a>
+                      </p>
+                      <div className="space-y-2">
+                        <Label>Client ID (App ID)</Label>
+                        <Input placeholder="Ex: 1234567890" value={newAccount.clientId} onChange={e => setNewAccount(p => ({ ...p, clientId: e.target.value }))} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Client Secret</Label>
+                        <div className="relative">
+                          <Input
+                            type={showSecrets ? 'text' : 'password'}
+                            placeholder="Sua client secret"
+                            value={newAccount.clientSecret}
+                            onChange={e => setNewAccount(p => ({ ...p, clientSecret: e.target.value }))}
+                          />
+                          <button type="button" onClick={() => setShowSecrets(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                            {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Access Token</Label>
+                        <div className="relative">
+                          <Input
+                            type={showSecrets ? 'text' : 'password'}
+                            placeholder="APP_USR-..."
+                            value={newAccount.accessToken}
+                            onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Refresh Token</Label>
+                        <div className="relative">
+                          <Input
+                            type={showSecrets ? 'text' : 'password'}
+                            placeholder="TG-..."
+                            value={newAccount.refreshToken}
+                            onChange={e => setNewAccount(p => ({ ...p, refreshToken: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-[hsl(var(--vix-warning)/0.1)] border border-[hsl(var(--vix-warning)/0.2)]">
+                        <AlertTriangle className="w-4 h-4 text-[hsl(var(--vix-warning))] mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-muted-foreground">
+                          Para produção, recomendamos ativar o <strong>Lovable Cloud</strong> para armazenar credenciais de forma segura.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Campos de API para Tiny */}
+                  {newAccount.plataforma === 'Tiny' && (
+                    <div className="space-y-3 pt-2 border-t border-border">
+                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <Key className="w-4 h-4 text-primary" />
+                        Credenciais da API (Tiny ERP)
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Token da API</Label>
+                        <div className="relative">
+                          <Input
+                            type={showSecrets ? 'text' : 'password'}
+                            placeholder="Seu token Tiny"
+                            value={newAccount.accessToken}
+                            onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))}
+                          />
+                          <button type="button" onClick={() => setShowSecrets(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                            {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
