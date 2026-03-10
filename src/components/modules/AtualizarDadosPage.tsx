@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
 import { formatBRL } from '@/lib/utils-vix';
-import type { MarketplaceId } from '@/lib/types';
+import type { MarketplaceAccount, MarketplaceId } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
@@ -22,12 +26,35 @@ const campaignStatusColors: Record<string, string> = {
   ajustar: 'text-[hsl(var(--vix-danger))] bg-[hsl(var(--vix-danger)/0.1)]',
 };
 
-export function AtualizarDadosPage() {
-  const [syncingAccounts, setSyncingAccounts] = useState<Set<MarketplaceId>>(new Set());
-  const [filterMarketplace, setFilterMarketplace] = useState<MarketplaceId | 'all'>('all');
-  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+const plataformaOptions = ['Mercado Livre', 'Tiny', 'Shopee', 'Amazon', 'Magalu', 'Americanas', 'Shein'];
 
-  const accounts = mockMarketplaceAccounts;
+export function AtualizarDadosPage() {
+  const [accounts, setAccounts] = useState<MarketplaceAccount[]>([...mockMarketplaceAccounts]);
+  const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
+  const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
+  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '' });
+
+  const handleAddAccount = () => {
+    if (!newAccount.nome || !newAccount.plataforma || !newAccount.loja) return;
+    const id = `custom_${Date.now()}` as MarketplaceId;
+    setAccounts(prev => [...prev, {
+      id,
+      nome: newAccount.nome,
+      plataforma: newAccount.plataforma,
+      loja: newAccount.loja.toUpperCase().replace(/\s+/g, '_'),
+      status: 'disconnected' as const,
+      totalPedidos: 0,
+      faturamento: 0,
+    }]);
+    setNewAccount({ nome: '', plataforma: '', loja: '' });
+    setDialogOpen(false);
+  };
+
+  const handleRemoveAccount = (id: MarketplaceId) => {
+    setAccounts(prev => prev.filter(a => a.id !== id));
+  };
   const totalFaturamento = accounts.reduce((s, a) => s + (a.faturamento || 0), 0);
   const totalPedidos = accounts.reduce((s, a) => s + (a.totalPedidos || 0), 0);
   const connectedCount = accounts.filter(a => a.status === 'connected').length;
@@ -73,7 +100,43 @@ export function AtualizarDadosPage() {
 
         {/* Tab: Contas */}
         <TabsContent value="contas">
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-end gap-3 mb-4">
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-muted transition-colors">
+                  <Plus className="w-4 h-4" />
+                  Adicionar Conta
+                </button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Adicionar Nova Conta</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <Label>Nome da Conta</Label>
+                    <Input placeholder="Ex: VixStore Premium" value={newAccount.nome} onChange={e => setNewAccount(p => ({ ...p, nome: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Plataforma</Label>
+                    <Select value={newAccount.plataforma} onValueChange={v => setNewAccount(p => ({ ...p, plataforma: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Selecione a plataforma" /></SelectTrigger>
+                      <SelectContent>
+                        {plataformaOptions.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>ID da Loja</Label>
+                    <Input placeholder="Ex: VIXSTORE_PREM" value={newAccount.loja} onChange={e => setNewAccount(p => ({ ...p, loja: e.target.value }))} />
+                  </div>
+                  <button onClick={handleAddAccount} disabled={!newAccount.nome || !newAccount.plataforma || !newAccount.loja} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                    <Plus className="w-4 h-4" />
+                    Adicionar
+                  </button>
+                </div>
+              </DialogContent>
+            </Dialog>
             <button onClick={handleSyncAll} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity">
               <RefreshCw className="w-4 h-4" />
               Sincronizar Tudo
@@ -127,9 +190,14 @@ export function AtualizarDadosPage() {
                   )}
 
                   {account.status === 'disconnected' && (
-                    <button className="w-full mt-2 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors">
-                      Conectar Conta
-                    </button>
+                    <div className="flex gap-2 mt-2">
+                      <button className="flex-1 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors">
+                        Conectar Conta
+                      </button>
+                      <button onClick={() => handleRemoveAccount(account.id)} className="px-3 py-2 rounded-lg border border-[hsl(var(--vix-danger)/0.3)] text-[hsl(var(--vix-danger))] text-xs font-medium hover:bg-[hsl(var(--vix-danger)/0.1)] transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
               );
