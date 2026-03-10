@@ -39,6 +39,75 @@ export function AtualizarDadosPage() {
   const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
   const [showSecrets, setShowSecrets] = useState(false);
 
+  // Google Sheets state
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [sheetRange, setSheetRange] = useState('');
+  const [sheetData, setSheetData] = useState<string[][] | null>(null);
+  const [sheetInfo, setSheetInfo] = useState<{ title: string; sheets: string[] } | null>(null);
+  const [loadingSheet, setLoadingSheet] = useState(false);
+  const [savedSheets, setSavedSheets] = useState<{ url: string; name: string }[]>([
+    { url: 'https://docs.google.com/spreadsheets/d/1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms/edit', name: 'Planilha Principal' }
+  ]);
+
+  const extractSpreadsheetId = (url: string): string | null => {
+    const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    return match ? match[1] : null;
+  };
+
+  const handleLoadSheetInfo = async () => {
+    const spreadsheetId = extractSpreadsheetId(sheetUrl);
+    if (!spreadsheetId) {
+      toast.error('URL inválida. Cole a URL completa da planilha Google.');
+      return;
+    }
+    setLoadingSheet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-sheets', {
+        body: { action: 'info', spreadsheetId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSheetInfo({
+        title: data.properties?.title || 'Sem título',
+        sheets: data.sheets?.map((s: any) => s.properties?.title) || [],
+      });
+      if (data.sheets?.length > 0) {
+        setSheetRange(`${data.sheets[0].properties.title}!A1:Z100`);
+      }
+      toast.success(`Planilha "${data.properties?.title}" conectada!`);
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setLoadingSheet(false);
+    }
+  };
+
+  const handleReadSheet = async () => {
+    const spreadsheetId = extractSpreadsheetId(sheetUrl);
+    if (!spreadsheetId || !sheetRange) return;
+    setLoadingSheet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-sheets', {
+        body: { action: 'read', spreadsheetId, range: sheetRange },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSheetData(data.values || []);
+      toast.success(`${data.values?.length || 0} linhas carregadas!`);
+    } catch (err: any) {
+      toast.error(`Erro ao ler: ${err.message}`);
+    } finally {
+      setLoadingSheet(false);
+    }
+  };
+
+  const handleAddSheet = () => {
+    const id = extractSpreadsheetId(sheetUrl);
+    if (!id) return;
+    if (savedSheets.some(s => extractSpreadsheetId(s.url) === id)) return;
+    setSavedSheets(prev => [...prev, { url: sheetUrl, name: sheetInfo?.title || 'Planilha' }]);
+  };
+
   const handleAddAccount = () => {
     if (!newAccount.nome || !newAccount.plataforma || !newAccount.loja) return;
     const id = `custom_${Date.now()}` as MarketplaceId;
