@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
   pendente: { icon: Clock, label: 'Pendente', class: 'text-[hsl(var(--vix-warning))] bg-[hsl(var(--vix-warning)/0.1)]' },
@@ -36,6 +38,75 @@ export function AtualizarDadosPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
   const [showSecrets, setShowSecrets] = useState(false);
+
+  // Google Sheets state
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [sheetRange, setSheetRange] = useState('');
+  const [sheetData, setSheetData] = useState<string[][] | null>(null);
+  const [sheetInfo, setSheetInfo] = useState<{ title: string; sheets: string[] } | null>(null);
+  const [loadingSheet, setLoadingSheet] = useState(false);
+  const [savedSheets, setSavedSheets] = useState<{ url: string; name: string }[]>([
+    { url: 'https://docs.google.com/spreadsheets/d/1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms/edit', name: 'Planilha Principal' }
+  ]);
+
+  const extractSpreadsheetId = (url: string): string | null => {
+    const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    return match ? match[1] : null;
+  };
+
+  const handleLoadSheetInfo = async () => {
+    const spreadsheetId = extractSpreadsheetId(sheetUrl);
+    if (!spreadsheetId) {
+      toast.error('URL inválida. Cole a URL completa da planilha Google.');
+      return;
+    }
+    setLoadingSheet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-sheets', {
+        body: { action: 'info', spreadsheetId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSheetInfo({
+        title: data.properties?.title || 'Sem título',
+        sheets: data.sheets?.map((s: any) => s.properties?.title) || [],
+      });
+      if (data.sheets?.length > 0) {
+        setSheetRange(`${data.sheets[0].properties.title}!A1:Z100`);
+      }
+      toast.success(`Planilha "${data.properties?.title}" conectada!`);
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setLoadingSheet(false);
+    }
+  };
+
+  const handleReadSheet = async () => {
+    const spreadsheetId = extractSpreadsheetId(sheetUrl);
+    if (!spreadsheetId || !sheetRange) return;
+    setLoadingSheet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-sheets', {
+        body: { action: 'read', spreadsheetId, range: sheetRange },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSheetData(data.values || []);
+      toast.success(`${data.values?.length || 0} linhas carregadas!`);
+    } catch (err: any) {
+      toast.error(`Erro ao ler: ${err.message}`);
+    } finally {
+      setLoadingSheet(false);
+    }
+  };
+
+  const handleAddSheet = () => {
+    const id = extractSpreadsheetId(sheetUrl);
+    if (!id) return;
+    if (savedSheets.some(s => extractSpreadsheetId(s.url) === id)) return;
+    setSavedSheets(prev => [...prev, { url: sheetUrl, name: sheetInfo?.title || 'Planilha' }]);
+  };
 
   const handleAddAccount = () => {
     if (!newAccount.nome || !newAccount.plataforma || !newAccount.loja) return;
@@ -98,6 +169,7 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
           <TabsTrigger value="ads">Performance Ads</TabsTrigger>
           <TabsTrigger value="graficos">Gráficos</TabsTrigger>
+          <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
         </TabsList>
 
         {/* Tab: Contas */}
@@ -496,6 +568,150 @@ export function AtualizarDadosPage() {
             </div>
           </div>
         </TabsContent>
+        {/* Tab: Planilhas Google */}
+        <TabsContent value="planilhas">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Sidebar: planilhas salvas */}
+            <div className="space-y-4">
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
+                <h3 className="text-foreground font-semibold text-sm mb-3 flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-primary" />
+                  Planilhas Salvas
+                </h3>
+                <div className="space-y-2">
+                  {savedSheets.map((sheet, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setSheetUrl(sheet.url); setSheetData(null); setSheetInfo(null); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                        sheetUrl === sheet.url ? 'bg-primary/10 text-primary border border-primary/20' : 'hover:bg-muted text-foreground'
+                      }`}
+                    >
+                      <p className="font-medium truncate">{sheet.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{extractSpreadsheetId(sheet.url)?.slice(0, 20)}...</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
+                <h3 className="text-foreground font-semibold text-sm mb-3">Conectar Nova Planilha</h3>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">URL da Planilha Google</Label>
+                    <Input
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      value={sheetUrl}
+                      onChange={e => { setSheetUrl(e.target.value); setSheetInfo(null); setSheetData(null); }}
+                      className="text-xs"
+                    />
+                  </div>
+                  <button
+                    onClick={handleLoadSheetInfo}
+                    disabled={!sheetUrl || loadingSheet}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {loadingSheet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                    Conectar Planilha
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Main content */}
+            <div className="lg:col-span-2 space-y-4">
+              {sheetInfo && (
+                <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-foreground font-semibold">{sheetInfo.title}</h3>
+                      <p className="text-xs text-muted-foreground">{sheetInfo.sheets.length} aba(s): {sheetInfo.sheets.join(', ')}</p>
+                    </div>
+                    <button
+                      onClick={handleAddSheet}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors text-foreground"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Salvar
+                    </button>
+                  </div>
+
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs">Aba e Range</Label>
+                      <div className="flex gap-2">
+                        <Select value={sheetRange.split('!')[0] || ''} onValueChange={v => setSheetRange(`${v}!A1:Z100`)}>
+                          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Selecione a aba" /></SelectTrigger>
+                          <SelectContent>
+                            {sheetInfo.sheets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={sheetRange}
+                          onChange={e => setSheetRange(e.target.value)}
+                          placeholder="Aba!A1:Z100"
+                          className="text-xs"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleReadSheet}
+                      disabled={loadingSheet || !sheetRange}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {loadingSheet ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      Puxar Dados
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {sheetData && sheetData.length > 0 && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
+                  <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+                    <p className="text-sm font-semibold text-foreground">{sheetData.length} linhas carregadas</p>
+                    <span className="text-xs text-muted-foreground">Range: {sheetRange}</span>
+                  </div>
+                  <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                        <tr className="border-b border-border">
+                          {sheetData[0]?.map((header, i) => (
+                            <th key={i} className="text-left py-2.5 px-3 font-semibold text-muted-foreground text-xs whitespace-nowrap">
+                              {header || `Col ${i + 1}`}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sheetData.slice(1).map((row, ri) => (
+                          <tr key={ri} className="border-b border-border hover:bg-muted/30 transition-colors">
+                            {sheetData[0]?.map((_, ci) => (
+                              <td key={ci} className="py-2 px-3 text-foreground text-xs whitespace-nowrap">
+                                {row[ci] || ''}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {!sheetInfo && !sheetData && (
+                <div className="bg-card border border-border rounded-xl p-12 text-center animate-fade-in">
+                  <FileSpreadsheet className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-foreground font-semibold mb-2">Conecte uma Planilha Google</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    Cole a URL de uma planilha Google Sheets compartilhada com o service account para visualizar e sincronizar os dados.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
       </Tabs>
     </div>
   );
