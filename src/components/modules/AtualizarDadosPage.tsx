@@ -218,6 +218,11 @@ export function AtualizarDadosPage() {
                       </div>
                     </div>
                   )}
+
+                  <button onClick={handleAddAccount} disabled={!newAccount.nome || !newAccount.plataforma || !newAccount.loja} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                    <Plus className="w-4 h-4" />
+                    Adicionar
+                  </button>
                 </div>
               </DialogContent>
             </Dialog>
