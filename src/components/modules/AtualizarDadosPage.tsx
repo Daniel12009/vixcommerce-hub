@@ -34,7 +34,8 @@ export function AtualizarDadosPage() {
   const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '' });
+  const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
+  const [showSecrets, setShowSecrets] = useState(false);
 
   const handleAddAccount = () => {
     if (!newAccount.nome || !newAccount.plataforma || !newAccount.loja) return;
