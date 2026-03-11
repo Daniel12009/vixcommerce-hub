@@ -1,18 +1,30 @@
-import { DollarSign, TrendingUp, Percent } from 'lucide-react';
+import { DollarSign, TrendingUp, Percent, FileSpreadsheet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { mockFinancialItems } from '@/lib/mock-data';
 import { formatBRL, formatPercent } from '@/lib/utils-vix';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
 
 export function FinanceiroPage() {
-  const totalReceita = mockFinancialItems.reduce((s, i) => s + i.receita, 0);
-  const totalMargem = mockFinancialItems.reduce((s, i) => s + i.margemReal, 0);
+  const { financeiroItems } = useSheetsData();
+  const items = financeiroItems || mockFinancialItems;
+  const isFromSheet = !!financeiroItems;
+
+  const totalReceita = items.reduce((s, i) => s + i.receita, 0);
+  const totalMargem = items.reduce((s, i) => s + i.margemReal, 0);
   const margemMedia = totalReceita > 0 ? (totalMargem / totalReceita) * 100 : 0;
 
   return (
     <div>
       <PageHeader title="Financeiro" subtitle="Margem real por SKU (Receita - Impostos - Taxas - Custo - Frete)" />
+
+      {isFromSheet && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-[hsl(var(--vix-success)/0.1)] border border-[hsl(var(--vix-success)/0.2)] text-xs text-[hsl(var(--vix-success))]">
+          <FileSpreadsheet className="w-3.5 h-3.5" />
+          Dados importados da planilha Google ({items.length} itens)
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <KpiCard title="Receita Total" value={formatBRL(totalReceita)} change={14.3} icon={DollarSign} delay={0} />
@@ -20,11 +32,10 @@ export function FinanceiroPage() {
         <KpiCard title="Margem Média" value={formatPercent(margemMedia)} icon={Percent} delay={100} />
       </div>
 
-      {/* Margin chart */}
       <div className="bg-card border border-border rounded-xl p-6 mb-6 animate-fade-in" style={{ animationDelay: '150ms' }}>
         <h3 className="text-foreground font-semibold mb-4">Margem Real por SKU</h3>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={mockFinancialItems}>
+          <BarChart data={items}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="skuPrincipal" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
             <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} />
@@ -38,7 +49,6 @@ export function FinanceiroPage() {
         </ResponsiveContainer>
       </div>
 
-      {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in" style={{ animationDelay: '250ms' }}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -56,7 +66,7 @@ export function FinanceiroPage() {
               </tr>
             </thead>
             <tbody>
-              {mockFinancialItems.map((item) => (
+              {items.map((item) => (
                 <tr key={item.skuPrincipal} className="border-b border-border hover:bg-muted/30 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs text-primary font-semibold">{item.skuPrincipal}</td>
                   <td className="py-3 px-4 text-foreground">{item.nome}</td>

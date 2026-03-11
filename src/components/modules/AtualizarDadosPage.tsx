@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download, Settings2, ArrowRight, Check } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
@@ -13,6 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
+import {
+  type SheetConfig, type ModuloDestino,
+  CAMPOS_POR_MODULO, loadSheetConfigs, saveSheetConfigs,
+  extractSpreadsheetId, parseSheetRows,
+} from '@/lib/sheets-store';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
   pendente: { icon: Clock, label: 'Pendente', class: 'text-[hsl(var(--vix-warning))] bg-[hsl(var(--vix-warning)/0.1)]' },
@@ -30,6 +36,18 @@ const campaignStatusColors: Record<string, string> = {
 
 const plataformaOptions = ['Mercado Livre', 'Tiny', 'Shopee', 'Amazon', 'Magalu', 'Americanas', 'Shein'];
 
+const moduloLabels: Record<ModuloDestino, string> = {
+  estoque: 'Estoque',
+  financeiro: 'Financeiro',
+  vendas: 'Vendas / Pedidos',
+};
+
+const moduloColors: Record<ModuloDestino, string> = {
+  estoque: 'bg-[hsl(var(--vix-info)/0.1)] text-[hsl(var(--vix-info))]',
+  financeiro: 'bg-[hsl(var(--vix-success)/0.1)] text-[hsl(var(--vix-success))]',
+  vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
+};
+
 export function AtualizarDadosPage() {
   const [accounts, setAccounts] = useState<MarketplaceAccount[]>([...mockMarketplaceAccounts]);
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
@@ -40,19 +58,27 @@ export function AtualizarDadosPage() {
   const [showSecrets, setShowSecrets] = useState(false);
 
   // Google Sheets state
+  const [sheetConfigs, setSheetConfigs] = useState<SheetConfig[]>(() => loadSheetConfigs());
   const [sheetUrl, setSheetUrl] = useState('');
-  const [sheetRange, setSheetRange] = useState('');
-  const [sheetData, setSheetData] = useState<string[][] | null>(null);
   const [sheetInfo, setSheetInfo] = useState<{ title: string; sheets: string[] } | null>(null);
   const [loadingSheet, setLoadingSheet] = useState(false);
-  const [savedSheets, setSavedSheets] = useState<{ url: string; name: string }[]>([
-    { url: 'https://docs.google.com/spreadsheets/d/1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms/edit', name: 'Planilha Principal' }
-  ]);
+  const [selectedConfig, setSelectedConfig] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<string[][] | null>(null);
+  const [importingConfig, setImportingConfig] = useState<string | null>(null);
 
-  const extractSpreadsheetId = (url: string): string | null => {
-    const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    return match ? match[1] : null;
-  };
+  // New config form state
+  const [newConfigAba, setNewConfigAba] = useState('');
+  const [newConfigModulo, setNewConfigModulo] = useState<ModuloDestino>('estoque');
+  const [newConfigMapping, setNewConfigMapping] = useState<Record<string, string>>({});
+  const [showMappingDialog, setShowMappingDialog] = useState(false);
+  const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
+
+  const sheetsData = useSheetsData();
+
+  // Persist configs
+  useEffect(() => {
+    saveSheetConfigs(sheetConfigs);
+  }, [sheetConfigs]);
 
   const handleLoadSheetInfo = async () => {
     const spreadsheetId = extractSpreadsheetId(sheetUrl);
@@ -71,9 +97,6 @@ export function AtualizarDadosPage() {
         title: data.properties?.title || 'Sem título',
         sheets: data.sheets?.map((s: any) => s.properties?.title) || [],
       });
-      if (data.sheets?.length > 0) {
-        setSheetRange(`${data.sheets[0].properties.title}!A1:Z100`);
-      }
       toast.success(`Planilha "${data.properties?.title}" conectada!`);
     } catch (err: any) {
       toast.error(`Erro: ${err.message}`);
@@ -82,44 +105,122 @@ export function AtualizarDadosPage() {
     }
   };
 
-  const handleReadSheet = async () => {
+  const handleFetchHeadersForMapping = async (abaNome: string) => {
     const spreadsheetId = extractSpreadsheetId(sheetUrl);
-    if (!spreadsheetId || !sheetRange) return;
+    if (!spreadsheetId) return;
     setLoadingSheet(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId, range: sheetRange },
+        body: { action: 'read', spreadsheetId, range: `${abaNome}!1:1` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      setSheetData(data.values || []);
-      toast.success(`${data.values?.length || 0} linhas carregadas!`);
+      const headers = data.values?.[0] || [];
+      setMappingHeaders(headers);
+      setNewConfigMapping({});
+      setShowMappingDialog(true);
     } catch (err: any) {
-      toast.error(`Erro ao ler: ${err.message}`);
+      toast.error(`Erro ao ler cabeçalhos: ${err.message}`);
     } finally {
       setLoadingSheet(false);
     }
   };
 
-  const handleAddSheet = () => {
-    const id = extractSpreadsheetId(sheetUrl);
-    if (!id) return;
-    if (savedSheets.some(s => extractSpreadsheetId(s.url) === id)) return;
-    setSavedSheets(prev => [...prev, { url: sheetUrl, name: sheetInfo?.title || 'Planilha' }]);
+  const handleSaveConfig = () => {
+    const spreadsheetId = extractSpreadsheetId(sheetUrl);
+    if (!spreadsheetId || !newConfigAba || !newConfigModulo) return;
+
+    const campos = CAMPOS_POR_MODULO[newConfigModulo];
+    const obrigatorios = campos.filter(c => c.obrigatorio);
+    const faltando = obrigatorios.filter(c => !newConfigMapping[c.key]);
+    if (faltando.length > 0) {
+      toast.error(`Mapeie os campos obrigatórios: ${faltando.map(f => f.label).join(', ')}`);
+      return;
+    }
+
+    const config: SheetConfig = {
+      id: `${spreadsheetId}_${newConfigAba}_${Date.now()}`,
+      url: sheetUrl,
+      nome: `${sheetInfo?.title || 'Planilha'} — ${newConfigAba}`,
+      spreadsheetId,
+      abaNome: newConfigAba,
+      moduloDestino: newConfigModulo,
+      mapeamento: { ...newConfigMapping },
+    };
+
+    setSheetConfigs(prev => [...prev, config]);
+    setShowMappingDialog(false);
+    setNewConfigMapping({});
+    setNewConfigAba('');
+    toast.success(`Configuração salva: ${newConfigAba} → ${moduloLabels[newConfigModulo]}`);
   };
 
+  const handleRemoveConfig = (id: string) => {
+    setSheetConfigs(prev => prev.filter(c => c.id !== id));
+    if (selectedConfig === id) setSelectedConfig(null);
+  };
+
+  const handleImportConfig = async (config: SheetConfig) => {
+    setImportingConfig(config.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-sheets', {
+        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A1:Z5000` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const allRows = data.values || [];
+      if (allRows.length < 2) {
+        toast.error('Planilha sem dados (precisa de cabeçalho + pelo menos 1 linha).');
+        return;
+      }
+
+      const headers = allRows[0];
+      const rows = allRows.slice(1);
+      const parsed = parseSheetRows(headers, rows, config.mapeamento);
+
+      if (config.moduloDestino === 'estoque') {
+        sheetsData.setEstoqueFromSheet(parsed);
+      } else if (config.moduloDestino === 'financeiro') {
+        sheetsData.setFinanceiroFromSheet(parsed);
+      }
+
+      // Update last sync
+      setSheetConfigs(prev => prev.map(c =>
+        c.id === config.id ? { ...c, ultimaSync: new Date().toLocaleString('pt-BR') } : c
+      ));
+
+      toast.success(`${parsed.length} linhas importadas para ${moduloLabels[config.moduloDestino]}!`);
+    } catch (err: any) {
+      toast.error(`Erro ao importar: ${err.message}`);
+    } finally {
+      setImportingConfig(null);
+    }
+  };
+
+  const handlePreviewConfig = async (config: SheetConfig) => {
+    setSelectedConfig(config.id);
+    setLoadingSheet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-sheets', {
+        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A1:Z20` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setPreviewData(data.values || []);
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+      setPreviewData(null);
+    } finally {
+      setLoadingSheet(false);
+    }
+  };
+
+  // === Original marketplace logic ===
   const handleAddAccount = () => {
     if (!newAccount.nome || !newAccount.plataforma || !newAccount.loja) return;
     const id = `custom_${Date.now()}` as MarketplaceId;
-    setAccounts(prev => [...prev, {
-      id,
-      nome: newAccount.nome,
-      plataforma: newAccount.plataforma,
-      loja: newAccount.loja.toUpperCase().replace(/\s+/g, '_'),
-      status: 'disconnected' as const,
-      totalPedidos: 0,
-      faturamento: 0,
-    }]);
+    setAccounts(prev => [...prev, { id, nome: newAccount.nome, plataforma: newAccount.plataforma, loja: newAccount.loja.toUpperCase().replace(/\s+/g, '_'), status: 'disconnected' as const, totalPedidos: 0, faturamento: 0 }]);
     setNewAccount({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
     setShowSecrets(false);
     setDialogOpen(false);
@@ -128,6 +229,7 @@ export function AtualizarDadosPage() {
   const handleRemoveAccount = (id: MarketplaceId) => {
     setAccounts(prev => prev.filter(a => a.id !== id));
   };
+
   const totalFaturamento = accounts.reduce((s, a) => s + (a.faturamento || 0), 0);
   const totalPedidos = accounts.reduce((s, a) => s + (a.totalPedidos || 0), 0);
   const connectedCount = accounts.filter(a => a.status === 'connected').length;
@@ -139,11 +241,7 @@ export function AtualizarDadosPage() {
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
     setTimeout(() => {
-      setSyncingAccounts(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      setSyncingAccounts(prev => { const next = new Set(prev); next.delete(id); return next; });
     }, 2500);
   };
 
@@ -155,22 +253,336 @@ export function AtualizarDadosPage() {
     <div>
       <PageHeader title="Atualizar Dados" subtitle="Sincronização de vendas e gestão de marketplaces" />
 
-      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <KpiCard title="Faturamento Total" value={formatBRL(totalFaturamento)} icon={DollarSign} delay={0} />
         <KpiCard title="Total Pedidos" value={totalPedidos.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
         <KpiCard title="Contas Conectadas" value={`${connectedCount}/${accounts.length}`} icon={Wifi} delay={100} />
-        <KpiCard title="Marketplaces" value={new Set(accounts.map(a => a.plataforma)).size.toString()} icon={Package} delay={150} />
+        <KpiCard title="Planilhas Configuradas" value={String(sheetConfigs.length)} icon={FileSpreadsheet} delay={150} />
       </div>
 
-      <Tabs defaultValue="contas" className="space-y-6">
+      <Tabs defaultValue="planilhas" className="space-y-6">
         <TabsList className="bg-card border border-border">
+          <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
           <TabsTrigger value="contas">Contas & Sync</TabsTrigger>
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
           <TabsTrigger value="ads">Performance Ads</TabsTrigger>
           <TabsTrigger value="graficos">Gráficos</TabsTrigger>
-          <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
         </TabsList>
+
+        {/* Tab: Planilhas Google */}
+        <TabsContent value="planilhas">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left: Configs list + Add new */}
+            <div className="space-y-4">
+              {/* Saved configs */}
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
+                <h3 className="text-foreground font-semibold text-sm mb-3 flex items-center gap-2">
+                  <Settings2 className="w-4 h-4 text-primary" />
+                  Fontes Configuradas
+                </h3>
+                {sheetConfigs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhuma fonte configurada. Conecte uma planilha abaixo.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {sheetConfigs.map(config => (
+                      <div
+                        key={config.id}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors border ${
+                          selectedConfig === config.id ? 'border-primary/30 bg-primary/5' : 'border-transparent hover:bg-muted'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <button onClick={() => handlePreviewConfig(config)} className="flex-1 text-left">
+                            <p className="font-medium text-foreground truncate text-xs">{config.nome}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${moduloColors[config.moduloDestino]}`}>
+                                {moduloLabels[config.moduloDestino]}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">Aba: {config.abaNome}</span>
+                            </div>
+                            {config.ultimaSync && (
+                              <p className="text-[10px] text-muted-foreground mt-1">Última sync: {config.ultimaSync}</p>
+                            )}
+                          </button>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => handleImportConfig(config)}
+                              disabled={importingConfig === config.id}
+                              className="p-1 rounded hover:bg-primary/10 text-primary transition-colors"
+                              title="Importar dados"
+                            >
+                              {importingConfig === config.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleRemoveConfig(config.id)}
+                              className="p-1 rounded hover:bg-[hsl(var(--vix-danger)/0.1)] text-muted-foreground hover:text-[hsl(var(--vix-danger))] transition-colors"
+                              title="Remover"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Import all button */}
+                {sheetConfigs.length > 0 && (
+                  <button
+                    onClick={() => sheetConfigs.forEach(c => handleImportConfig(c))}
+                    disabled={!!importingConfig}
+                    className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${importingConfig ? 'animate-spin' : ''}`} />
+                    Importar Tudo
+                  </button>
+                )}
+              </div>
+
+              {/* Connect new sheet */}
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
+                <h3 className="text-foreground font-semibold text-sm mb-3 flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-primary" />
+                  Adicionar Fonte
+                </h3>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">URL da Planilha Google</Label>
+                    <Input
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      value={sheetUrl}
+                      onChange={e => { setSheetUrl(e.target.value); setSheetInfo(null); }}
+                      className="text-xs"
+                    />
+                  </div>
+                  <button
+                    onClick={handleLoadSheetInfo}
+                    disabled={!sheetUrl || loadingSheet}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-colors disabled:opacity-50"
+                  >
+                    {loadingSheet && !showMappingDialog ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                    Conectar Planilha
+                  </button>
+
+                  {/* After connection: pick tab + module */}
+                  {sheetInfo && (
+                    <div className="space-y-3 pt-3 border-t border-border">
+                      <p className="text-xs font-medium text-foreground">{sheetInfo.title}</p>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Aba da Planilha</Label>
+                        <Select value={newConfigAba} onValueChange={v => setNewConfigAba(v)}>
+                          <SelectTrigger className="text-xs"><SelectValue placeholder="Selecione a aba" /></SelectTrigger>
+                          <SelectContent>
+                            {sheetInfo.sheets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Destino dos Dados</Label>
+                        <Select value={newConfigModulo} onValueChange={v => setNewConfigModulo(v as ModuloDestino)}>
+                          <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="estoque">📦 Estoque</SelectItem>
+                            <SelectItem value="financeiro">💰 Financeiro</SelectItem>
+                            <SelectItem value="vendas">🛒 Vendas / Pedidos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <button
+                        onClick={() => newConfigAba && handleFetchHeadersForMapping(newConfigAba)}
+                        disabled={!newConfigAba || loadingSheet}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" />
+                        Mapear Colunas
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Preview / Mapping Dialog */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Mapping Dialog */}
+              {showMappingDialog && (
+                <div className="bg-card border border-primary/20 rounded-xl p-5 animate-fade-in">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-foreground font-semibold text-sm">Mapear Colunas</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Aba: <strong>{newConfigAba}</strong> → <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${moduloColors[newConfigModulo]}`}>{moduloLabels[newConfigModulo]}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {CAMPOS_POR_MODULO[newConfigModulo].map(campo => (
+                      <div key={campo.key} className="flex items-center gap-3">
+                        <div className="w-1/3">
+                          <span className="text-xs text-foreground">
+                            {campo.label}
+                            {campo.obrigatorio && <span className="text-[hsl(var(--vix-danger))] ml-0.5">*</span>}
+                          </span>
+                        </div>
+                        <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        <Select
+                          value={newConfigMapping[campo.key] || ''}
+                          onValueChange={v => setNewConfigMapping(prev => ({ ...prev, [campo.key]: v }))}
+                        >
+                          <SelectTrigger className="text-xs flex-1">
+                            <SelectValue placeholder="Selecione coluna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Não mapear —</SelectItem>
+                            {mappingHeaders.map(h => (
+                              <SelectItem key={h} value={h}>{h}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {newConfigMapping[campo.key] && newConfigMapping[campo.key] !== '__none__' && (
+                          <Check className="w-4 h-4 text-[hsl(var(--vix-success))] flex-shrink-0" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => { setShowMappingDialog(false); setNewConfigMapping({}); }}
+                      className="flex-1 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleSaveConfig}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Salvar Configuração
+                    </button>
+                  </div>
+
+                  {/* Show available headers */}
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <p className="text-[10px] text-muted-foreground mb-2">Colunas encontradas na planilha:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {mappingHeaders.map(h => (
+                        <span key={h} className="px-2 py-0.5 rounded-full bg-muted text-[10px] text-muted-foreground font-mono">{h}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview of selected config */}
+              {selectedConfig && previewData && previewData.length > 0 && !showMappingDialog && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
+                  <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">Preview</p>
+                      {(() => {
+                        const cfg = sheetConfigs.find(c => c.id === selectedConfig);
+                        return cfg ? (
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${moduloColors[cfg.moduloDestino]}`}>
+                            {moduloLabels[cfg.moduloDestino]}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+                    <span className="text-xs text-muted-foreground">{previewData.length - 1} linhas (preview)</span>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                        <tr className="border-b border-border">
+                          {previewData[0]?.map((header, i) => {
+                            const cfg = sheetConfigs.find(c => c.id === selectedConfig);
+                            const isMapped = cfg && Object.values(cfg.mapeamento).includes(header);
+                            return (
+                              <th key={i} className={`text-left py-2.5 px-3 font-semibold text-xs whitespace-nowrap ${
+                                isMapped ? 'text-primary' : 'text-muted-foreground'
+                              }`}>
+                                {header || `Col ${i + 1}`}
+                                {isMapped && <span className="ml-1">✓</span>}
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewData.slice(1).map((row, ri) => (
+                          <tr key={ri} className="border-b border-border hover:bg-muted/30 transition-colors">
+                            {previewData[0]?.map((_, ci) => (
+                              <td key={ci} className="py-2 px-3 text-foreground text-xs whitespace-nowrap">
+                                {row[ci] || ''}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Status cards for imported data */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`bg-card border rounded-xl p-4 animate-fade-in ${sheetsData.estoqueItems ? 'border-[hsl(var(--vix-success)/0.3)]' : 'border-border'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-[hsl(var(--vix-info))]" />
+                      <span className="text-sm font-medium text-foreground">Estoque</span>
+                    </div>
+                    {sheetsData.estoqueItems ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[hsl(var(--vix-success))]">{sheetsData.estoqueItems.length} itens importados</span>
+                        <button onClick={sheetsData.clearEstoque} className="text-[10px] text-muted-foreground hover:text-[hsl(var(--vix-danger))]">Limpar</button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Usando dados mock</span>
+                    )}
+                  </div>
+                </div>
+                <div className={`bg-card border rounded-xl p-4 animate-fade-in ${sheetsData.financeiroItems ? 'border-[hsl(var(--vix-success)/0.3)]' : 'border-border'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-[hsl(var(--vix-success))]" />
+                      <span className="text-sm font-medium text-foreground">Financeiro</span>
+                    </div>
+                    {sheetsData.financeiroItems ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[hsl(var(--vix-success))]">{sheetsData.financeiroItems.length} itens importados</span>
+                        <button onClick={sheetsData.clearFinanceiro} className="text-[10px] text-muted-foreground hover:text-[hsl(var(--vix-danger))]">Limpar</button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Usando dados mock</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Empty state */}
+              {!selectedConfig && !showMappingDialog && sheetConfigs.length === 0 && (
+                <div className="bg-card border border-border rounded-xl p-12 text-center animate-fade-in">
+                  <FileSpreadsheet className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-foreground font-semibold mb-2">Configure suas Fontes de Dados</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    1. Cole a URL da planilha Google → 2. Escolha a aba e o módulo destino → 3. Mapeie as colunas → 4. Clique em Importar
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
 
         {/* Tab: Contas */}
         <TabsContent value="contas">
@@ -205,7 +617,6 @@ export function AtualizarDadosPage() {
                     <Input placeholder="Ex: VIXSTORE_PREM" value={newAccount.loja} onChange={e => setNewAccount(p => ({ ...p, loja: e.target.value }))} />
                   </div>
 
-                  {/* Campos de API para Mercado Livre */}
                   {newAccount.plataforma === 'Mercado Livre' && (
                     <div className="space-y-3 pt-2 border-t border-border">
                       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -225,12 +636,7 @@ export function AtualizarDadosPage() {
                       <div className="space-y-2">
                         <Label>Client Secret</Label>
                         <div className="relative">
-                          <Input
-                            type={showSecrets ? 'text' : 'password'}
-                            placeholder="Sua client secret"
-                            value={newAccount.clientSecret}
-                            onChange={e => setNewAccount(p => ({ ...p, clientSecret: e.target.value }))}
-                          />
+                          <Input type={showSecrets ? 'text' : 'password'} placeholder="Sua client secret" value={newAccount.clientSecret} onChange={e => setNewAccount(p => ({ ...p, clientSecret: e.target.value }))} />
                           <button type="button" onClick={() => setShowSecrets(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                             {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
@@ -238,25 +644,11 @@ export function AtualizarDadosPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>Access Token</Label>
-                        <div className="relative">
-                          <Input
-                            type={showSecrets ? 'text' : 'password'}
-                            placeholder="APP_USR-..."
-                            value={newAccount.accessToken}
-                            onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))}
-                          />
-                        </div>
+                        <Input type={showSecrets ? 'text' : 'password'} placeholder="APP_USR-..." value={newAccount.accessToken} onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))} />
                       </div>
                       <div className="space-y-2">
                         <Label>Refresh Token</Label>
-                        <div className="relative">
-                          <Input
-                            type={showSecrets ? 'text' : 'password'}
-                            placeholder="TG-..."
-                            value={newAccount.refreshToken}
-                            onChange={e => setNewAccount(p => ({ ...p, refreshToken: e.target.value }))}
-                          />
-                        </div>
+                        <Input type={showSecrets ? 'text' : 'password'} placeholder="TG-..." value={newAccount.refreshToken} onChange={e => setNewAccount(p => ({ ...p, refreshToken: e.target.value }))} />
                       </div>
                       <div className="flex items-start gap-2 p-3 rounded-lg bg-[hsl(var(--vix-warning)/0.1)] border border-[hsl(var(--vix-warning)/0.2)]">
                         <AlertTriangle className="w-4 h-4 text-[hsl(var(--vix-warning))] mt-0.5 flex-shrink-0" />
@@ -267,7 +659,6 @@ export function AtualizarDadosPage() {
                     </div>
                   )}
 
-                  {/* Campos de API para Tiny */}
                   {newAccount.plataforma === 'Tiny' && (
                     <div className="space-y-3 pt-2 border-t border-border">
                       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -277,12 +668,7 @@ export function AtualizarDadosPage() {
                       <div className="space-y-2">
                         <Label>Token da API</Label>
                         <div className="relative">
-                          <Input
-                            type={showSecrets ? 'text' : 'password'}
-                            placeholder="Seu token Tiny"
-                            value={newAccount.accessToken}
-                            onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))}
-                          />
+                          <Input type={showSecrets ? 'text' : 'password'} placeholder="Seu token Tiny" value={newAccount.accessToken} onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))} />
                           <button type="button" onClick={() => setShowSecrets(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                             {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
@@ -323,7 +709,6 @@ export function AtualizarDadosPage() {
                       {account.status === 'connected' ? 'Conectado' : account.status === 'syncing' ? 'Sincronizando...' : 'Desconectado'}
                     </div>
                   </div>
-
                   {account.status === 'connected' && (
                     <>
                       <div className="grid grid-cols-2 gap-3 mb-3">
@@ -338,18 +723,13 @@ export function AtualizarDadosPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <p className="text-muted-foreground text-xs">Última sync: {account.ultimaSync}</p>
-                        <button
-                          onClick={() => handleSync(account.id)}
-                          disabled={isSyncing}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-colors disabled:opacity-50"
-                        >
+                        <button onClick={() => handleSync(account.id)} disabled={isSyncing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-colors disabled:opacity-50">
                           <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
                           {isSyncing ? 'Sincronizando...' : 'Sync'}
                         </button>
                       </div>
                     </>
                   )}
-
                   {account.status === 'disconnected' && (
                     <div className="flex gap-2 mt-2">
                       <button className="flex-1 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors">
@@ -370,11 +750,7 @@ export function AtualizarDadosPage() {
         <TabsContent value="pedidos">
           <div className="flex items-center gap-3 mb-4">
             <label className="text-sm text-muted-foreground">Filtrar:</label>
-            <select
-              value={filterMarketplace}
-              onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')}
-              className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm"
-            >
+            <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
               <option value="all">Todos os Marketplaces</option>
               {accounts.filter(a => a.status === 'connected').map(a => (
                 <option key={a.id} value={a.id}>{a.nome}</option>
@@ -382,7 +758,6 @@ export function AtualizarDadosPage() {
             </select>
             <span className="text-xs text-muted-foreground ml-auto">{filteredOrders.length} pedidos</span>
           </div>
-
           <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -434,28 +809,18 @@ export function AtualizarDadosPage() {
             <KpiCard title="Receita de Ads (7d)" value={formatBRL(mockAdsCampaigns.reduce((s, c) => s + c.receita, 0))} icon={TrendingUp} delay={50} />
             <KpiCard
               title="ROAS Geral (7d)"
-              value={(() => {
-                const inv = mockAdsCampaigns.reduce((s, c) => s + c.investimento, 0);
-                const rec = mockAdsCampaigns.reduce((s, c) => s + c.receita, 0);
-                return inv > 0 ? (rec / inv).toFixed(2) + 'x' : '0x';
-              })()}
-              icon={TrendingUp}
-              delay={100}
+              value={(() => { const inv = mockAdsCampaigns.reduce((s, c) => s + c.investimento, 0); const rec = mockAdsCampaigns.reduce((s, c) => s + c.receita, 0); return inv > 0 ? (rec / inv).toFixed(2) + 'x' : '0x'; })()}
+              icon={TrendingUp} delay={100}
             />
           </div>
-
           <div className="space-y-3">
             {mockAdsCampaigns.map((campaign) => {
               const isExpanded = expandedCampaign === campaign.campanha;
               const roasRatio = campaign.roasObjetivo > 0 ? campaign.roasRealizado / campaign.roasObjetivo : 0;
               const roasColor = roasRatio >= 0.8 ? 'text-[hsl(var(--vix-success))]' : roasRatio >= 0.5 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]';
-
               return (
                 <div key={campaign.campanha} className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
-                  <button
-                    onClick={() => setExpandedCampaign(isExpanded ? null : campaign.campanha)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                  >
+                  <button onClick={() => setExpandedCampaign(isExpanded ? null : campaign.campanha)} className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-4">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${campaignStatusColors[campaign.status]}`}>
                         {campaign.status === 'ativo' ? 'Ativo' : campaign.status === 'pausado' ? 'Pausado' : 'Ajustar'}
@@ -475,19 +840,14 @@ export function AtualizarDadosPage() {
                         <p className="text-xs text-muted-foreground">ROAS</p>
                         <p className={`text-sm font-bold ${roasColor}`}>{campaign.roasRealizado.toFixed(2)}x / {campaign.roasObjetivo}x</p>
                       </div>
-                      {/* Progress bar */}
                       <div className="w-24 hidden lg:block">
                         <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${roasRatio >= 0.8 ? 'bg-[hsl(var(--vix-success))]' : roasRatio >= 0.5 ? 'bg-[hsl(var(--vix-warning))]' : 'bg-[hsl(var(--vix-danger))]'}`}
-                            style={{ width: `${Math.min(100, roasRatio * 100)}%` }}
-                          />
+                          <div className={`h-full rounded-full transition-all ${roasRatio >= 0.8 ? 'bg-[hsl(var(--vix-success))]' : roasRatio >= 0.5 ? 'bg-[hsl(var(--vix-warning))]' : 'bg-[hsl(var(--vix-danger))]'}`} style={{ width: `${Math.min(100, roasRatio * 100)}%` }} />
                         </div>
                       </div>
                       {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                     </div>
                   </button>
-
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-border pt-3">
                       <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
@@ -509,7 +869,6 @@ export function AtualizarDadosPage() {
         {/* Tab: Gráficos */}
         <TabsContent value="graficos">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Vendas por dia por marketplace */}
             <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
               <h3 className="text-foreground font-semibold mb-4">Vendas por Dia (7d)</h3>
               <ResponsiveContainer width="100%" height={280}>
@@ -526,32 +885,17 @@ export function AtualizarDadosPage() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-
-            {/* Faturamento por marketplace (Pie) */}
             <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
               <h3 className="text-foreground font-semibold mb-4">Faturamento por Marketplace</h3>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
-                  <Pie
-                    data={mockRevenueByMarketplace}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={4}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name.split(' - ')[1] || name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {mockRevenueByMarketplace.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
+                  <Pie data={mockRevenueByMarketplace} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, percent }) => `${name.split(' - ')[1] || name} ${(percent * 100).toFixed(0)}%`}>
+                    {mockRevenueByMarketplace.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.fill} />))}
                   </Pie>
                   <Tooltip formatter={(value: number) => [formatBRL(value), 'Faturamento']} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-
-            {/* ROAS por campanha (Bar) */}
             <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
               <h3 className="text-foreground font-semibold mb-4">ROAS Realizado vs Objetivo por Campanha</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -568,150 +912,6 @@ export function AtualizarDadosPage() {
             </div>
           </div>
         </TabsContent>
-        {/* Tab: Planilhas Google */}
-        <TabsContent value="planilhas">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Sidebar: planilhas salvas */}
-            <div className="space-y-4">
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
-                <h3 className="text-foreground font-semibold text-sm mb-3 flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-primary" />
-                  Planilhas Salvas
-                </h3>
-                <div className="space-y-2">
-                  {savedSheets.map((sheet, i) => (
-                    <button
-                      key={i}
-                      onClick={() => { setSheetUrl(sheet.url); setSheetData(null); setSheetInfo(null); }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                        sheetUrl === sheet.url ? 'bg-primary/10 text-primary border border-primary/20' : 'hover:bg-muted text-foreground'
-                      }`}
-                    >
-                      <p className="font-medium truncate">{sheet.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{extractSpreadsheetId(sheet.url)?.slice(0, 20)}...</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
-                <h3 className="text-foreground font-semibold text-sm mb-3">Conectar Nova Planilha</h3>
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">URL da Planilha Google</Label>
-                    <Input
-                      placeholder="https://docs.google.com/spreadsheets/d/..."
-                      value={sheetUrl}
-                      onChange={e => { setSheetUrl(e.target.value); setSheetInfo(null); setSheetData(null); }}
-                      className="text-xs"
-                    />
-                  </div>
-                  <button
-                    onClick={handleLoadSheetInfo}
-                    disabled={!sheetUrl || loadingSheet}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-                  >
-                    {loadingSheet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
-                    Conectar Planilha
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Main content */}
-            <div className="lg:col-span-2 space-y-4">
-              {sheetInfo && (
-                <div className="bg-card border border-border rounded-xl p-5 animate-fade-in">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-foreground font-semibold">{sheetInfo.title}</h3>
-                      <p className="text-xs text-muted-foreground">{sheetInfo.sheets.length} aba(s): {sheetInfo.sheets.join(', ')}</p>
-                    </div>
-                    <button
-                      onClick={handleAddSheet}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors text-foreground"
-                    >
-                      <Plus className="w-3 h-3" />
-                      Salvar
-                    </button>
-                  </div>
-
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1 space-y-1.5">
-                      <Label className="text-xs">Aba e Range</Label>
-                      <div className="flex gap-2">
-                        <Select value={sheetRange.split('!')[0] || ''} onValueChange={v => setSheetRange(`${v}!A1:Z100`)}>
-                          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Selecione a aba" /></SelectTrigger>
-                          <SelectContent>
-                            {sheetInfo.sheets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          value={sheetRange}
-                          onChange={e => setSheetRange(e.target.value)}
-                          placeholder="Aba!A1:Z100"
-                          className="text-xs"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleReadSheet}
-                      disabled={loadingSheet || !sheetRange}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-                    >
-                      {loadingSheet ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                      Puxar Dados
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {sheetData && sheetData.length > 0 && (
-                <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
-                  <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-                    <p className="text-sm font-semibold text-foreground">{sheetData.length} linhas carregadas</p>
-                    <span className="text-xs text-muted-foreground">Range: {sheetRange}</span>
-                  </div>
-                  <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-                        <tr className="border-b border-border">
-                          {sheetData[0]?.map((header, i) => (
-                            <th key={i} className="text-left py-2.5 px-3 font-semibold text-muted-foreground text-xs whitespace-nowrap">
-                              {header || `Col ${i + 1}`}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sheetData.slice(1).map((row, ri) => (
-                          <tr key={ri} className="border-b border-border hover:bg-muted/30 transition-colors">
-                            {sheetData[0]?.map((_, ci) => (
-                              <td key={ci} className="py-2 px-3 text-foreground text-xs whitespace-nowrap">
-                                {row[ci] || ''}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {!sheetInfo && !sheetData && (
-                <div className="bg-card border border-border rounded-xl p-12 text-center animate-fade-in">
-                  <FileSpreadsheet className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-foreground font-semibold mb-2">Conecte uma Planilha Google</h3>
-                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                    Cole a URL de uma planilha Google Sheets compartilhada com o service account para visualizar e sincronizar os dados.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </TabsContent>
-
       </Tabs>
     </div>
   );
