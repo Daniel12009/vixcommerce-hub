@@ -1,18 +1,30 @@
-import { Package, AlertTriangle, TrendingDown } from 'lucide-react';
+import { Package, AlertTriangle, TrendingDown, FileSpreadsheet } from 'lucide-react';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { mockStockItems } from '@/lib/mock-data';
 import { formatNumber } from '@/lib/utils-vix';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
 
 export function EstoquePage() {
-  const totalEstoque = mockStockItems.reduce((s, i) => s + i.estoqueAtual, 0);
-  const criticos = mockStockItems.filter(i => i.statusCobertura === 'red').length;
-  const emRuptura = mockStockItems.filter(i => i.estoqueAtual <= i.estoqueMinimo).length;
+  const { estoqueItems } = useSheetsData();
+  const items = estoqueItems || mockStockItems;
+  const isFromSheet = !!estoqueItems;
+
+  const totalEstoque = items.reduce((s, i) => s + i.estoqueAtual, 0);
+  const criticos = items.filter(i => i.statusCobertura === 'red').length;
+  const emRuptura = items.filter(i => i.estoqueAtual <= i.estoqueMinimo).length;
 
   return (
     <div>
       <PageHeader title="Estoque Full" subtitle="Gestão logística com alertas de ruptura" />
+
+      {isFromSheet && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-[hsl(var(--vix-success)/0.1)] border border-[hsl(var(--vix-success)/0.2)] text-xs text-[hsl(var(--vix-success))]">
+          <FileSpreadsheet className="w-3.5 h-3.5" />
+          Dados importados da planilha Google ({items.length} itens)
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <KpiCard title="Estoque Total" value={formatNumber(totalEstoque)} icon={Package} delay={0} />
@@ -36,7 +48,7 @@ export function EstoquePage() {
               </tr>
             </thead>
             <tbody>
-              {mockStockItems.map((item) => (
+              {items.map((item) => (
                 <tr key={item.skuPrincipal} className="border-b border-border hover:bg-muted/30 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs text-primary font-semibold">{item.skuPrincipal}</td>
                   <td className="py-3 px-4 text-foreground">{item.nome}</td>
