@@ -52,6 +52,10 @@ export function AtualizarDadosPage() {
   const [accounts, setAccounts] = useState<MarketplaceAccount[]>([...mockMarketplaceAccounts]);
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
   const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
+  const [filterDias, setFilterDias] = useState<number>(30);
+  const [filterDataInicio, setFilterDataInicio] = useState<string>('');
+  const [filterDataFim, setFilterDataFim] = useState<string>('');
+  const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
