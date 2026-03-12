@@ -41,6 +41,7 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
   vendas: [
     { key: 'numeroPedido', label: 'Nº Pedido', obrigatorio: true },
     { key: 'data', label: 'Data', obrigatorio: true },
+    { key: 'conta', label: 'Conta / Loja' },
     { key: 'comprador', label: 'Comprador' },
     { key: 'sku', label: 'SKU' },
     { key: 'produto', label: 'Produto' },
