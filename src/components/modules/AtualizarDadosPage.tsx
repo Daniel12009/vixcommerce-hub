@@ -167,8 +167,9 @@ export function AtualizarDadosPage() {
   const handleImportConfig = async (config: SheetConfig) => {
     setImportingConfig(config.id);
     try {
+      const startRow = config.linhaInicial || 1;
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A1:Z5000` },
+        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:Z5000` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
