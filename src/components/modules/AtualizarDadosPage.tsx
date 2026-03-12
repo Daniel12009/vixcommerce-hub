@@ -443,7 +443,7 @@ export function AtualizarDadosPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">— Não mapear —</SelectItem>
-                            {mappingHeaders.map(h => (
+                            {mappingHeaders.filter(h => h.trim() !== '').map(h => (
                               <SelectItem key={h} value={h}>{h}</SelectItem>
                             ))}
                           </SelectContent>
