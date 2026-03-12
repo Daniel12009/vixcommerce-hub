@@ -435,8 +435,8 @@ export function AtualizarDadosPage() {
                         </div>
                         <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                         <Select
-                          value={newConfigMapping[campo.key] || ''}
-                          onValueChange={v => setNewConfigMapping(prev => ({ ...prev, [campo.key]: v }))}
+                          value={newConfigMapping[campo.key] || '__none__'}
+                          onValueChange={v => setNewConfigMapping(prev => ({ ...prev, [campo.key]: v === '__none__' ? '' : v }))}
                         >
                           <SelectTrigger className="text-xs flex-1">
                             <SelectValue placeholder="Selecione coluna" />
