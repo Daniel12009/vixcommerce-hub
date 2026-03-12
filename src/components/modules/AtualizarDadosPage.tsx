@@ -77,6 +77,7 @@ export function AtualizarDadosPage() {
   const [newConfigLinhaInicial, setNewConfigLinhaInicial] = useState(1);
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
+  const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
 
   const sheetsData = useSheetsData();
 
