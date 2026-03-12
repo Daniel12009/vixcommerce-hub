@@ -800,7 +800,7 @@ export function AtualizarDadosPage() {
 
         {/* Tab: Pedidos */}
         <TabsContent value="pedidos">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
             <label className="text-sm text-muted-foreground">Filtrar:</label>
             <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
               <option value="all">Todos os Marketplaces</option>
@@ -808,6 +808,52 @@ export function AtualizarDadosPage() {
                 <option key={a.id} value={a.id}>{a.nome}</option>
               ))}
             </select>
+
+            <div className="flex items-center gap-1 ml-2">
+              {[7, 15, 30].map(d => (
+                <button
+                  key={d}
+                  onClick={() => { setFilterDias(d); setShowCustomDate(false); }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    !showCustomDate && filterDias === d
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+              <button
+                onClick={() => setShowCustomDate(prev => !prev)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  showCustomDate
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <CalendarDays className="w-3 h-3" />
+                Personalizado
+              </button>
+            </div>
+
+            {showCustomDate && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={filterDataInicio}
+                  onChange={e => setFilterDataInicio(e.target.value)}
+                  className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs"
+                />
+                <span className="text-xs text-muted-foreground">até</span>
+                <input
+                  type="date"
+                  value={filterDataFim}
+                  onChange={e => setFilterDataFim(e.target.value)}
+                  className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs"
+                />
+              </div>
+            )}
+
             <span className="text-xs text-muted-foreground ml-auto">{filteredOrders.length} pedidos</span>
           </div>
           <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
