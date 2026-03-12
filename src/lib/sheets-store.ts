@@ -92,3 +92,17 @@ export function parseSheetRows(
     return obj;
   });
 }
+
+// Parse with fixed values merged into each row
+export function parseSheetRowsWithFixos(
+  headers: string[],
+  rows: string[][],
+  mapeamento: Record<string, string>,
+  valoresFixos?: Record<string, string>
+): Record<string, string>[] {
+  const parsed = parseSheetRows(headers, rows, mapeamento);
+  if (valoresFixos && Object.keys(valoresFixos).length > 0) {
+    return parsed.map(row => ({ ...valoresFixos, ...row }));
+  }
+  return parsed;
+}
