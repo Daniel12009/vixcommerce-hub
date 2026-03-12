@@ -146,6 +146,7 @@ export function AtualizarDadosPage() {
       abaNome: newConfigAba,
       moduloDestino: newConfigModulo,
       mapeamento: { ...newConfigMapping },
+      linhaInicial: newConfigLinhaInicial,
     };
 
     setSheetConfigs(prev => [...prev, config]);

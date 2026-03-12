@@ -46,6 +46,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         return {
           skuPrincipal: r.skuPrincipal,
           nome: r.nome || r.skuPrincipal,
+          conta: r.conta || '',
           estoqueAtual,
           estoqueMinimo,
           vmd,
