@@ -141,10 +141,16 @@ export function AtualizarDadosPage() {
 
     const campos = CAMPOS_POR_MODULO[newConfigModulo];
     const obrigatorios = campos.filter(c => c.obrigatorio);
-    const faltando = obrigatorios.filter(c => !newConfigMapping[c.key]);
+    const faltando = obrigatorios.filter(c => !newConfigMapping[c.key] && !newConfigValoresFixos[c.key]);
     if (faltando.length > 0) {
       toast.error(`Mapeie os campos obrigatórios: ${faltando.map(f => f.label).join(', ')}`);
       return;
+    }
+
+    // Clean out empty fixed values
+    const fixos: Record<string, string> = {};
+    for (const [k, v] of Object.entries(newConfigValoresFixos)) {
+      if (v.trim()) fixos[k] = v.trim();
     }
 
     const config: SheetConfig = {
@@ -155,12 +161,14 @@ export function AtualizarDadosPage() {
       abaNome: newConfigAba,
       moduloDestino: newConfigModulo,
       mapeamento: { ...newConfigMapping },
+      valoresFixos: Object.keys(fixos).length > 0 ? fixos : undefined,
       linhaInicial: newConfigLinhaInicial,
     };
 
     setSheetConfigs(prev => [...prev, config]);
     setShowMappingDialog(false);
     setNewConfigMapping({});
+    setNewConfigValoresFixos({});
     setNewConfigAba('');
     toast.success(`Configuração salva: ${newConfigAba} → ${moduloLabels[newConfigModulo]}`);
   };
