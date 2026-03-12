@@ -10,6 +10,7 @@ export interface SheetConfig {
   abaNome: string;
   moduloDestino: ModuloDestino;
   mapeamento: Record<string, string>; // fieldName -> column header name
+  linhaInicial: number; // 1-indexed row where headers are (data starts next row)
   ultimaSync?: string;
 }
 
