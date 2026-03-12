@@ -10,6 +10,7 @@ export interface SheetConfig {
   abaNome: string;
   moduloDestino: ModuloDestino;
   mapeamento: Record<string, string>; // fieldName -> column header name
+  valoresFixos?: Record<string, string>; // fieldName -> fixed value (e.g. conta from a different row)
   linhaInicial: number; // 1-indexed row where headers are (data starts next row)
   ultimaSync?: string;
 }
@@ -40,6 +41,7 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
   vendas: [
     { key: 'numeroPedido', label: 'Nº Pedido', obrigatorio: true },
     { key: 'data', label: 'Data', obrigatorio: true },
+    { key: 'conta', label: 'Conta / Loja' },
     { key: 'comprador', label: 'Comprador' },
     { key: 'sku', label: 'SKU' },
     { key: 'produto', label: 'Produto' },
@@ -89,4 +91,18 @@ export function parseSheetRows(
     }
     return obj;
   });
+}
+
+// Parse with fixed values merged into each row
+export function parseSheetRowsWithFixos(
+  headers: string[],
+  rows: string[][],
+  mapeamento: Record<string, string>,
+  valoresFixos?: Record<string, string>
+): Record<string, string>[] {
+  const parsed = parseSheetRows(headers, rows, mapeamento);
+  if (valoresFixos && Object.keys(valoresFixos).length > 0) {
+    return parsed.map(row => ({ ...valoresFixos, ...row }));
+  }
+  return parsed;
 }

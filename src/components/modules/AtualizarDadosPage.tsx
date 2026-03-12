@@ -17,7 +17,7 @@ import { useSheetsData } from '@/contexts/SheetsDataContext';
 import {
   type SheetConfig, type ModuloDestino,
   CAMPOS_POR_MODULO, loadSheetConfigs, saveSheetConfigs,
-  extractSpreadsheetId, parseSheetRows,
+  extractSpreadsheetId, parseSheetRowsWithFixos,
 } from '@/lib/sheets-store';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
@@ -77,6 +77,7 @@ export function AtualizarDadosPage() {
   const [newConfigLinhaInicial, setNewConfigLinhaInicial] = useState(1);
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
+  const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
 
   const sheetsData = useSheetsData();
 
@@ -125,6 +126,7 @@ export function AtualizarDadosPage() {
       const headers = data.values?.[0] || [];
       setMappingHeaders(headers);
       setNewConfigMapping({});
+      setNewConfigValoresFixos({});
       setShowMappingDialog(true);
     } catch (err: any) {
       toast.error(`Erro ao ler cabeçalhos: ${err.message}`);
@@ -139,10 +141,16 @@ export function AtualizarDadosPage() {
 
     const campos = CAMPOS_POR_MODULO[newConfigModulo];
     const obrigatorios = campos.filter(c => c.obrigatorio);
-    const faltando = obrigatorios.filter(c => !newConfigMapping[c.key]);
+    const faltando = obrigatorios.filter(c => !newConfigMapping[c.key] && !newConfigValoresFixos[c.key]);
     if (faltando.length > 0) {
       toast.error(`Mapeie os campos obrigatórios: ${faltando.map(f => f.label).join(', ')}`);
       return;
+    }
+
+    // Clean out empty fixed values
+    const fixos: Record<string, string> = {};
+    for (const [k, v] of Object.entries(newConfigValoresFixos)) {
+      if (v.trim()) fixos[k] = v.trim();
     }
 
     const config: SheetConfig = {
@@ -153,12 +161,14 @@ export function AtualizarDadosPage() {
       abaNome: newConfigAba,
       moduloDestino: newConfigModulo,
       mapeamento: { ...newConfigMapping },
+      valoresFixos: Object.keys(fixos).length > 0 ? fixos : undefined,
       linhaInicial: newConfigLinhaInicial,
     };
 
     setSheetConfigs(prev => [...prev, config]);
     setShowMappingDialog(false);
     setNewConfigMapping({});
+    setNewConfigValoresFixos({});
     setNewConfigAba('');
     toast.success(`Configuração salva: ${newConfigAba} → ${moduloLabels[newConfigModulo]}`);
   };
@@ -186,7 +196,7 @@ export function AtualizarDadosPage() {
 
       const headers = allRows[0];
       const rows = allRows.slice(1);
-      const parsed = parseSheetRows(headers, rows, config.mapeamento);
+      const parsed = parseSheetRowsWithFixos(headers, rows, config.mapeamento, config.valoresFixos);
 
       if (config.moduloDestino === 'estoque') {
         sheetsData.setEstoqueFromSheet(parsed);
@@ -479,40 +489,65 @@ export function AtualizarDadosPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {CAMPOS_POR_MODULO[newConfigModulo].map(campo => (
-                      <div key={campo.key} className="flex items-center gap-3">
-                        <div className="w-1/3">
-                          <span className="text-xs text-foreground">
-                            {campo.label}
-                            {campo.obrigatorio && <span className="text-[hsl(var(--vix-danger))] ml-0.5">*</span>}
-                          </span>
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {CAMPOS_POR_MODULO[newConfigModulo].map(campo => {
+                      const hasFixo = !!newConfigValoresFixos[campo.key];
+                      const hasMapped = !!newConfigMapping[campo.key] && newConfigMapping[campo.key] !== '__none__';
+                      return (
+                        <div key={campo.key} className="space-y-1">
+                          <div className="flex items-center gap-3">
+                            <div className="w-1/3">
+                              <span className="text-xs text-foreground">
+                                {campo.label}
+                                {campo.obrigatorio && <span className="text-[hsl(var(--vix-danger))] ml-0.5">*</span>}
+                              </span>
+                            </div>
+                            <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <Select
+                              value={hasFixo ? '__fixo__' : (newConfigMapping[campo.key] || '__none__')}
+                              onValueChange={v => {
+                                if (v === '__fixo__') {
+                                  setNewConfigMapping(prev => { const n = { ...prev }; delete n[campo.key]; return n; });
+                                  setNewConfigValoresFixos(prev => ({ ...prev, [campo.key]: prev[campo.key] || '' }));
+                                } else {
+                                  setNewConfigValoresFixos(prev => { const n = { ...prev }; delete n[campo.key]; return n; });
+                                  setNewConfigMapping(prev => ({ ...prev, [campo.key]: v === '__none__' ? '' : v }));
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="text-xs flex-1">
+                                <SelectValue placeholder="Selecione coluna" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">— Não mapear —</SelectItem>
+                                <SelectItem value="__fixo__">📌 Valor Fixo</SelectItem>
+                                {mappingHeaders.filter(h => h.trim() !== '').map(h => (
+                                  <SelectItem key={h} value={h}>{h}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {(hasMapped || hasFixo) && (
+                              <Check className="w-4 h-4 text-[hsl(var(--vix-success))] flex-shrink-0" />
+                            )}
+                          </div>
+                          {hasFixo && (
+                            <div className="ml-[calc(33.33%+24px)]">
+                              <Input
+                                placeholder={`Ex: VIAFLIX, GS, MONACO...`}
+                                value={newConfigValoresFixos[campo.key] || ''}
+                                onChange={e => setNewConfigValoresFixos(prev => ({ ...prev, [campo.key]: e.target.value }))}
+                                className="text-xs h-8"
+                              />
+                            </div>
+                          )}
                         </div>
-                        <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                        <Select
-                          value={newConfigMapping[campo.key] || '__none__'}
-                          onValueChange={v => setNewConfigMapping(prev => ({ ...prev, [campo.key]: v === '__none__' ? '' : v }))}
-                        >
-                          <SelectTrigger className="text-xs flex-1">
-                            <SelectValue placeholder="Selecione coluna" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">— Não mapear —</SelectItem>
-                            {mappingHeaders.filter(h => h.trim() !== '').map(h => (
-                              <SelectItem key={h} value={h}>{h}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {newConfigMapping[campo.key] && newConfigMapping[campo.key] !== '__none__' && (
-                          <Check className="w-4 h-4 text-[hsl(var(--vix-success))] flex-shrink-0" />
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <div className="flex gap-2 mt-4">
                     <button
-                      onClick={() => { setShowMappingDialog(false); setNewConfigMapping({}); }}
+                      onClick={() => { setShowMappingDialog(false); setNewConfigMapping({}); setNewConfigValoresFixos({}); }}
                       className="flex-1 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors"
                     >
                       Cancelar
@@ -866,7 +901,7 @@ export function AtualizarDadosPage() {
                   <tr className="border-b border-border bg-muted/50">
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Pedido</th>
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Data</th>
-                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Marketplace</th>
+                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Conta</th>
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Comprador</th>
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Produto</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Qtd</th>
