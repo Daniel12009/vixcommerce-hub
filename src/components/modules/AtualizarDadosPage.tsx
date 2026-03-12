@@ -126,6 +126,7 @@ export function AtualizarDadosPage() {
       const headers = data.values?.[0] || [];
       setMappingHeaders(headers);
       setNewConfigMapping({});
+      setNewConfigValoresFixos({});
       setShowMappingDialog(true);
     } catch (err: any) {
       toast.error(`Erro ao ler cabeçalhos: ${err.message}`);
