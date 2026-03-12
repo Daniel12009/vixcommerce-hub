@@ -401,6 +401,19 @@ export function AtualizarDadosPage() {
                         </Select>
                       </div>
 
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Linha do Cabeçalho</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={newConfigLinhaInicial}
+                          onChange={e => setNewConfigLinhaInicial(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="text-xs"
+                          placeholder="Ex: 7 (se dados começam na linha 7)"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Linha onde estão os cabeçalhos das colunas (dados começam na linha seguinte)</p>
+                      </div>
+
                       <button
                         onClick={() => newConfigAba && handleFetchHeadersForMapping(newConfigAba)}
                         disabled={!newConfigAba || loadingSheet}

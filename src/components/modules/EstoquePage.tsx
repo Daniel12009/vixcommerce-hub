@@ -37,6 +37,7 @@ export function EstoquePage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
+                <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Conta</th>
                 <th className="text-left py-3 px-4 font-semibold text-muted-foreground">SKU</th>
                 <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Produto</th>
                 <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Estoque</th>
@@ -48,8 +49,9 @@ export function EstoquePage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.skuPrincipal} className="border-b border-border hover:bg-muted/30 transition-colors">
+              {items.map((item, idx) => (
+                <tr key={`${item.skuPrincipal}-${idx}`} className="border-b border-border hover:bg-muted/30 transition-colors">
+                  <td className="py-3 px-4 text-xs text-muted-foreground">{item.conta || '—'}</td>
                   <td className="py-3 px-4 font-mono text-xs text-primary font-semibold">{item.skuPrincipal}</td>
                   <td className="py-3 px-4 text-foreground">{item.nome}</td>
                   <td className="py-3 px-4 text-right text-foreground font-medium">{formatNumber(item.estoqueAtual)}</td>
