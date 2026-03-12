@@ -148,6 +148,7 @@ export const mockStockItems: StockItem[] = mockProducts
     return {
       skuPrincipal: p.skuPrincipal,
       nome: p.nome,
+      conta: 'Principal',
       estoqueAtual: p.estoqueAtual!,
       estoqueMinimo: p.estoqueMinimo || 0,
       vmd,

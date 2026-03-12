@@ -33,6 +33,7 @@ export interface Product {
 export interface StockItem {
   skuPrincipal: string;
   nome: string;
+  conta: string;
   estoqueAtual: number;
   estoqueMinimo: number;
   vmd: number; // Vendas Média Diária

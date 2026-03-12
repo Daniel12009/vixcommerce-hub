@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download, Settings2, ArrowRight, Check } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download, Settings2, ArrowRight, Check, CalendarDays } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
@@ -52,6 +52,10 @@ export function AtualizarDadosPage() {
   const [accounts, setAccounts] = useState<MarketplaceAccount[]>([...mockMarketplaceAccounts]);
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
   const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
+  const [filterDias, setFilterDias] = useState<number>(30);
+  const [filterDataInicio, setFilterDataInicio] = useState<string>('');
+  const [filterDataFim, setFilterDataFim] = useState<string>('');
+  const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
@@ -70,6 +74,7 @@ export function AtualizarDadosPage() {
   const [newConfigAba, setNewConfigAba] = useState('');
   const [newConfigModulo, setNewConfigModulo] = useState<ModuloDestino>('estoque');
   const [newConfigMapping, setNewConfigMapping] = useState<Record<string, string>>({});
+  const [newConfigLinhaInicial, setNewConfigLinhaInicial] = useState(1);
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
 
@@ -110,8 +115,10 @@ export function AtualizarDadosPage() {
     if (!spreadsheetId) return;
     setLoadingSheet(true);
     try {
+      // Fetch the header row based on linhaInicial
+      const headerRow = newConfigLinhaInicial;
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId, range: `${abaNome}!1:1` },
+        body: { action: 'read', spreadsheetId, range: `${abaNome}!${headerRow}:${headerRow}` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -146,6 +153,7 @@ export function AtualizarDadosPage() {
       abaNome: newConfigAba,
       moduloDestino: newConfigModulo,
       mapeamento: { ...newConfigMapping },
+      linhaInicial: newConfigLinhaInicial,
     };
 
     setSheetConfigs(prev => [...prev, config]);
@@ -163,8 +171,9 @@ export function AtualizarDadosPage() {
   const handleImportConfig = async (config: SheetConfig) => {
     setImportingConfig(config.id);
     try {
+      const startRow = config.linhaInicial || 1;
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A1:Z5000` },
+        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:Z5000` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -234,9 +243,39 @@ export function AtualizarDadosPage() {
   const totalPedidos = accounts.reduce((s, a) => s + (a.totalPedidos || 0), 0);
   const connectedCount = accounts.filter(a => a.status === 'connected').length;
 
-  const filteredOrders = filterMarketplace === 'all'
-    ? mockOrders
-    : mockOrders.filter(o => o.marketplace === filterMarketplace);
+  // Date-filtered orders
+  const filteredOrders = useMemo(() => {
+    let orders = filterMarketplace === 'all'
+      ? mockOrders
+      : mockOrders.filter(o => o.marketplace === filterMarketplace);
+
+    if (showCustomDate && filterDataInicio && filterDataFim) {
+      orders = orders.filter(o => {
+        const d = o.data; // format dd/mm/yyyy
+        const parts = d.split('/');
+        if (parts.length === 3) {
+          const orderDate = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+          const start = new Date(filterDataInicio);
+          const end = new Date(filterDataFim);
+          end.setHours(23, 59, 59);
+          return orderDate >= start && orderDate <= end;
+        }
+        return true;
+      });
+    } else if (!showCustomDate && filterDias > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - filterDias);
+      orders = orders.filter(o => {
+        const parts = o.data.split('/');
+        if (parts.length === 3) {
+          const orderDate = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+          return orderDate >= cutoff;
+        }
+        return true;
+      });
+    }
+    return orders;
+  }, [filterMarketplace, filterDias, showCustomDate, filterDataInicio, filterDataFim]);
 
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
@@ -299,6 +338,9 @@ export function AtualizarDadosPage() {
                                 {moduloLabels[config.moduloDestino]}
                               </span>
                               <span className="text-[10px] text-muted-foreground">Aba: {config.abaNome}</span>
+                              {config.linhaInicial > 1 && (
+                                <span className="text-[10px] text-muted-foreground">Linha: {config.linhaInicial}</span>
+                              )}
                             </div>
                             {config.ultimaSync && (
                               <p className="text-[10px] text-muted-foreground mt-1">Última sync: {config.ultimaSync}</p>
@@ -394,6 +436,19 @@ export function AtualizarDadosPage() {
                             <SelectItem value="vendas">🛒 Vendas / Pedidos</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Linha do Cabeçalho</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={newConfigLinhaInicial}
+                          onChange={e => setNewConfigLinhaInicial(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="text-xs"
+                          placeholder="Ex: 7 (se dados começam na linha 7)"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Linha onde estão os cabeçalhos das colunas (dados começam na linha seguinte)</p>
                       </div>
 
                       <button
@@ -748,7 +803,7 @@ export function AtualizarDadosPage() {
 
         {/* Tab: Pedidos */}
         <TabsContent value="pedidos">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
             <label className="text-sm text-muted-foreground">Filtrar:</label>
             <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
               <option value="all">Todos os Marketplaces</option>
@@ -756,6 +811,52 @@ export function AtualizarDadosPage() {
                 <option key={a.id} value={a.id}>{a.nome}</option>
               ))}
             </select>
+
+            <div className="flex items-center gap-1 ml-2">
+              {[7, 15, 30].map(d => (
+                <button
+                  key={d}
+                  onClick={() => { setFilterDias(d); setShowCustomDate(false); }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    !showCustomDate && filterDias === d
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+              <button
+                onClick={() => setShowCustomDate(prev => !prev)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  showCustomDate
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <CalendarDays className="w-3 h-3" />
+                Personalizado
+              </button>
+            </div>
+
+            {showCustomDate && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={filterDataInicio}
+                  onChange={e => setFilterDataInicio(e.target.value)}
+                  className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs"
+                />
+                <span className="text-xs text-muted-foreground">até</span>
+                <input
+                  type="date"
+                  value={filterDataFim}
+                  onChange={e => setFilterDataFim(e.target.value)}
+                  className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs"
+                />
+              </div>
+            )}
+
             <span className="text-xs text-muted-foreground ml-auto">{filteredOrders.length} pedidos</span>
           </div>
           <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">

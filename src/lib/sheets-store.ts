@@ -10,6 +10,7 @@ export interface SheetConfig {
   abaNome: string;
   moduloDestino: ModuloDestino;
   mapeamento: Record<string, string>; // fieldName -> column header name
+  linhaInicial: number; // 1-indexed row where headers are (data starts next row)
   ultimaSync?: string;
 }
 
@@ -18,6 +19,7 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
   estoque: [
     { key: 'skuPrincipal', label: 'SKU Principal', obrigatorio: true },
     { key: 'nome', label: 'Nome do Produto', obrigatorio: true },
+    { key: 'conta', label: 'Conta / Loja' },
     { key: 'estoqueAtual', label: 'Estoque Atual', obrigatorio: true },
     { key: 'estoqueMinimo', label: 'Estoque Mínimo' },
     { key: 'vmd', label: 'VMD (Vendas/Dia)' },
