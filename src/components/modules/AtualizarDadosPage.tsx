@@ -186,7 +186,7 @@ export function AtualizarDadosPage() {
 
       const headers = allRows[0];
       const rows = allRows.slice(1);
-      const parsed = parseSheetRows(headers, rows, config.mapeamento);
+      const parsed = parseSheetRowsWithFixos(headers, rows, config.mapeamento, config.valoresFixos);
 
       if (config.moduloDestino === 'estoque') {
         sheetsData.setEstoqueFromSheet(parsed);
