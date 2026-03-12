@@ -901,7 +901,7 @@ export function AtualizarDadosPage() {
                   <tr className="border-b border-border bg-muted/50">
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Pedido</th>
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Data</th>
-                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Marketplace</th>
+                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Conta</th>
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Comprador</th>
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Produto</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Qtd</th>
