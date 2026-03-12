@@ -111,8 +111,10 @@ export function AtualizarDadosPage() {
     if (!spreadsheetId) return;
     setLoadingSheet(true);
     try {
+      // Fetch the header row based on linhaInicial
+      const headerRow = newConfigLinhaInicial;
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId, range: `${abaNome}!1:1` },
+        body: { action: 'read', spreadsheetId, range: `${abaNome}!${headerRow}:${headerRow}` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
