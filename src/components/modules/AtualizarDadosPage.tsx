@@ -489,35 +489,60 @@ export function AtualizarDadosPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {CAMPOS_POR_MODULO[newConfigModulo].map(campo => (
-                      <div key={campo.key} className="flex items-center gap-3">
-                        <div className="w-1/3">
-                          <span className="text-xs text-foreground">
-                            {campo.label}
-                            {campo.obrigatorio && <span className="text-[hsl(var(--vix-danger))] ml-0.5">*</span>}
-                          </span>
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {CAMPOS_POR_MODULO[newConfigModulo].map(campo => {
+                      const hasFixo = !!newConfigValoresFixos[campo.key];
+                      const hasMapped = !!newConfigMapping[campo.key] && newConfigMapping[campo.key] !== '__none__';
+                      return (
+                        <div key={campo.key} className="space-y-1">
+                          <div className="flex items-center gap-3">
+                            <div className="w-1/3">
+                              <span className="text-xs text-foreground">
+                                {campo.label}
+                                {campo.obrigatorio && <span className="text-[hsl(var(--vix-danger))] ml-0.5">*</span>}
+                              </span>
+                            </div>
+                            <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <Select
+                              value={hasFixo ? '__fixo__' : (newConfigMapping[campo.key] || '__none__')}
+                              onValueChange={v => {
+                                if (v === '__fixo__') {
+                                  setNewConfigMapping(prev => { const n = { ...prev }; delete n[campo.key]; return n; });
+                                  setNewConfigValoresFixos(prev => ({ ...prev, [campo.key]: prev[campo.key] || '' }));
+                                } else {
+                                  setNewConfigValoresFixos(prev => { const n = { ...prev }; delete n[campo.key]; return n; });
+                                  setNewConfigMapping(prev => ({ ...prev, [campo.key]: v === '__none__' ? '' : v }));
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="text-xs flex-1">
+                                <SelectValue placeholder="Selecione coluna" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">— Não mapear —</SelectItem>
+                                <SelectItem value="__fixo__">📌 Valor Fixo</SelectItem>
+                                {mappingHeaders.filter(h => h.trim() !== '').map(h => (
+                                  <SelectItem key={h} value={h}>{h}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {(hasMapped || hasFixo) && (
+                              <Check className="w-4 h-4 text-[hsl(var(--vix-success))] flex-shrink-0" />
+                            )}
+                          </div>
+                          {hasFixo && (
+                            <div className="ml-[calc(33.33%+24px)]">
+                              <Input
+                                placeholder={`Ex: VIAFLIX, GS, MONACO...`}
+                                value={newConfigValoresFixos[campo.key] || ''}
+                                onChange={e => setNewConfigValoresFixos(prev => ({ ...prev, [campo.key]: e.target.value }))}
+                                className="text-xs h-8"
+                              />
+                            </div>
+                          )}
                         </div>
-                        <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                        <Select
-                          value={newConfigMapping[campo.key] || '__none__'}
-                          onValueChange={v => setNewConfigMapping(prev => ({ ...prev, [campo.key]: v === '__none__' ? '' : v }))}
-                        >
-                          <SelectTrigger className="text-xs flex-1">
-                            <SelectValue placeholder="Selecione coluna" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">— Não mapear —</SelectItem>
-                            {mappingHeaders.filter(h => h.trim() !== '').map(h => (
-                              <SelectItem key={h} value={h}>{h}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {newConfigMapping[campo.key] && newConfigMapping[campo.key] !== '__none__' && (
-                          <Check className="w-4 h-4 text-[hsl(var(--vix-success))] flex-shrink-0" />
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <div className="flex gap-2 mt-4">
