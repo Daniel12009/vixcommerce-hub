@@ -379,7 +379,7 @@ export function AtualizarDadosPage() {
                         <Select value={newConfigAba} onValueChange={v => setNewConfigAba(v)}>
                           <SelectTrigger className="text-xs"><SelectValue placeholder="Selecione a aba" /></SelectTrigger>
                           <SelectContent>
-                            {sheetInfo.sheets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                            {sheetInfo.sheets.filter(s => s.trim() !== '').map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
