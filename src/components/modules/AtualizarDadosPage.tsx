@@ -70,6 +70,7 @@ export function AtualizarDadosPage() {
   const [newConfigAba, setNewConfigAba] = useState('');
   const [newConfigModulo, setNewConfigModulo] = useState<ModuloDestino>('estoque');
   const [newConfigMapping, setNewConfigMapping] = useState<Record<string, string>>({});
+  const [newConfigLinhaInicial, setNewConfigLinhaInicial] = useState(1);
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
 
