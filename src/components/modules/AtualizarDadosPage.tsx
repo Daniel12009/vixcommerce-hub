@@ -17,7 +17,7 @@ import { useSheetsData } from '@/contexts/SheetsDataContext';
 import {
   type SheetConfig, type ModuloDestino,
   CAMPOS_POR_MODULO, loadSheetConfigs, saveSheetConfigs,
-  extractSpreadsheetId, parseSheetRows,
+  extractSpreadsheetId, parseSheetRowsWithFixos,
 } from '@/lib/sheets-store';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
