@@ -243,9 +243,39 @@ export function AtualizarDadosPage() {
   const totalPedidos = accounts.reduce((s, a) => s + (a.totalPedidos || 0), 0);
   const connectedCount = accounts.filter(a => a.status === 'connected').length;
 
-  const filteredOrders = filterMarketplace === 'all'
-    ? mockOrders
-    : mockOrders.filter(o => o.marketplace === filterMarketplace);
+  // Date-filtered orders
+  const filteredOrders = useMemo(() => {
+    let orders = filterMarketplace === 'all'
+      ? mockOrders
+      : mockOrders.filter(o => o.marketplace === filterMarketplace);
+
+    if (showCustomDate && filterDataInicio && filterDataFim) {
+      orders = orders.filter(o => {
+        const d = o.data; // format dd/mm/yyyy
+        const parts = d.split('/');
+        if (parts.length === 3) {
+          const orderDate = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+          const start = new Date(filterDataInicio);
+          const end = new Date(filterDataFim);
+          end.setHours(23, 59, 59);
+          return orderDate >= start && orderDate <= end;
+        }
+        return true;
+      });
+    } else if (!showCustomDate && filterDias > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - filterDias);
+      orders = orders.filter(o => {
+        const parts = o.data.split('/');
+        if (parts.length === 3) {
+          const orderDate = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+          return orderDate >= cutoff;
+        }
+        return true;
+      });
+    }
+    return orders;
+  }, [filterMarketplace, filterDias, showCustomDate, filterDataInicio, filterDataFim]);
 
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
