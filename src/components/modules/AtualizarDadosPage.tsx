@@ -338,6 +338,9 @@ export function AtualizarDadosPage() {
                                 {moduloLabels[config.moduloDestino]}
                               </span>
                               <span className="text-[10px] text-muted-foreground">Aba: {config.abaNome}</span>
+                              {config.linhaInicial > 1 && (
+                                <span className="text-[10px] text-muted-foreground">Linha: {config.linhaInicial}</span>
+                              )}
                             </div>
                             {config.ultimaSync && (
                               <p className="text-[10px] text-muted-foreground mt-1">Última sync: {config.ultimaSync}</p>
