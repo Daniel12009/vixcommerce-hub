@@ -379,7 +379,7 @@ export function AtualizarDadosPage() {
                         <Select value={newConfigAba} onValueChange={v => setNewConfigAba(v)}>
                           <SelectTrigger className="text-xs"><SelectValue placeholder="Selecione a aba" /></SelectTrigger>
                           <SelectContent>
-                            {sheetInfo.sheets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                            {sheetInfo.sheets.filter(s => s.trim() !== '').map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -435,15 +435,15 @@ export function AtualizarDadosPage() {
                         </div>
                         <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                         <Select
-                          value={newConfigMapping[campo.key] || ''}
-                          onValueChange={v => setNewConfigMapping(prev => ({ ...prev, [campo.key]: v }))}
+                          value={newConfigMapping[campo.key] || '__none__'}
+                          onValueChange={v => setNewConfigMapping(prev => ({ ...prev, [campo.key]: v === '__none__' ? '' : v }))}
                         >
                           <SelectTrigger className="text-xs flex-1">
                             <SelectValue placeholder="Selecione coluna" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">— Não mapear —</SelectItem>
-                            {mappingHeaders.map(h => (
+                            {mappingHeaders.filter(h => h.trim() !== '').map(h => (
                               <SelectItem key={h} value={h}>{h}</SelectItem>
                             ))}
                           </SelectContent>
