@@ -491,7 +491,7 @@ export function AtualizarDadosPage() {
 
                   <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {CAMPOS_POR_MODULO[newConfigModulo].map(campo => {
-                      const hasFixo = !!newConfigValoresFixos[campo.key];
+                      const hasFixo = campo.key in newConfigValoresFixos;
                       const hasMapped = !!newConfigMapping[campo.key] && newConfigMapping[campo.key] !== '__none__';
                       return (
                         <div key={campo.key} className="space-y-1">
