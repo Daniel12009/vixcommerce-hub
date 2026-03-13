@@ -699,6 +699,22 @@ export function AtualizarDadosPage() {
                     )}
                   </div>
                 </div>
+                <div className={`bg-card border rounded-xl p-4 animate-fade-in ${sheetsData.vendasItems ? 'border-[hsl(var(--vix-warning)/0.3)]' : 'border-border'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-[hsl(var(--vix-warning))]" />
+                      <span className="text-sm font-medium text-foreground">Vendas / Pedidos</span>
+                    </div>
+                    {sheetsData.vendasItems ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[hsl(var(--vix-success))]">{sheetsData.vendasItems.length} vendas importadas</span>
+                        <button onClick={sheetsData.clearVendas} className="text-[10px] text-muted-foreground hover:text-[hsl(var(--vix-danger))]">Limpar</button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Usando dados mock</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Empty state */}
