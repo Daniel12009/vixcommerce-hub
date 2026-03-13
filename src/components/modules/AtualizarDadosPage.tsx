@@ -183,7 +183,7 @@ export function AtualizarDadosPage() {
     try {
       const startRow = config.linhaInicial || 1;
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:Z5000` },
+        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:AZ5000` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -202,6 +202,8 @@ export function AtualizarDadosPage() {
         sheetsData.setEstoqueFromSheet(parsed);
       } else if (config.moduloDestino === 'financeiro') {
         sheetsData.setFinanceiroFromSheet(parsed);
+      } else if (config.moduloDestino === 'vendas') {
+        sheetsData.setVendasFromSheet(parsed);
       }
 
       // Update last sync
@@ -253,16 +255,55 @@ export function AtualizarDadosPage() {
   const totalPedidos = accounts.reduce((s, a) => s + (a.totalPedidos || 0), 0);
   const connectedCount = accounts.filter(a => a.status === 'connected').length;
 
-  // Date-filtered orders
+  // Date-filtered orders (uses imported vendas if available, otherwise mock)
   const filteredOrders = useMemo(() => {
+    if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
+      let items = sheetsData.vendasItems;
+
+      // Filter by conta
+      if (filterMarketplace !== 'all') {
+        items = items.filter(v => v.conta.toLowerCase().includes(filterMarketplace.toLowerCase()) || v.origem.toLowerCase().includes(filterMarketplace.toLowerCase()));
+      }
+
+      // Date filter
+      const parseDate = (d: string) => {
+        if (!d) return null;
+        const parts = d.split('/');
+        if (parts.length === 3) {
+          const year = parts[2].length === 2 ? 2000 + +parts[2] : +parts[2];
+          return new Date(year, +parts[1] - 1, +parts[0]);
+        }
+        return new Date(d);
+      };
+
+      if (showCustomDate && filterDataInicio && filterDataFim) {
+        const start = new Date(filterDataInicio);
+        const end = new Date(filterDataFim);
+        end.setHours(23, 59, 59);
+        items = items.filter(v => {
+          const d = parseDate(v.data);
+          return d && d >= start && d <= end;
+        });
+      } else if (!showCustomDate && filterDias > 0) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - filterDias);
+        items = items.filter(v => {
+          const d = parseDate(v.data);
+          return d && d >= cutoff;
+        });
+      }
+
+      return items;
+    }
+
+    // Fallback to mock orders
     let orders = filterMarketplace === 'all'
       ? mockOrders
       : mockOrders.filter(o => o.marketplace === filterMarketplace);
 
     if (showCustomDate && filterDataInicio && filterDataFim) {
       orders = orders.filter(o => {
-        const d = o.data; // format dd/mm/yyyy
-        const parts = d.split('/');
+        const parts = o.data.split('/');
         if (parts.length === 3) {
           const orderDate = new Date(+parts[2], +parts[1] - 1, +parts[0]);
           const start = new Date(filterDataInicio);
@@ -285,7 +326,7 @@ export function AtualizarDadosPage() {
       });
     }
     return orders;
-  }, [filterMarketplace, filterDias, showCustomDate, filterDataInicio, filterDataFim]);
+  }, [filterMarketplace, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
 
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
@@ -658,6 +699,22 @@ export function AtualizarDadosPage() {
                     )}
                   </div>
                 </div>
+                <div className={`bg-card border rounded-xl p-4 animate-fade-in ${sheetsData.vendasItems ? 'border-[hsl(var(--vix-warning)/0.3)]' : 'border-border'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-[hsl(var(--vix-warning))]" />
+                      <span className="text-sm font-medium text-foreground">Vendas / Pedidos</span>
+                    </div>
+                    {sheetsData.vendasItems ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[hsl(var(--vix-success))]">{sheetsData.vendasItems.length} vendas importadas</span>
+                        <button onClick={sheetsData.clearVendas} className="text-[10px] text-muted-foreground hover:text-[hsl(var(--vix-danger))]">Limpar</button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Usando dados mock</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Empty state */}
@@ -838,104 +895,173 @@ export function AtualizarDadosPage() {
 
         {/* Tab: Pedidos */}
         <TabsContent value="pedidos">
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <label className="text-sm text-muted-foreground">Filtrar:</label>
-            <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
-              <option value="all">Todos os Marketplaces</option>
-              {accounts.filter(a => a.status === 'connected').map(a => (
-                <option key={a.id} value={a.id}>{a.nome}</option>
-              ))}
-            </select>
+          {(() => {
+            const useImported = sheetsData.vendasItems && sheetsData.vendasItems.length > 0;
+            const vendasList = useImported ? (filteredOrders as any[]) : [];
+            const mockList = !useImported ? (filteredOrders as any[]) : [];
 
-            <div className="flex items-center gap-1 ml-2">
-              {[7, 15, 30].map(d => (
-                <button
-                  key={d}
-                  onClick={() => { setFilterDias(d); setShowCustomDate(false); }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    !showCustomDate && filterDias === d
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {d}d
-                </button>
-              ))}
-              <button
-                onClick={() => setShowCustomDate(prev => !prev)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  showCustomDate
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <CalendarDays className="w-3 h-3" />
-                Personalizado
-              </button>
-            </div>
+            // Get unique contas for filter
+            const contasUnicas = useImported
+              ? [...new Set(sheetsData.vendasItems!.map(v => v.conta).filter(Boolean))]
+              : [];
 
-            {showCustomDate && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={filterDataInicio}
-                  onChange={e => setFilterDataInicio(e.target.value)}
-                  className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs"
-                />
-                <span className="text-xs text-muted-foreground">até</span>
-                <input
-                  type="date"
-                  value={filterDataFim}
-                  onChange={e => setFilterDataFim(e.target.value)}
-                  className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs"
-                />
-              </div>
-            )}
+            return (
+              <>
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <label className="text-sm text-muted-foreground">Filtrar:</label>
+                  {useImported ? (
+                    <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value)} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
+                      <option value="all">Todas as Contas</option>
+                      {contasUnicas.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
+                      <option value="all">Todos os Marketplaces</option>
+                      {accounts.filter(a => a.status === 'connected').map(a => (
+                        <option key={a.id} value={a.id}>{a.nome}</option>
+                      ))}
+                    </select>
+                  )}
 
-            <span className="text-xs text-muted-foreground ml-auto">{filteredOrders.length} pedidos</span>
-          </div>
-          <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Pedido</th>
-                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Data</th>
-                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Conta</th>
-                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Comprador</th>
-                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Produto</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Qtd</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Total</th>
-                    <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredOrders.map((order) => {
-                    const account = accounts.find(a => a.id === order.marketplace);
-                    const st = statusConfig[order.statusPedido];
-                    const StIcon = st.icon;
-                    return (
-                      <tr key={order.id} className="border-b border-border hover:bg-muted/30 transition-colors">
-                        <td className="py-3 px-4 font-mono text-xs text-foreground">{order.numeroPedido}</td>
-                        <td className="py-3 px-4 text-muted-foreground">{order.data}</td>
-                        <td className="py-3 px-4 text-muted-foreground text-xs">{account?.nome || order.marketplace}</td>
-                        <td className="py-3 px-4 text-foreground">{order.comprador}</td>
-                        <td className="py-3 px-4 text-foreground text-xs">{order.produto}</td>
-                        <td className="py-3 px-4 text-right text-foreground">{order.quantidade}</td>
-                        <td className="py-3 px-4 text-right font-semibold text-foreground">{formatBRL(order.valorTotal)}</td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${st.class}`}>
-                            <StIcon className="w-3 h-3" />
-                            {st.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  <div className="flex items-center gap-1 ml-2">
+                    {[7, 15, 30, 60, 90].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => { setFilterDias(d); setShowCustomDate(false); }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          !showCustomDate && filterDias === d
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {d}d
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setShowCustomDate(prev => !prev)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        showCustomDate
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <CalendarDays className="w-3 h-3" />
+                      Personalizado
+                    </button>
+                  </div>
+
+                  {showCustomDate && (
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={filterDataInicio} onChange={e => setFilterDataInicio(e.target.value)} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
+                      <span className="text-xs text-muted-foreground">até</span>
+                      <input type="date" value={filterDataFim} onChange={e => setFilterDataFim(e.target.value)} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
+                    </div>
+                  )}
+
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {useImported && <span className="text-[hsl(var(--vix-success))] mr-2">● Dados importados</span>}
+                    {(useImported ? vendasList : mockList).length} pedidos
+                  </span>
+                </div>
+
+                {/* KPIs */}
+                {useImported && vendasList.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div className="bg-card border border-border rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground">Faturamento</p>
+                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || v.precoUnitario || 0), 0))}</p>
+                    </div>
+                    <div className="bg-card border border-border rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground">Líquido Total</p>
+                      <p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.liquido || 0), 0))}</p>
+                    </div>
+                    <div className="bg-card border border-border rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground">Unidades</p>
+                      <p className="text-sm font-bold text-foreground">{vendasList.reduce((s: number, v: any) => s + (v.quantidade || 1), 0)}</p>
+                    </div>
+                    <div className="bg-card border border-border rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
+                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || v.precoUnitario || 0), 0) / (vendasList.length || 1))}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/50">
+                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Pedido</th>
+                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Data</th>
+                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Conta</th>
+                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">SKU</th>
+                          <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Qtd</th>
+                          <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Valor</th>
+                          {useImported && (
+                            <>
+                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Impostos</th>
+                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Comissão</th>
+                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">CMV</th>
+                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Líquido</th>
+                              <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Margem</th>
+                            </>
+                          )}
+                          {!useImported && (
+                            <>
+                              <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Comprador</th>
+                              <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
+                            </>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {useImported ? vendasList.map((venda: any, idx: number) => (
+                          <tr key={venda.numeroPedido + '_' + idx} className="border-b border-border hover:bg-muted/30 transition-colors">
+                            <td className="py-3 px-4 font-mono text-xs text-foreground">{venda.numeroPedido}</td>
+                            <td className="py-3 px-4 text-muted-foreground text-xs">{venda.data}</td>
+                            <td className="py-3 px-4 text-muted-foreground text-xs">{venda.conta}</td>
+                            <td className="py-3 px-4 text-foreground text-xs font-mono">{venda.sku}</td>
+                            <td className="py-3 px-4 text-right text-foreground">{venda.quantidade}</td>
+                            <td className="py-3 px-4 text-right font-semibold text-foreground">{formatBRL(venda.valorTotal || venda.precoUnitario)}</td>
+                            <td className="py-3 px-4 text-right text-muted-foreground text-xs">{formatBRL(venda.impostos)}</td>
+                            <td className="py-3 px-4 text-right text-muted-foreground text-xs">{formatBRL(venda.comissao)}</td>
+                            <td className="py-3 px-4 text-right text-muted-foreground text-xs">{formatBRL(venda.cmv)}</td>
+                            <td className="py-3 px-4 text-right font-semibold text-[hsl(var(--vix-success))]">{formatBRL(venda.liquido)}</td>
+                            <td className="py-3 px-4 text-center text-xs font-medium">{venda.margem}</td>
+                          </tr>
+                        )) : mockList.map((order: any) => {
+                          const account = accounts.find(a => a.id === order.marketplace);
+                          const st = statusConfig[order.statusPedido];
+                          const StIcon = st?.icon || CheckCircle2;
+                          return (
+                            <tr key={order.id} className="border-b border-border hover:bg-muted/30 transition-colors">
+                              <td className="py-3 px-4 font-mono text-xs text-foreground">{order.numeroPedido}</td>
+                              <td className="py-3 px-4 text-muted-foreground">{order.data}</td>
+                              <td className="py-3 px-4 text-muted-foreground text-xs">{account?.nome || order.marketplace}</td>
+                              <td className="py-3 px-4 text-foreground text-xs font-mono">{order.sku}</td>
+                              <td className="py-3 px-4 text-right text-foreground">{order.quantidade}</td>
+                              <td className="py-3 px-4 text-right font-semibold text-foreground">{formatBRL(order.valorTotal)}</td>
+                              <td className="py-3 px-4 text-foreground">{order.comprador}</td>
+                              <td className="py-3 px-4 text-center">
+                                {st && (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${st.class}`}>
+                                    <StIcon className="w-3 h-3" />
+                                    {st.label}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </TabsContent>
 
         {/* Tab: Performance Ads */}

@@ -108,6 +108,28 @@ export interface Order {
   statusPedido: 'pendente' | 'pago' | 'enviado' | 'entregue' | 'cancelado';
   frete: number;
   taxas: number;
+  conta?: string;
+}
+
+export interface VendaItem {
+  numeroPedido: string;
+  data: string;
+  conta: string;
+  comprador: string;
+  sku: string;
+  produto: string;
+  quantidade: number;
+  valorTotal: number;
+  statusPedido: string;
+  frete: number;
+  origem: string;
+  precoUnitario: number;
+  impostos: number;
+  comissao: number;
+  custoEnvio: number;
+  cmv: number;
+  margem: string;
+  liquido: number;
 }
 
 export interface AdsCampaign {

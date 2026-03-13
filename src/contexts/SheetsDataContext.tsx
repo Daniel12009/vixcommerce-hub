@@ -1,14 +1,16 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { StockItem, FinancialItem } from '@/lib/types';
-import { parseBRL } from '@/lib/utils-vix';
+import type { StockItem, FinancialItem, VendaItem } from '@/lib/types';
 
 interface SheetsData {
   estoqueItems: StockItem[] | null;
   financeiroItems: FinancialItem[] | null;
+  vendasItems: VendaItem[] | null;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
+  setVendasFromSheet: (rows: Record<string, string>[]) => void;
   clearEstoque: () => void;
   clearFinanceiro: () => void;
+  clearVendas: () => void;
 }
 
 const SheetsDataContext = createContext<SheetsData | null>(null);
@@ -21,8 +23,7 @@ function calcStockStatus(diasCobertura: number): 'green' | 'yellow' | 'red' {
 
 function num(v: string | undefined): number {
   if (!v) return 0;
-  // Try BRL parse first, then plain number
-  const cleaned = v.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const cleaned = v.replace(/[R$\s%]/g, '').replace(/\./g, '').replace(',', '.');
   const n = parseFloat(cleaned);
   return isNaN(n) ? 0 : n;
 }
@@ -30,6 +31,7 @@ function num(v: string | undefined): number {
 export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [estoqueItems, setEstoqueItems] = useState<StockItem[] | null>(null);
   const [financeiroItems, setFinanceiroItems] = useState<FinancialItem[] | null>(null);
+  const [vendasItems, setVendasItems] = useState<VendaItem[] | null>(null);
 
   const setEstoqueFromSheet = useCallback((rows: Record<string, string>[]) => {
     const items: StockItem[] = rows
@@ -89,14 +91,53 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setFinanceiroItems(items);
   }, []);
 
+  const setVendasFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: VendaItem[] = rows
+      .filter(r => r.numeroPedido || r.sku)
+      .map(r => {
+        // Parse conta from ORIGEM field if not directly mapped
+        // ORIGEM format: "Mercado Livre|VIA FLIX" or "TikTok Shop|Via Flix"
+        let conta = r.conta || '';
+        const origem = r.origem || '';
+        if (!conta && origem.includes('|')) {
+          conta = origem.split('|')[1]?.trim() || '';
+        }
+
+        return {
+          numeroPedido: r.numeroPedido || '',
+          data: r.data || '',
+          conta,
+          comprador: r.comprador || '',
+          sku: r.sku || '',
+          produto: r.produto || r.sku || '',
+          quantidade: num(r.quantidade) || 1,
+          valorTotal: num(r.valorTotal) || num(r.precoUnitario) || 0,
+          statusPedido: r.statusPedido || 'pago',
+          frete: num(r.frete),
+          origem,
+          precoUnitario: num(r.precoUnitario),
+          impostos: num(r.impostos),
+          comissao: num(r.comissao),
+          custoEnvio: num(r.custoEnvio),
+          cmv: num(r.cmv),
+          margem: r.margem || '',
+          liquido: num(r.liquido),
+        };
+      });
+    setVendasItems(items);
+  }, []);
+
   return (
     <SheetsDataContext.Provider value={{
       estoqueItems,
       financeiroItems,
+      vendasItems,
       setEstoqueFromSheet,
       setFinanceiroFromSheet,
+      setVendasFromSheet,
       clearEstoque: () => setEstoqueItems(null),
       clearFinanceiro: () => setFinanceiroItems(null),
+      clearVendas: () => setVendasItems(null),
     }}>
       {children}
     </SheetsDataContext.Provider>
