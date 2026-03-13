@@ -202,6 +202,8 @@ export function AtualizarDadosPage() {
         sheetsData.setEstoqueFromSheet(parsed);
       } else if (config.moduloDestino === 'financeiro') {
         sheetsData.setFinanceiroFromSheet(parsed);
+      } else if (config.moduloDestino === 'vendas') {
+        sheetsData.setVendasFromSheet(parsed);
       }
 
       // Update last sync
