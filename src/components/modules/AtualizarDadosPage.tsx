@@ -183,7 +183,7 @@ export function AtualizarDadosPage() {
     try {
       const startRow = config.linhaInicial || 1;
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:Z5000` },
+        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:AZ5000` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
