@@ -95,8 +95,6 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     const items: VendaItem[] = rows
       .filter(r => r.numeroPedido || r.sku)
       .map(r => {
-        // Parse conta from ORIGEM field if not directly mapped
-        // ORIGEM format: "Mercado Livre|VIA FLIX" or "TikTok Shop|Via Flix"
         let conta = r.conta || '';
         const origem = r.origem || '';
         if (!conta && origem.includes('|')) {
@@ -107,18 +105,22 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           numeroPedido: r.numeroPedido || '',
           data: r.data || '',
           conta,
+          contaMae: r.contaMae || conta || '',
           comprador: r.comprador || '',
           sku: r.sku || '',
+          skuProduto: r.skuProduto || r.sku || '',
           produto: r.produto || r.sku || '',
           quantidade: num(r.quantidade) || 1,
           valorTotal: num(r.valorTotal) || num(r.precoUnitario) || 0,
           statusPedido: r.statusPedido || 'pago',
           frete: num(r.frete),
           origem,
+          pedidoOrigem: r.pedidoOrigem || '',
           precoUnitario: num(r.precoUnitario),
           impostos: num(r.impostos),
           comissao: num(r.comissao),
           custoEnvio: num(r.custoEnvio),
+          ads: num(r.ads),
           cmv: num(r.cmv),
           margem: r.margem || '',
           liquido: num(r.liquido),
