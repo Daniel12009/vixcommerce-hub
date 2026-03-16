@@ -264,9 +264,20 @@ export function AtualizarDadosPage() {
     if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
       let items = sheetsData.vendasItems;
 
-      // Filter by conta
+      // Filter by marketplace (pedidoOrigem)
       if (filterMarketplace !== 'all') {
-        items = items.filter(v => v.conta.toLowerCase().includes(filterMarketplace.toLowerCase()) || v.origem.toLowerCase().includes(filterMarketplace.toLowerCase()));
+        items = items.filter(v => v.pedidoOrigem.toLowerCase().includes(filterMarketplace.toLowerCase()));
+      }
+
+      // Filter by conta
+      if (filterConta !== 'all') {
+        items = items.filter(v => v.conta.toLowerCase() === filterConta.toLowerCase() || v.contaMae.toLowerCase() === filterConta.toLowerCase());
+      }
+
+      // Filter by SKU
+      if (filterSku.trim()) {
+        const q = filterSku.trim().toLowerCase();
+        items = items.filter(v => v.sku.toLowerCase().includes(q) || v.skuProduto?.toLowerCase().includes(q) || v.numeroPedido.toLowerCase().includes(q));
       }
 
       // Date filter
@@ -277,7 +288,9 @@ export function AtualizarDadosPage() {
           const year = parts[2].length === 2 ? 2000 + +parts[2] : +parts[2];
           return new Date(year, +parts[1] - 1, +parts[0]);
         }
-        return new Date(d);
+        // Try ISO format
+        const iso = new Date(d);
+        return isNaN(iso.getTime()) ? null : iso;
       };
 
       if (showCustomDate && filterDataInicio && filterDataFim) {
@@ -330,7 +343,7 @@ export function AtualizarDadosPage() {
       });
     }
     return orders;
-  }, [filterMarketplace, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
+  }, [filterMarketplace, filterConta, filterSku, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
 
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
