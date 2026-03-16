@@ -52,9 +52,13 @@ export function AtualizarDadosPage() {
   const [accounts, setAccounts] = useState<MarketplaceAccount[]>([...mockMarketplaceAccounts]);
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
   const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
-  const [filterDias, setFilterDias] = useState<number>(30);
+  const [filterConta, setFilterConta] = useState<string>('all');
+  const [filterSku, setFilterSku] = useState<string>('');
+  const [filterDias, setFilterDias] = useState<number>(90);
   const [filterDataInicio, setFilterDataInicio] = useState<string>('');
   const [filterDataFim, setFilterDataFim] = useState<string>('');
+  const [pedidosPage, setPedidosPage] = useState(0);
+  const PEDIDOS_PER_PAGE = 100;
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
