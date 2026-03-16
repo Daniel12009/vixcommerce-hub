@@ -52,9 +52,13 @@ export function AtualizarDadosPage() {
   const [accounts, setAccounts] = useState<MarketplaceAccount[]>([...mockMarketplaceAccounts]);
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
   const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
-  const [filterDias, setFilterDias] = useState<number>(30);
+  const [filterConta, setFilterConta] = useState<string>('all');
+  const [filterSku, setFilterSku] = useState<string>('');
+  const [filterDias, setFilterDias] = useState<number>(90);
   const [filterDataInicio, setFilterDataInicio] = useState<string>('');
   const [filterDataFim, setFilterDataFim] = useState<string>('');
+  const [pedidosPage, setPedidosPage] = useState(0);
+  const PEDIDOS_PER_PAGE = 100;
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -183,7 +187,7 @@ export function AtualizarDadosPage() {
     try {
       const startRow = config.linhaInicial || 1;
       const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:AZ5000` },
+        body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:BZ` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -260,9 +264,20 @@ export function AtualizarDadosPage() {
     if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
       let items = sheetsData.vendasItems;
 
-      // Filter by conta
+      // Filter by marketplace (pedidoOrigem)
       if (filterMarketplace !== 'all') {
-        items = items.filter(v => v.conta.toLowerCase().includes(filterMarketplace.toLowerCase()) || v.origem.toLowerCase().includes(filterMarketplace.toLowerCase()));
+        items = items.filter(v => v.pedidoOrigem.toLowerCase().includes(filterMarketplace.toLowerCase()));
+      }
+
+      // Filter by conta
+      if (filterConta !== 'all') {
+        items = items.filter(v => v.conta.toLowerCase() === filterConta.toLowerCase() || v.contaMae.toLowerCase() === filterConta.toLowerCase());
+      }
+
+      // Filter by SKU
+      if (filterSku.trim()) {
+        const q = filterSku.trim().toLowerCase();
+        items = items.filter(v => v.sku.toLowerCase().includes(q) || v.skuProduto?.toLowerCase().includes(q) || v.numeroPedido.toLowerCase().includes(q));
       }
 
       // Date filter
@@ -273,7 +288,9 @@ export function AtualizarDadosPage() {
           const year = parts[2].length === 2 ? 2000 + +parts[2] : +parts[2];
           return new Date(year, +parts[1] - 1, +parts[0]);
         }
-        return new Date(d);
+        // Try ISO format
+        const iso = new Date(d);
+        return isNaN(iso.getTime()) ? null : iso;
       };
 
       if (showCustomDate && filterDataInicio && filterDataFim) {
@@ -326,7 +343,7 @@ export function AtualizarDadosPage() {
       });
     }
     return orders;
-  }, [filterMarketplace, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
+  }, [filterMarketplace, filterConta, filterSku, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
 
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
@@ -900,36 +917,78 @@ export function AtualizarDadosPage() {
             const vendasList = useImported ? (filteredOrders as any[]) : [];
             const mockList = !useImported ? (filteredOrders as any[]) : [];
 
+            // Get unique marketplaces for filter
+            const marketplacesUnicos = useImported
+              ? [...new Set(sheetsData.vendasItems!.map(v => v.pedidoOrigem).filter(Boolean))]
+              : [];
+
             // Get unique contas for filter
             const contasUnicas = useImported
               ? [...new Set(sheetsData.vendasItems!.map(v => v.conta).filter(Boolean))]
               : [];
 
+            const displayList = useImported ? vendasList : mockList;
+            const totalPages = Math.ceil(displayList.length / PEDIDOS_PER_PAGE);
+            const paginatedList = displayList.slice(pedidosPage * PEDIDOS_PER_PAGE, (pedidosPage + 1) * PEDIDOS_PER_PAGE);
+
             return (
               <>
+                {/* Filters row */}
                 <div className="flex flex-wrap items-center gap-3 mb-4">
-                  <label className="text-sm text-muted-foreground">Filtrar:</label>
-                  {useImported ? (
-                    <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value)} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
-                      <option value="all">Todas as Contas</option>
-                      {contasUnicas.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-sm">
-                      <option value="all">Todos os Marketplaces</option>
-                      {accounts.filter(a => a.status === 'connected').map(a => (
-                        <option key={a.id} value={a.id}>{a.nome}</option>
-                      ))}
-                    </select>
+                  {useImported && marketplacesUnicos.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-muted-foreground">Marketplace:</label>
+                      <select value={filterMarketplace} onChange={(e) => { setFilterMarketplace(e.target.value); setPedidosPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todos</option>
+                        {marketplacesUnicos.map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
 
-                  <div className="flex items-center gap-1 ml-2">
+                  {useImported && contasUnicas.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-muted-foreground">Conta:</label>
+                      <select value={filterConta} onChange={(e) => { setFilterConta(e.target.value); setPedidosPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todas</option>
+                        {contasUnicas.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {!useImported && (
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-muted-foreground">Marketplace:</label>
+                      <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value as MarketplaceId | 'all')} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todos</option>
+                        {accounts.filter(a => a.status === 'connected').map(a => (
+                          <option key={a.id} value={a.id}>{a.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {useImported && (
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-muted-foreground">SKU:</label>
+                      <input
+                        type="text"
+                        placeholder="Buscar SKU..."
+                        value={filterSku}
+                        onChange={e => { setFilterSku(e.target.value); setPedidosPage(0); }}
+                        className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs w-28"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1 ml-1">
                     {[7, 15, 30, 60, 90].map(d => (
                       <button
                         key={d}
-                        onClick={() => { setFilterDias(d); setShowCustomDate(false); }}
+                        onClick={() => { setFilterDias(d); setShowCustomDate(false); setPedidosPage(0); }}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                           !showCustomDate && filterDias === d
                             ? 'bg-primary text-primary-foreground'
@@ -954,15 +1013,15 @@ export function AtualizarDadosPage() {
 
                   {showCustomDate && (
                     <div className="flex items-center gap-2">
-                      <input type="date" value={filterDataInicio} onChange={e => setFilterDataInicio(e.target.value)} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
+                      <input type="date" value={filterDataInicio} onChange={e => { setFilterDataInicio(e.target.value); setPedidosPage(0); }} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
                       <span className="text-xs text-muted-foreground">até</span>
-                      <input type="date" value={filterDataFim} onChange={e => setFilterDataFim(e.target.value)} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
+                      <input type="date" value={filterDataFim} onChange={e => { setFilterDataFim(e.target.value); setPedidosPage(0); }} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
                     </div>
                   )}
 
                   <span className="text-xs text-muted-foreground ml-auto">
                     {useImported && <span className="text-[hsl(var(--vix-success))] mr-2">● Dados importados</span>}
-                    {(useImported ? vendasList : mockList).length} pedidos
+                    {displayList.length} pedidos
                   </span>
                 </div>
 
@@ -971,7 +1030,7 @@ export function AtualizarDadosPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div className="bg-card border border-border rounded-xl p-3">
                       <p className="text-[10px] text-muted-foreground">Faturamento</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || v.precoUnitario || 0), 0))}</p>
+                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0))}</p>
                     </div>
                     <div className="bg-card border border-border rounded-xl p-3">
                       <p className="text-[10px] text-muted-foreground">Líquido Total</p>
@@ -983,7 +1042,7 @@ export function AtualizarDadosPage() {
                     </div>
                     <div className="bg-card border border-border rounded-xl p-3">
                       <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || v.precoUnitario || 0), 0) / (vendasList.length || 1))}</p>
+                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) / (vendasList.length || 1))}</p>
                     </div>
                   </div>
                 )}
@@ -1017,7 +1076,7 @@ export function AtualizarDadosPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {useImported ? vendasList.map((venda: any, idx: number) => (
+                        {useImported ? paginatedList.map((venda: any, idx: number) => (
                           <tr key={venda.numeroPedido + '_' + idx} className="border-b border-border hover:bg-muted/30 transition-colors">
                             <td className="py-3 px-4 font-mono text-xs text-foreground">{venda.numeroPedido}</td>
                             <td className="py-3 px-4 text-muted-foreground text-xs">{venda.data}</td>
@@ -1031,7 +1090,7 @@ export function AtualizarDadosPage() {
                             <td className="py-3 px-4 text-right font-semibold text-[hsl(var(--vix-success))]">{formatBRL(venda.liquido)}</td>
                             <td className="py-3 px-4 text-center text-xs font-medium">{venda.margem}</td>
                           </tr>
-                        )) : mockList.map((order: any) => {
+                        )) : paginatedList.map((order: any) => {
                           const account = accounts.find(a => a.id === order.marketplace);
                           const st = statusConfig[order.statusPedido];
                           const StIcon = st?.icon || CheckCircle2;
@@ -1058,6 +1117,34 @@ export function AtualizarDadosPage() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                      <span className="text-xs text-muted-foreground">
+                        Mostrando {pedidosPage * PEDIDOS_PER_PAGE + 1}–{Math.min((pedidosPage + 1) * PEDIDOS_PER_PAGE, displayList.length)} de {displayList.length}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setPedidosPage(p => Math.max(0, p - 1))}
+                          disabled={pedidosPage === 0}
+                          className="px-2.5 py-1 rounded text-xs font-medium bg-card border border-border text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                        >
+                          ← Anterior
+                        </button>
+                        <span className="text-xs text-muted-foreground px-2">
+                          {pedidosPage + 1} / {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setPedidosPage(p => Math.min(totalPages - 1, p + 1))}
+                          disabled={pedidosPage >= totalPages - 1}
+                          className="px-2.5 py-1 rounded text-xs font-medium bg-card border border-border text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                        >
+                          Próximo →
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             );
