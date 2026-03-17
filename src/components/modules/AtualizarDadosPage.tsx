@@ -65,6 +65,80 @@ export function AtualizarDadosPage() {
   const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
   const [showSecrets, setShowSecrets] = useState(false);
 
+  // Vendas Table Columns state
+  const DEFAULT_COLUMNS = [
+    { id: 'numeroPedido', label: 'Pedido', visible: true },
+    { id: 'data', label: 'Data', visible: true },
+    { id: 'conta', label: 'Conta', visible: true },
+    { id: 'sku', label: 'SKU', visible: true },
+    { id: 'quantidade', label: 'Qtd', visible: true },
+    { id: 'valorTotal', label: 'Valor', visible: true },
+    { id: 'impostos', label: 'Impostos', visible: true, onlyImported: true },
+    { id: 'comissao', label: 'Comissão', visible: true, onlyImported: true },
+    { id: 'cmv', label: 'CMV', visible: true, onlyImported: true },
+    { id: 'liquido', label: 'Líquido', visible: true, onlyImported: true },
+    { id: 'margem', label: 'Margem', visible: true, onlyImported: true },
+    { id: 'comprador', label: 'Comprador', visible: true, onlyMock: true },
+    { id: 'status', label: 'Status', visible: true, onlyMock: true },
+  ];
+  const [tableColumns, setTableColumns] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vix_vendas_columns');
+      return saved ? JSON.parse(saved) : DEFAULT_COLUMNS;
+    } catch {
+      return DEFAULT_COLUMNS;
+    }
+  });
+  const [showColConfig, setShowColConfig] = useState(false);
+
+  // Auto-detect new custom columns from imported data
+  useEffect(() => {
+    if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
+      const allKeys = new Set<string>();
+      sheetsData.vendasItems.forEach(item => Object.keys(item).forEach(k => allKeys.add(k)));
+      
+      const standardKeys = CAMPOS_POR_MODULO['vendas'].map(c => c.key);
+      const customKeys = Array.from(allKeys).filter(k => !standardKeys.includes(k) && k !== 'id');
+
+      setTableColumns(prev => {
+        let updated = [...prev];
+        let changed = false;
+        customKeys.forEach(ck => {
+          if (!updated.find(c => c.id === ck)) {
+            updated.push({ id: ck, label: ck, visible: true, isCustom: true });
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem('vix_vendas_columns', JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
+    }
+  }, [sheetsData.vendasItems]);
+
+  const toggleColumn = (id: string) => {
+    setTableColumns(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, visible: !c.visible } : c);
+      localStorage.setItem('vix_vendas_columns', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const moveColumn = (index: number, direction: 'up' | 'down') => {
+    setTableColumns(prev => {
+      const next = [...prev];
+      if (direction === 'up' && index > 0) {
+        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      } else if (direction === 'down' && index < next.length - 1) {
+        [next[index + 1], next[index]] = [next[index], next[index + 1]];
+      }
+      localStorage.setItem('vix_vendas_columns', JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Google Sheets state
   const [sheetConfigs, setSheetConfigs] = useState<SheetConfig[]>(() => loadSheetConfigs());
   const [sheetUrl, setSheetUrl] = useState('');
@@ -75,6 +149,7 @@ export function AtualizarDadosPage() {
   const [importingConfig, setImportingConfig] = useState<string | null>(null);
 
   // New config form state
+  const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
   const [newConfigAba, setNewConfigAba] = useState('');
   const [newConfigModulo, setNewConfigModulo] = useState<ModuloDestino>('estoque');
   const [newConfigMapping, setNewConfigMapping] = useState<Record<string, string>>({});
@@ -82,6 +157,7 @@ export function AtualizarDadosPage() {
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
   const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
+  const [customColumns, setCustomColumns] = useState<{ id: string; targetName: string; selectedSourceColumn: string }[]>([]);
 
   const sheetsData = useSheetsData();
 
@@ -115,7 +191,7 @@ export function AtualizarDadosPage() {
     }
   };
 
-  const handleFetchHeadersForMapping = async (abaNome: string) => {
+  const handleFetchHeadersForMapping = async (abaNome: string, existingMapping?: Record<string, string>, existingFixos?: Record<string, string>) => {
     const spreadsheetId = extractSpreadsheetId(sheetUrl);
     if (!spreadsheetId) return;
     setLoadingSheet(true);
@@ -129,14 +205,40 @@ export function AtualizarDadosPage() {
       if (data?.error) throw new Error(data.error);
       const headers = data.values?.[0] || [];
       setMappingHeaders(headers);
-      setNewConfigMapping({});
-      setNewConfigValoresFixos({});
+      
+      if (existingMapping) {
+        setNewConfigMapping(existingMapping);
+        setNewConfigValoresFixos(existingFixos || {});
+        
+        // Extract custom columns that are not in CAMPOS_POR_MODULO
+        const camposPadraoKeys = CAMPOS_POR_MODULO[newConfigModulo].map(c => c.key);
+        const mappedCustoms = Object.entries(existingMapping)
+          .filter(([k]) => !camposPadraoKeys.includes(k))
+          .map(([k, v]) => ({ id: `cust_${Date.now()}_${Math.random()}`, targetName: k, selectedSourceColumn: v }));
+        setCustomColumns(mappedCustoms);
+      } else {
+        setNewConfigMapping({});
+        setNewConfigValoresFixos({});
+        setCustomColumns([]);
+      }
+      
       setShowMappingDialog(true);
     } catch (err: any) {
       toast.error(`Erro ao ler cabeçalhos: ${err.message}`);
     } finally {
       setLoadingSheet(false);
     }
+  };
+
+  const handleEditConfig = (config: SheetConfig) => {
+    setEditingConfigId(config.id);
+    setSheetUrl(config.url);
+    setSheetInfo({ title: config.nome.split(' — ')[0], sheets: [config.abaNome] });
+    setNewConfigAba(config.abaNome);
+    setNewConfigModulo(config.moduloDestino);
+    setNewConfigLinhaInicial(config.linhaInicial);
+    // Fetch headers and populate
+    handleFetchHeadersForMapping(config.abaNome, config.mapeamento, config.valoresFixos);
   };
 
   const handleSaveConfig = () => {
@@ -151,6 +253,14 @@ export function AtualizarDadosPage() {
       return;
     }
 
+    // Integrate custom columns into mapping
+    const finalMapping = { ...newConfigMapping };
+    customColumns.forEach(cc => {
+      if (cc.targetName.trim() && cc.selectedSourceColumn && cc.selectedSourceColumn !== '__none__') {
+        finalMapping[cc.targetName.trim()] = cc.selectedSourceColumn;
+      }
+    });
+
     // Clean out empty fixed values
     const fixos: Record<string, string> = {};
     for (const [k, v] of Object.entries(newConfigValoresFixos)) {
@@ -158,23 +268,33 @@ export function AtualizarDadosPage() {
     }
 
     const config: SheetConfig = {
-      id: `${spreadsheetId}_${newConfigAba}_${Date.now()}`,
+      id: editingConfigId ? editingConfigId : `${spreadsheetId}_${newConfigAba}_${Date.now()}`,
       url: sheetUrl,
       nome: `${sheetInfo?.title || 'Planilha'} — ${newConfigAba}`,
       spreadsheetId,
       abaNome: newConfigAba,
       moduloDestino: newConfigModulo,
-      mapeamento: { ...newConfigMapping },
+      mapeamento: finalMapping,
       valoresFixos: Object.keys(fixos).length > 0 ? fixos : undefined,
       linhaInicial: newConfigLinhaInicial,
     };
 
-    setSheetConfigs(prev => [...prev, config]);
+    if (editingConfigId) {
+      setSheetConfigs(prev => prev.map(c => c.id === editingConfigId ? config : c));
+      toast.success(`Configuração atualizada: ${newConfigAba}`);
+    } else {
+      setSheetConfigs(prev => [...prev, config]);
+      toast.success(`Configuração salva: ${newConfigAba} → ${moduloLabels[newConfigModulo]}`);
+    }
+
     setShowMappingDialog(false);
+    setEditingConfigId(null);
     setNewConfigMapping({});
     setNewConfigValoresFixos({});
+    setCustomColumns([]);
     setNewConfigAba('');
-    toast.success(`Configuração salva: ${newConfigAba} → ${moduloLabels[newConfigModulo]}`);
+    setSheetUrl('');
+    setSheetInfo(null);
   };
 
   const handleRemoveConfig = (id: string) => {
@@ -434,6 +554,14 @@ export function AtualizarDadosPage() {
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
+                            <button
+                              onClick={() => handleEditConfig(config)}
+                              disabled={!!importingConfig}
+                              className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                              title="Editar mapeamento"
+                            >
+                              <Settings2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -602,10 +730,67 @@ export function AtualizarDadosPage() {
                       );
                     })}
                   </div>
+                  
+                  {/* Custom columns section */}
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-semibold text-foreground">Colunas Extras Personalizadas</h4>
+                      <button
+                        onClick={() => setCustomColumns(prev => [...prev, { id: `cust_${Date.now()}`, targetName: '', selectedSourceColumn: '' }])}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium bg-primary text-primary-foreground hover:opacity-90"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Adicionar Coluna
+                      </button>
+                    </div>
+                    
+                    {customColumns.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">Nenhuma coluna extra adicionada. Use isso para importar dados adicionais que não estão na lista padrão.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {customColumns.map((col, idx) => (
+                          <div key={col.id} className="flex items-center gap-2">
+                            <Input
+                              placeholder="Nome do Campo Novo"
+                              value={col.targetName}
+                              onChange={e => {
+                                const newName = e.target.value;
+                                setCustomColumns(prev => prev.map((c, i) => i === idx ? { ...c, targetName: newName } : c));
+                              }}
+                              className="text-xs w-1/3"
+                            />
+                            <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <Select
+                              value={col.selectedSourceColumn || '__none__'}
+                              onValueChange={v => {
+                                setCustomColumns(prev => prev.map((c, i) => i === idx ? { ...c, selectedSourceColumn: v === '__none__' ? '' : v } : c));
+                              }}
+                            >
+                              <SelectTrigger className="text-xs flex-1">
+                                <SelectValue placeholder="Selecione coluna na planilha" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">— Escolha a coluna —</SelectItem>
+                                {mappingHeaders.filter(h => h.trim() !== '').map(h => (
+                                  <SelectItem key={h} value={h}>{h}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <button
+                              onClick={() => setCustomColumns(prev => prev.filter((_, i) => i !== idx))}
+                              className="p-1 rounded text-muted-foreground hover:text-[hsl(var(--vix-danger))] hover:bg-[hsl(var(--vix-danger)/0.1)] transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                  <div className="flex gap-2 mt-4">
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-border">
                     <button
-                      onClick={() => { setShowMappingDialog(false); setNewConfigMapping({}); setNewConfigValoresFixos({}); }}
+                      onClick={() => { setShowMappingDialog(false); setEditingConfigId(null); setNewConfigMapping({}); setNewConfigValoresFixos({}); setCustomColumns([]); setSheetUrl(''); setSheetInfo(null); }}
                       className="flex-1 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors"
                     >
                       Cancelar
@@ -1025,8 +1210,37 @@ export function AtualizarDadosPage() {
                   </span>
                 </div>
 
-                {/* KPIs */}
-                {useImported && vendasList.length > 0 && (
+                  {/* Col Config Modal */}
+                  {showColConfig && (
+                    <div className="mb-4 p-4 bg-card border border-border rounded-xl animate-fade-in">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Settings2 className="w-4 h-4 text-primary" />
+                          Configurar Colunas da Tabela
+                        </h4>
+                        <button onClick={() => setShowColConfig(false)} className="text-muted-foreground hover:text-foreground"><XCircle className="w-4 h-4" /></button>
+                      </div>
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                        {tableColumns.filter(c => useImported ? !c.onlyMock : !c.onlyImported).map((col: any, idx: number, arr: any[]) => (
+                          <div key={col.id} className="flex items-center justify-between p-2 rounded-lg border border-border bg-background hover:border-primary/30 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => toggleColumn(col.id)} className={`w-4 h-4 rounded flex items-center justify-center border ${col.visible ? 'bg-primary border-primary text-primary-foreground' : 'border-input bg-transparent'}`}>
+                                {col.visible && <Check className="w-3 h-3" />}
+                              </button>
+                              <span className="text-xs font-medium text-foreground">
+                                {col.label} {col.isCustom && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-normal text-muted-foreground">Extra</span>}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => moveColumn(tableColumns.findIndex(c => c.id === col.id), 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => moveColumn(tableColumns.findIndex(c => c.id === col.id), 'down')} disabled={idx === arr.length - 1} className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div className="bg-card border border-border rounded-xl p-3">
                       <p className="text-[10px] text-muted-foreground">Faturamento</p>
@@ -1045,50 +1259,50 @@ export function AtualizarDadosPage() {
                       <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) / (vendasList.length || 1))}</p>
                     </div>
                   </div>
-                )}
+
+                <div className="flex items-center justify-end mb-3">
+                  <button onClick={() => setShowColConfig(!showColConfig)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:bg-muted transition-colors">
+                    <Settings2 className="w-3.5 h-3.5" />
+                    Configurar Colunas
+                  </button>
+                </div>
 
                 <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-muted/50">
-                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Pedido</th>
-                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Data</th>
-                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Conta</th>
-                          <th className="text-left py-3 px-4 font-semibold text-muted-foreground">SKU</th>
-                          <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Qtd</th>
-                          <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Valor</th>
-                          {useImported && (
-                            <>
-                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Impostos</th>
-                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Comissão</th>
-                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">CMV</th>
-                              <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Líquido</th>
-                              <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Margem</th>
-                            </>
-                          )}
-                          {!useImported && (
-                            <>
-                              <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Comprador</th>
-                              <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
-                            </>
-                          )}
+                          {tableColumns.filter(c => c.visible && (useImported ? !c.onlyMock : !c.onlyImported)).map(col => (
+                            <th key={col.id} className={`py-3 px-4 font-semibold text-muted-foreground ${['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem'].includes(col.id) ? 'text-right' : col.id === 'status' ? 'text-center' : 'text-left'}`}>
+                              {col.label}
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
                         {useImported ? paginatedList.map((venda: any, idx: number) => (
                           <tr key={venda.numeroPedido + '_' + idx} className="border-b border-border hover:bg-muted/30 transition-colors">
-                            <td className="py-3 px-4 font-mono text-xs text-foreground">{venda.numeroPedido}</td>
-                            <td className="py-3 px-4 text-muted-foreground text-xs">{venda.data}</td>
-                            <td className="py-3 px-4 text-muted-foreground text-xs">{venda.conta}</td>
-                            <td className="py-3 px-4 text-foreground text-xs font-mono">{venda.sku}</td>
-                            <td className="py-3 px-4 text-right text-foreground">{venda.quantidade}</td>
-                            <td className="py-3 px-4 text-right font-semibold text-foreground">{formatBRL(venda.valorTotal || venda.precoUnitario)}</td>
-                            <td className="py-3 px-4 text-right text-muted-foreground text-xs">{formatBRL(venda.impostos)}</td>
-                            <td className="py-3 px-4 text-right text-muted-foreground text-xs">{formatBRL(venda.comissao)}</td>
-                            <td className="py-3 px-4 text-right text-muted-foreground text-xs">{formatBRL(venda.cmv)}</td>
-                            <td className="py-3 px-4 text-right font-semibold text-[hsl(var(--vix-success))]">{formatBRL(venda.liquido)}</td>
-                            <td className="py-3 px-4 text-center text-xs font-medium">{venda.margem}</td>
+                            {tableColumns.filter(c => c.visible && !c.onlyMock).map(col => {
+                              let content: any = venda[col.id];
+                              let className = "py-3 px-4 text-xs text-foreground ";
+                              
+                              if (col.id === 'numeroPedido' || col.id === 'sku') className += "font-mono ";
+                              if (['impostos','comissao','cmv','data','conta'].includes(col.id)) className += "text-muted-foreground ";
+                              if (col.id === 'liquido') className += "font-semibold text-[hsl(var(--vix-success))] text-right ";
+                              if (col.id === 'valorTotal') className += "font-semibold text-right ";
+                              if (['quantidade','margem'].includes(col.id)) className += "text-right ";
+                              if (col.id === 'margem') className += "text-center font-medium ";
+                              if (['valorTotal','impostos','comissao','cmv','liquido'].includes(col.id)) {
+                                content = formatBRL(content || (col.id === 'valorTotal' ? venda.precoUnitario : 0));
+                                className += "text-right ";
+                              }
+
+                              return (
+                                <td key={col.id} className={className.trim()}>
+                                  {content}
+                                </td>
+                              );
+                            })}
                           </tr>
                         )) : paginatedList.map((order: any) => {
                           const account = accounts.find(a => a.id === order.marketplace);
@@ -1096,21 +1310,32 @@ export function AtualizarDadosPage() {
                           const StIcon = st?.icon || CheckCircle2;
                           return (
                             <tr key={order.id} className="border-b border-border hover:bg-muted/30 transition-colors">
-                              <td className="py-3 px-4 font-mono text-xs text-foreground">{order.numeroPedido}</td>
-                              <td className="py-3 px-4 text-muted-foreground">{order.data}</td>
-                              <td className="py-3 px-4 text-muted-foreground text-xs">{account?.nome || order.marketplace}</td>
-                              <td className="py-3 px-4 text-foreground text-xs font-mono">{order.sku}</td>
-                              <td className="py-3 px-4 text-right text-foreground">{order.quantidade}</td>
-                              <td className="py-3 px-4 text-right font-semibold text-foreground">{formatBRL(order.valorTotal)}</td>
-                              <td className="py-3 px-4 text-foreground">{order.comprador}</td>
-                              <td className="py-3 px-4 text-center">
-                                {st && (
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${st.class}`}>
-                                    <StIcon className="w-3 h-3" />
-                                    {st.label}
-                                  </span>
-                                )}
-                              </td>
+                              {tableColumns.filter(c => c.visible && !c.onlyImported).map(col => {
+                                let content: any = order[col.id];
+                                let className = "py-3 px-4 text-xs text-foreground ";
+
+                                if (col.id === 'numeroPedido' || col.id === 'sku') className += "font-mono ";
+                                if (col.id === 'data') className += "text-muted-foreground ";
+                                if (col.id === 'conta') { content = account?.nome || order.marketplace; className += "text-muted-foreground text-xs "; }
+                                if (col.id === 'valorTotal') { content = formatBRL(content); className += "font-semibold text-right "; }
+                                if (col.id === 'quantidade') className += "text-right ";
+
+                                if (col.id === 'status') {
+                                  className += "text-center ";
+                                  content = st ? (
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${st.class}`}>
+                                      <StIcon className="w-3 h-3" />
+                                      {st.label}
+                                    </span>
+                                  ) : null;
+                                }
+
+                                return (
+                                  <td key={col.id} className={className.trim()}>
+                                    {content}
+                                  </td>
+                                );
+                              })}
                             </tr>
                           );
                         })}
