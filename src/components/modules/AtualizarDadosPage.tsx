@@ -94,6 +94,9 @@ export function AtualizarDadosPage() {
   });
   const [showColConfig, setShowColConfig] = useState(false);
 
+  // Load sheets data
+  const sheetsData = useSheetsData();
+
   // Auto-detect new custom columns from imported data
   useEffect(() => {
     if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
@@ -161,8 +164,6 @@ export function AtualizarDadosPage() {
   const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
   const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
   const [customColumns, setCustomColumns] = useState<{ id: string; targetName: string; selectedSourceColumn: string }[]>([]);
-
-  const sheetsData = useSheetsData();
 
   // Persist configs
   useEffect(() => {
