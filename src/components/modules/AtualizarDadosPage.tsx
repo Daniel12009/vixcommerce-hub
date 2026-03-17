@@ -48,6 +48,25 @@ const moduloColors: Record<ModuloDestino, string> = {
   vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
 };
 
+// Vendas Table Columns state
+const DEFAULT_COLUMNS = [
+  { id: 'numeroPedido', label: 'Pedido', visible: true },
+  { id: 'data', label: 'Data', visible: true },
+  { id: 'conta', label: 'Conta', visible: true },
+  { id: 'sku', label: 'SKU', visible: true },
+  { id: 'quantidade', label: 'Qtd', visible: true },
+  { id: 'valorTotal', label: 'Valor', visible: true },
+  { id: 'impostos', label: 'Impostos', visible: true, onlyImported: true },
+  { id: 'comissao', label: 'Comissão', visible: true, onlyImported: true },
+  { id: 'cmv', label: 'CMV', visible: true, onlyImported: true },
+  { id: 'liquido', label: 'Líquido', visible: true, onlyImported: true },
+  { id: 'margem', label: 'Margem', visible: true, onlyImported: true },
+  { id: 'comprador', label: 'Comprador', visible: true, onlyMock: true },
+  { id: 'status', label: 'Status', visible: true, onlyMock: true },
+];
+
+const PEDIDOS_PER_PAGE = 100;
+
 export function AtualizarDadosPage() {
   const [accounts, setAccounts] = useState<MarketplaceAccount[]>([...mockMarketplaceAccounts]);
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
@@ -58,29 +77,13 @@ export function AtualizarDadosPage() {
   const [filterDataInicio, setFilterDataInicio] = useState<string>('');
   const [filterDataFim, setFilterDataFim] = useState<string>('');
   const [pedidosPage, setPedidosPage] = useState(0);
-  const PEDIDOS_PER_PAGE = 100;
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newAccount, setNewAccount] = useState({ nome: '', plataforma: '', loja: '', clientId: '', clientSecret: '', accessToken: '', refreshToken: '' });
   const [showSecrets, setShowSecrets] = useState(false);
 
-  // Vendas Table Columns state
-  const DEFAULT_COLUMNS = [
-    { id: 'numeroPedido', label: 'Pedido', visible: true },
-    { id: 'data', label: 'Data', visible: true },
-    { id: 'conta', label: 'Conta', visible: true },
-    { id: 'sku', label: 'SKU', visible: true },
-    { id: 'quantidade', label: 'Qtd', visible: true },
-    { id: 'valorTotal', label: 'Valor', visible: true },
-    { id: 'impostos', label: 'Impostos', visible: true, onlyImported: true },
-    { id: 'comissao', label: 'Comissão', visible: true, onlyImported: true },
-    { id: 'cmv', label: 'CMV', visible: true, onlyImported: true },
-    { id: 'liquido', label: 'Líquido', visible: true, onlyImported: true },
-    { id: 'margem', label: 'Margem', visible: true, onlyImported: true },
-    { id: 'comprador', label: 'Comprador', visible: true, onlyMock: true },
-    { id: 'status', label: 'Status', visible: true, onlyMock: true },
-  ];
+  // Removed DEFAULT_COLUMNS from here
   const [tableColumns, setTableColumns] = useState(() => {
     try {
       const saved = localStorage.getItem('vix_vendas_columns');
