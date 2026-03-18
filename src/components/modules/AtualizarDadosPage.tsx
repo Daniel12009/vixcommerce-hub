@@ -383,6 +383,34 @@ export function AtualizarDadosPage() {
   const totalPedidos = accounts.reduce((s, a) => s + (a.totalPedidos || 0), 0);
   const connectedCount = accounts.filter(a => a.status === 'connected').length;
 
+  // Helper: parse date string
+  const parseDate = (d: string) => {
+    if (!d) return null;
+    const parts = d.split('/');
+    if (parts.length === 3) {
+      const year = parts[2].length === 2 ? 2000 + +parts[2] : +parts[2];
+      return new Date(year, +parts[1] - 1, +parts[0]);
+    }
+    const iso = new Date(d);
+    return isNaN(iso.getTime()) ? null : iso;
+  };
+
+  // Date-ONLY filtered orders (for top KPI cards — NOT affected by marketplace/conta/origem filters)
+  const dateOnlyOrders = useMemo(() => {
+    if (!sheetsData.vendasItems || sheetsData.vendasItems.length === 0) return [];
+    let items = sheetsData.vendasItems;
+    if (showCustomDate && filterDataInicio && filterDataFim) {
+      const start = new Date(filterDataInicio);
+      const end = new Date(filterDataFim);
+      end.setHours(23, 59, 59);
+      items = items.filter(v => { const d = parseDate(v.data); return d && d >= start && d <= end; });
+    } else if (!showCustomDate && filterDias > 0) {
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - filterDias);
+      items = items.filter(v => { const d = parseDate(v.data); return d && d >= cutoff; });
+    }
+    return items;
+  }, [filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
+
   // Date-filtered orders (uses imported vendas if available, otherwise mock)
   const filteredOrders = useMemo(() => {
     if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
@@ -416,17 +444,6 @@ export function AtualizarDadosPage() {
       }
 
       // Date filter
-      const parseDate = (d: string) => {
-        if (!d) return null;
-        const parts = d.split('/');
-        if (parts.length === 3) {
-          const year = parts[2].length === 2 ? 2000 + +parts[2] : +parts[2];
-          return new Date(year, +parts[1] - 1, +parts[0]);
-        }
-        // Try ISO format
-        const iso = new Date(d);
-        return isNaN(iso.getTime()) ? null : iso;
-      };
 
       if (showCustomDate && filterDataInicio && filterDataFim) {
         const start = new Date(filterDataInicio);
@@ -532,10 +549,10 @@ export function AtualizarDadosPage() {
         )}
       </div>
 
-      {/* KPI cards - data-driven from vendas */}
+      {/* KPI cards - data-driven from vendas, filtered by DATE ONLY */}
       {(() => {
         const useVendas = sheetsData.vendasItems && sheetsData.vendasItems.length > 0;
-        const vendas = useVendas ? (filteredOrders as any[]) : [];
+        const vendas = useVendas ? (dateOnlyOrders as any[]) : [];
         const fat = useVendas ? vendas.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) : totalFaturamento;
         const ped = useVendas ? vendas.length : totalPedidos;
         const liq = vendas.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
@@ -544,7 +561,7 @@ export function AtualizarDadosPage() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
             <KpiCard title="Faturamento Total" value={formatBRL(fat)} icon={DollarSign} delay={0} />
             <KpiCard title="Total Pedidos" value={ped.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
-            <KpiCard title={`Margem ${margemPct >= 0 ? '' : ''}%`} value={`${margemPct.toFixed(1)}%`} icon={TrendingUp} delay={100} />
+            <KpiCard title="Margem %" value={`${margemPct.toFixed(1)}%`} icon={TrendingUp} delay={100} />
             <KpiCard title="Contas Conectadas" value={`${connectedCount}/${accounts.length}`} icon={Wifi} delay={150} />
             <KpiCard title="Planilhas Configuradas" value={String(sheetConfigs.length)} icon={FileSpreadsheet} delay={200} />
           </div>
@@ -1186,9 +1203,9 @@ export function AtualizarDadosPage() {
                 <div className="flex flex-wrap items-center gap-3 mb-4">
                   {useImported && marketplacesUnicos.length > 0 && (
                     <div className="flex items-center gap-1.5">
-                      <label className="text-xs text-muted-foreground">Marketplace:</label>
+                      <label className="text-xs text-muted-foreground">Origem:</label>
                       <select value={filterMarketplace} onChange={(e) => { setFilterMarketplace(e.target.value); setPedidosPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                        <option value="all">Todos</option>
+                        <option value="all">Todas</option>
                         {marketplacesUnicos.map(m => (
                           <option key={m} value={m}>{m}</option>
                         ))}
@@ -1208,17 +1225,6 @@ export function AtualizarDadosPage() {
                     </div>
                   )}
 
-                  {useImported && (
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-xs text-muted-foreground">Origem:</label>
-                      <select value={filterOrigem} onChange={(e) => { setFilterOrigem(e.target.value); setPedidosPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                        <option value="all">Todas Origens</option>
-                        <option value="Marketplace">Marketplace</option>
-                        <option value="Showroom">Showroom</option>
-                        <option value="Atacado">Atacado</option>
-                      </select>
-                    </div>
-                  )}
 
                   {!useImported && (
                     <div className="flex items-center gap-1.5">
