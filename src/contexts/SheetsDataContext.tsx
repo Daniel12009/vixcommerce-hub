@@ -45,8 +45,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         const emTransferencia = num(r.emTransferencia);
         const estoqueMinimo = num(r.estoqueMinimo) || 0;
         const necessidade = (vmd * (30 + leadTime)) - (estoqueAtual + emTransito + emTransferencia);
-        return {
-          ...r, // Preserve any custom mapped columns first
+        const baseItem = {
           skuPrincipal: r.skuPrincipal,
           nome: r.nome || r.skuPrincipal,
           conta: r.conta || '',
@@ -60,6 +59,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           necessidadeReposicao: Math.max(0, necessidade),
           statusCobertura: calcStockStatus(diasCobertura),
         };
+        return Object.assign({}, r, baseItem);
       });
     setEstoqueItems(items);
   }, []);
@@ -76,8 +76,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         const unidadesVendidas = num(r.unidadesVendidas) || 0;
         const margemReal = receita - impostos - taxas - custo - frete;
         const margemPercent = receita > 0 ? (margemReal / receita) * 100 : 0;
-        return {
-          ...r, // Preserve any custom mapped columns first
+        const baseItem = {
           skuPrincipal: r.skuPrincipal,
           nome: r.nome || r.skuPrincipal,
           receita,
@@ -89,6 +88,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           margemPercent,
           unidadesVendidas,
         };
+        return Object.assign({}, r, baseItem);
       });
     setFinanceiroItems(items);
   }, []);
@@ -103,8 +103,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           conta = origem.split('|')[1]?.trim() || '';
         }
 
-        return {
-          ...r, // Preserve any custom mapped columns first
+        const baseItem = {
           numeroPedido: r.numeroPedido || '',
           data: r.data || '',
           conta,
@@ -128,6 +127,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           margem: r.margem || '',
           liquido: num(r.liquido),
         };
+        return Object.assign({}, r, baseItem);
       });
     setVendasItems(items);
   }, []);

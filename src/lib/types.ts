@@ -43,7 +43,6 @@ export interface StockItem {
   emTransferencia: number;
   necessidadeReposicao: number;
   statusCobertura: 'green' | 'yellow' | 'red';
-  [key: string]: string | number | boolean | null | undefined;
 }
 
 export interface FinancialItem {
@@ -57,7 +56,6 @@ export interface FinancialItem {
   margemReal: number;
   margemPercent: number;
   unidadesVendidas: number;
-  [key: string]: string | number | boolean | null | undefined;
 }
 
 export interface DashboardMetrics {
@@ -136,7 +134,6 @@ export interface VendaItem {
   cmv: number;
   margem: string;
   liquido: number;
-  [key: string]: string | number | boolean | null | undefined;
 }
 
 export interface AdsCampaign {
