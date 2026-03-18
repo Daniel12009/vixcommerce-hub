@@ -72,6 +72,7 @@ export function AtualizarDadosPage() {
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
   const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
   const [filterConta, setFilterConta] = useState<string>('all');
+  const [filterOrigem, setFilterOrigem] = useState<string>('all');
   const [filterSku, setFilterSku] = useState<string>('');
   const [filterDias, setFilterDias] = useState<number>(90);
   const [filterDataInicio, setFilterDataInicio] = useState<string>('');
@@ -396,6 +397,11 @@ export function AtualizarDadosPage() {
       // Filter by conta
       if (filterConta !== 'all') {
         items = items.filter(v => v.conta.toLowerCase() === filterConta.toLowerCase() || v.contaMae.toLowerCase() === filterConta.toLowerCase());
+      }
+
+      // Filter by Origem
+      if (filterOrigem !== 'all') {
+        items = items.filter(v => (v.origem || '').toLowerCase().includes(filterOrigem.toLowerCase()));
       }
 
       // Filter by SKU
@@ -1144,6 +1150,18 @@ export function AtualizarDadosPage() {
                         {contasUnicas.map(c => (
                           <option key={c} value={c}>{c}</option>
                         ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {useImported && (
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-muted-foreground">Origem:</label>
+                      <select value={filterOrigem} onChange={(e) => { setFilterOrigem(e.target.value); setPedidosPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todas Origens</option>
+                        <option value="Marketplace">Marketplace</option>
+                        <option value="Showroom">Showroom</option>
+                        <option value="Atacado">Atacado</option>
                       </select>
                     </div>
                   )}

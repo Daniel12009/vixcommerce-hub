@@ -58,6 +58,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           emTransferencia,
           necessidadeReposicao: Math.max(0, necessidade),
           statusCobertura: calcStockStatus(diasCobertura),
+          ...r, // Preserve any custom mapped columns
         };
       });
     setEstoqueItems(items);
@@ -86,6 +87,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           margemReal,
           margemPercent,
           unidadesVendidas,
+          ...r, // Preserve any custom mapped columns
         };
       });
     setFinanceiroItems(items);
@@ -124,6 +126,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           cmv: num(r.cmv),
           margem: r.margem || '',
           liquido: num(r.liquido),
+          ...r, // Preserve any custom mapped columns
         };
       });
     setVendasItems(items);
