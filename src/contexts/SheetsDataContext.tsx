@@ -46,6 +46,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         const estoqueMinimo = num(r.estoqueMinimo) || 0;
         const necessidade = (vmd * (30 + leadTime)) - (estoqueAtual + emTransito + emTransferencia);
         return {
+          ...r, // Preserve any custom mapped columns first
           skuPrincipal: r.skuPrincipal,
           nome: r.nome || r.skuPrincipal,
           conta: r.conta || '',
@@ -58,7 +59,6 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           emTransferencia,
           necessidadeReposicao: Math.max(0, necessidade),
           statusCobertura: calcStockStatus(diasCobertura),
-          ...r, // Preserve any custom mapped columns
         };
       });
     setEstoqueItems(items);
@@ -77,6 +77,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         const margemReal = receita - impostos - taxas - custo - frete;
         const margemPercent = receita > 0 ? (margemReal / receita) * 100 : 0;
         return {
+          ...r, // Preserve any custom mapped columns first
           skuPrincipal: r.skuPrincipal,
           nome: r.nome || r.skuPrincipal,
           receita,
@@ -87,7 +88,6 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           margemReal,
           margemPercent,
           unidadesVendidas,
-          ...r, // Preserve any custom mapped columns
         };
       });
     setFinanceiroItems(items);
@@ -104,6 +104,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         }
 
         return {
+          ...r, // Preserve any custom mapped columns first
           numeroPedido: r.numeroPedido || '',
           data: r.data || '',
           conta,
@@ -126,7 +127,6 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           cmv: num(r.cmv),
           margem: r.margem || '',
           liquido: num(r.liquido),
-          ...r, // Preserve any custom mapped columns
         };
       });
     setVendasItems(items);
