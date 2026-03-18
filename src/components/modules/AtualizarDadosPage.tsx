@@ -398,9 +398,15 @@ export function AtualizarDadosPage() {
         items = items.filter(v => v.conta.toLowerCase() === filterConta.toLowerCase() || v.contaMae.toLowerCase() === filterConta.toLowerCase());
       }
 
-      // Filter by Origem
+      // Filter by Canal/Origem category
       if (filterOrigem !== 'all') {
-        items = items.filter(v => (v.origem || '').toLowerCase().includes(filterOrigem.toLowerCase()));
+        items = items.filter(v => {
+          const canal = (String((v as any).CANAL || (v as any).canal || (v as any).Canal || v.origem || '')).toLowerCase().trim();
+          if (filterOrigem === 'Marketplace') return canal === 'ecommerce';
+          if (filterOrigem === 'Atacado') return canal.includes('atacado');
+          if (filterOrigem === 'Showroom') return canal.includes('showroom') || canal.includes('loja fisica') || canal.includes('loja física');
+          return true;
+        });
       }
 
       // Filter by SKU
@@ -472,7 +478,7 @@ export function AtualizarDadosPage() {
       });
     }
     return orders;
-  }, [filterMarketplace, filterConta, filterSku, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
+  }, [filterMarketplace, filterConta, filterOrigem, filterSku, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
 
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
@@ -1262,24 +1268,36 @@ export function AtualizarDadosPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Faturamento</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0))}</p>
-                    </div>
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Líquido Total</p>
-                      <p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.liquido || 0), 0))}</p>
-                    </div>
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Unidades</p>
-                      <p className="text-sm font-bold text-foreground">{vendasList.reduce((s: number, v: any) => s + (v.quantidade || 1), 0)}</p>
-                    </div>
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) / (vendasList.length || 1))}</p>
-                    </div>
-                  </div>
+                  {(() => {
+                    const fat = vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0);
+                    const liq = vendasList.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
+                    const unid = vendasList.reduce((s: number, v: any) => s + (v.quantidade || 1), 0);
+                    const margemPct = fat > 0 ? ((liq / fat) * 100) : 0;
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Faturamento</p>
+                          <p className="text-sm font-bold text-foreground">{formatBRL(fat)}</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Líquido Total</p>
+                          <p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(liq)}</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Margem %</p>
+                          <p className={`text-sm font-bold ${margemPct >= 0 ? 'text-[hsl(var(--vix-success))]' : 'text-[hsl(var(--vix-danger))]'}`}>{margemPct.toFixed(1)}%</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Unidades</p>
+                          <p className="text-sm font-bold text-foreground">{unid}</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
+                          <p className="text-sm font-bold text-foreground">{formatBRL(fat / (vendasList.length || 1))}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 <div className="flex items-center justify-end mb-3">
                   <button onClick={() => setShowColConfig(!showColConfig)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:bg-muted transition-colors">
