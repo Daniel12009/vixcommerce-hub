@@ -95,6 +95,8 @@ export function AtualizarDadosPage() {
   });
   const [showColConfig, setShowColConfig] = useState(false);
 
+  const sheetsData = useSheetsData();
+
   // Auto-detect new custom columns from imported data
   useEffect(() => {
     if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
