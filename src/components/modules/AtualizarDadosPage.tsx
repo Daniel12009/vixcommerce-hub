@@ -95,8 +95,6 @@ export function AtualizarDadosPage() {
   });
   const [showColConfig, setShowColConfig] = useState(false);
 
-  const sheetsData = useSheetsData();
-
   // Auto-detect new custom columns from imported data
   useEffect(() => {
     if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
@@ -165,6 +163,7 @@ export function AtualizarDadosPage() {
   const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
   const [customColumns, setCustomColumns] = useState<{ id: string; targetName: string; selectedSourceColumn: string }[]>([]);
 
+  const sheetsData = useSheetsData();
 
   // Persist configs
   useEffect(() => {
@@ -399,9 +398,15 @@ export function AtualizarDadosPage() {
         items = items.filter(v => v.conta.toLowerCase() === filterConta.toLowerCase() || v.contaMae.toLowerCase() === filterConta.toLowerCase());
       }
 
-      // Filter by Origem
+      // Filter by Canal/Origem category
       if (filterOrigem !== 'all') {
-        items = items.filter(v => (v.origem || '').toLowerCase().includes(filterOrigem.toLowerCase()));
+        items = items.filter(v => {
+          const canal = (String((v as any).CANAL || (v as any).canal || (v as any).Canal || v.origem || '')).toLowerCase().trim();
+          if (filterOrigem === 'Marketplace') return canal === 'ecommerce';
+          if (filterOrigem === 'Atacado') return canal.includes('atacado');
+          if (filterOrigem === 'Showroom') return canal.includes('showroom') || canal.includes('loja fisica') || canal.includes('loja física');
+          return true;
+        });
       }
 
       // Filter by SKU
@@ -473,7 +478,7 @@ export function AtualizarDadosPage() {
       });
     }
     return orders;
-  }, [filterMarketplace, filterConta, filterSku, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
+  }, [filterMarketplace, filterConta, filterOrigem, filterSku, filterDias, showCustomDate, filterDataInicio, filterDataFim, sheetsData.vendasItems]);
 
   const handleSync = (id: MarketplaceId) => {
     setSyncingAccounts(prev => new Set(prev).add(id));
@@ -490,12 +495,61 @@ export function AtualizarDadosPage() {
     <div>
       <PageHeader title="Atualizar Dados" subtitle="Sincronização de vendas e gestão de marketplaces" />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <KpiCard title="Faturamento Total" value={formatBRL(totalFaturamento)} icon={DollarSign} delay={0} />
-        <KpiCard title="Total Pedidos" value={totalPedidos.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
-        <KpiCard title="Contas Conectadas" value={`${connectedCount}/${accounts.length}`} icon={Wifi} delay={100} />
-        <KpiCard title="Planilhas Configuradas" value={String(sheetConfigs.length)} icon={FileSpreadsheet} delay={150} />
+      {/* Date filter row at top */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex items-center gap-1">
+          {[7, 15, 30, 60, 90].map(d => (
+            <button
+              key={d}
+              onClick={() => { setFilterDias(d); setShowCustomDate(false); setPedidosPage(0); }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                !showCustomDate && filterDias === d
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+          <button
+            onClick={() => setShowCustomDate(prev => !prev)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+              showCustomDate
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <CalendarDays className="w-3 h-3" />
+            Personalizado
+          </button>
+        </div>
+        {showCustomDate && (
+          <div className="flex items-center gap-2">
+            <input type="date" value={filterDataInicio} onChange={e => { setFilterDataInicio(e.target.value); setPedidosPage(0); }} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
+            <span className="text-xs text-muted-foreground">até</span>
+            <input type="date" value={filterDataFim} onChange={e => { setFilterDataFim(e.target.value); setPedidosPage(0); }} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
+          </div>
+        )}
       </div>
+
+      {/* KPI cards - data-driven from vendas */}
+      {(() => {
+        const useVendas = sheetsData.vendasItems && sheetsData.vendasItems.length > 0;
+        const vendas = useVendas ? (filteredOrders as any[]) : [];
+        const fat = useVendas ? vendas.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) : totalFaturamento;
+        const ped = useVendas ? vendas.length : totalPedidos;
+        const liq = vendas.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
+        const margemPct = fat > 0 ? ((liq / fat) * 100) : 0;
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+            <KpiCard title="Faturamento Total" value={formatBRL(fat)} icon={DollarSign} delay={0} />
+            <KpiCard title="Total Pedidos" value={ped.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
+            <KpiCard title={`Margem ${margemPct >= 0 ? '' : ''}%`} value={`${margemPct.toFixed(1)}%`} icon={TrendingUp} delay={100} />
+            <KpiCard title="Contas Conectadas" value={`${connectedCount}/${accounts.length}`} icon={Wifi} delay={150} />
+            <KpiCard title="Planilhas Configuradas" value={String(sheetConfigs.length)} icon={FileSpreadsheet} delay={200} />
+          </div>
+        );
+      })()}
 
       <Tabs defaultValue="planilhas" className="space-y-6">
         <TabsList className="bg-card border border-border">
@@ -1191,46 +1245,11 @@ export function AtualizarDadosPage() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-1 ml-1">
-                    {[7, 15, 30, 60, 90].map(d => (
-                      <button
-                        key={d}
-                        onClick={() => { setFilterDias(d); setShowCustomDate(false); setPedidosPage(0); }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                          !showCustomDate && filterDias === d
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        {d}d
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setShowCustomDate(prev => !prev)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                        showCustomDate
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <CalendarDays className="w-3 h-3" />
-                      Personalizado
-                    </button>
-                  </div>
-
-                  {showCustomDate && (
-                    <div className="flex items-center gap-2">
-                      <input type="date" value={filterDataInicio} onChange={e => { setFilterDataInicio(e.target.value); setPedidosPage(0); }} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
-                      <span className="text-xs text-muted-foreground">até</span>
-                      <input type="date" value={filterDataFim} onChange={e => { setFilterDataFim(e.target.value); setPedidosPage(0); }} className="px-2 py-1 rounded-lg bg-card border border-border text-foreground text-xs" />
-                    </div>
-                  )}
-
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {useImported && <span className="text-[hsl(var(--vix-success))] mr-2">● Dados importados</span>}
-                    {displayList.length} pedidos
-                  </span>
-                </div>
+                   <span className="text-xs text-muted-foreground ml-auto">
+                     {useImported && <span className="text-[hsl(var(--vix-success))] mr-2">● Dados importados</span>}
+                     {displayList.length} pedidos
+                   </span>
+                 </div>
 
                   {/* Col Config Modal */}
                   {showColConfig && (
@@ -1263,24 +1282,36 @@ export function AtualizarDadosPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Faturamento</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0))}</p>
-                    </div>
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Líquido Total</p>
-                      <p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.liquido || 0), 0))}</p>
-                    </div>
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Unidades</p>
-                      <p className="text-sm font-bold text-foreground">{vendasList.reduce((s: number, v: any) => s + (v.quantidade || 1), 0)}</p>
-                    </div>
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) / (vendasList.length || 1))}</p>
-                    </div>
-                  </div>
+                  {(() => {
+                    const fat = vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0);
+                    const liq = vendasList.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
+                    const unid = vendasList.reduce((s: number, v: any) => s + (v.quantidade || 1), 0);
+                    const margemPct = fat > 0 ? ((liq / fat) * 100) : 0;
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Faturamento</p>
+                          <p className="text-sm font-bold text-foreground">{formatBRL(fat)}</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Líquido Total</p>
+                          <p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(liq)}</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Margem %</p>
+                          <p className={`text-sm font-bold ${margemPct >= 0 ? 'text-[hsl(var(--vix-success))]' : 'text-[hsl(var(--vix-danger))]'}`}>{margemPct.toFixed(1)}%</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Unidades</p>
+                          <p className="text-sm font-bold text-foreground">{unid}</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-xl p-3">
+                          <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
+                          <p className="text-sm font-bold text-foreground">{formatBRL(fat / (vendasList.length || 1))}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 <div className="flex items-center justify-end mb-3">
                   <button onClick={() => setShowColConfig(!showColConfig)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:bg-muted transition-colors">
