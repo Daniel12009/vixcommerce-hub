@@ -553,8 +553,8 @@ export function AtualizarDadosPage() {
       {(() => {
         const useVendas = sheetsData.vendasItems && sheetsData.vendasItems.length > 0;
         const vendas = useVendas ? (dateOnlyOrders as any[]) : [];
-        const fat = useVendas ? vendas.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) : totalFaturamento;
-        const ped = useVendas ? vendas.length : totalPedidos;
+        const fat = useVendas ? vendas.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0) : 0;
+        const ped = useVendas ? vendas.length : 0;
         const liq = vendas.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
         const margemPct = fat > 0 ? ((liq / fat) * 100) : 0;
         return (
