@@ -165,7 +165,6 @@ export function AtualizarDadosPage() {
   const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
   const [customColumns, setCustomColumns] = useState<{ id: string; targetName: string; selectedSourceColumn: string }[]>([]);
 
-  const sheetsData = useSheetsData();
 
   // Persist configs
   useEffect(() => {
