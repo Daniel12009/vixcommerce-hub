@@ -87,6 +87,8 @@ export function AtualizarDadosPage() {
   const [perfPage, setPerfPage] = useState(0);
   const [perfSortField, setPerfSortField] = useState<string>('vendas');
   const [perfSortDir, setPerfSortDir] = useState<'asc' | 'desc'>('desc');
+  const [vendasSortField, setVendasSortField] = useState<string>('');
+  const [vendasSortDir, setVendasSortDir] = useState<'asc' | 'desc'>('desc');
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1206,8 +1208,30 @@ export function AtualizarDadosPage() {
               : [];
 
             const displayList = useImported ? vendasList : mockList;
-            const totalPages = Math.ceil(displayList.length / PEDIDOS_PER_PAGE);
-            const paginatedList = displayList.slice(pedidosPage * PEDIDOS_PER_PAGE, (pedidosPage + 1) * PEDIDOS_PER_PAGE);
+
+            // Sort displayList
+            const sortableVendasCols = ['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem','devolucao'];
+            const sortedDisplayList = vendasSortField && sortableVendasCols.includes(vendasSortField)
+              ? [...displayList].sort((a: any, b: any) => {
+                  const va = typeof a[vendasSortField] === 'string' ? parseFloat(a[vendasSortField]?.replace(/[^\d.,-]/g,'')?.replace(',','.') || '0') : (a[vendasSortField] || 0);
+                  const vb = typeof b[vendasSortField] === 'string' ? parseFloat(b[vendasSortField]?.replace(/[^\d.,-]/g,'')?.replace(',','.') || '0') : (b[vendasSortField] || 0);
+                  return vendasSortDir === 'desc' ? vb - va : va - vb;
+                })
+              : displayList;
+
+            const toggleVendasSort = (field: string) => {
+              if (vendasSortField === field) {
+                setVendasSortDir(d => d === 'desc' ? 'asc' : 'desc');
+              } else {
+                setVendasSortField(field);
+                setVendasSortDir('desc');
+              }
+              setPedidosPage(0);
+            };
+            const vendasSortIcon = (field: string) => vendasSortField === field ? (vendasSortDir === 'desc' ? ' ↓' : ' ↑') : '';
+
+            const totalPages = Math.ceil(sortedDisplayList.length / PEDIDOS_PER_PAGE);
+            const paginatedList = sortedDisplayList.slice(pedidosPage * PEDIDOS_PER_PAGE, (pedidosPage + 1) * PEDIDOS_PER_PAGE);
 
             return (
               <>
@@ -1343,11 +1367,19 @@ export function AtualizarDadosPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-muted/50">
-                          {tableColumns.filter(c => c.visible && (useImported ? !c.onlyMock : !c.onlyImported)).map(col => (
-                            <th key={col.id} className={`py-3 px-4 font-semibold text-muted-foreground ${['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem','devolucao'].includes(col.id) ? 'text-right' : col.id === 'status' ? 'text-center' : 'text-left'}`}>
-                              {col.label}
-                            </th>
-                          ))}
+                          {tableColumns.filter(c => c.visible && (useImported ? !c.onlyMock : !c.onlyImported)).map(col => {
+                            const isSortable = sortableVendasCols.includes(col.id);
+                            const isRight = ['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem','devolucao'].includes(col.id);
+                            return (
+                              <th
+                                key={col.id}
+                                className={`py-3 px-4 font-semibold text-muted-foreground ${isRight ? 'text-right' : col.id === 'status' ? 'text-center' : 'text-left'} ${isSortable ? 'cursor-pointer select-none hover:text-foreground transition-colors' : ''}`}
+                                onClick={isSortable ? () => toggleVendasSort(col.id) : undefined}
+                              >
+                                {col.label}{isSortable ? vendasSortIcon(col.id) : ''}
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
@@ -1419,7 +1451,7 @@ export function AtualizarDadosPage() {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between px-4 py-3 border-t border-border">
                       <span className="text-xs text-muted-foreground">
-                        Mostrando {pedidosPage * PEDIDOS_PER_PAGE + 1}–{Math.min((pedidosPage + 1) * PEDIDOS_PER_PAGE, displayList.length)} de {displayList.length}
+                        Mostrando {pedidosPage * PEDIDOS_PER_PAGE + 1}–{Math.min((pedidosPage + 1) * PEDIDOS_PER_PAGE, sortedDisplayList.length)} de {sortedDisplayList.length}
                       </span>
                       <div className="flex items-center gap-1">
                         <button
