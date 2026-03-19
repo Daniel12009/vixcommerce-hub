@@ -134,7 +134,7 @@ export interface VendaItem {
   cmv: number;
   margem: string;
   liquido: number;
-  devolucao: number;
+  devolucao: string;
 }
 
 export interface AdsCampaign {

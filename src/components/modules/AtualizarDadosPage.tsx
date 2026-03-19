@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download, Settings2, ArrowRight, Check, CalendarDays } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
@@ -114,7 +114,7 @@ export function AtualizarDadosPage() {
       const allKeys = new Set<string>();
       sheetsData.vendasItems.forEach(item => Object.keys(item).forEach(k => allKeys.add(k)));
       
-      const standardKeys = CAMPOS_POR_MODULO['vendas'].map(c => c.key);
+      const standardKeys = [...CAMPOS_POR_MODULO['vendas'].map(c => c.key), 'devolucao'];
       const customKeys = Array.from(allKeys).filter(k => !standardKeys.includes(k) && k !== 'id');
 
       setTableColumns(prev => {
@@ -179,6 +179,15 @@ export function AtualizarDadosPage() {
   // Persist configs
   useEffect(() => {
     saveSheetConfigs(sheetConfigs);
+  }, [sheetConfigs]);
+
+  // Auto-import on page load — run import for all configured sheets
+  const hasAutoImported = useRef(false);
+  useEffect(() => {
+    if (hasAutoImported.current) return;
+    if (sheetConfigs.length === 0) return;
+    hasAutoImported.current = true;
+    sheetConfigs.forEach(config => handleImportConfig(config));
   }, [sheetConfigs]);
 
   const handleLoadSheetInfo = async () => {
@@ -1369,7 +1378,7 @@ export function AtualizarDadosPage() {
                         <tr className="border-b border-border bg-muted/50">
                           {tableColumns.filter(c => c.visible && (useImported ? !c.onlyMock : !c.onlyImported)).map(col => {
                             const isSortable = sortableVendasCols.includes(col.id);
-                            const isRight = ['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem','devolucao'].includes(col.id);
+                            const isRight = ['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem'].includes(col.id);
                             return (
                               <th
                                 key={col.id}
@@ -1395,7 +1404,7 @@ export function AtualizarDadosPage() {
                               if (col.id === 'valorTotal') className += "font-semibold text-right ";
                               if (['quantidade','margem'].includes(col.id)) className += "text-right ";
                               if (col.id === 'margem') className += "text-center font-medium ";
-                              if (col.id === 'devolucao') { content = formatBRL(content || 0); className += "text-right text-[hsl(var(--vix-danger))] "; }
+                              if (col.id === 'devolucao') { className += "text-muted-foreground "; }
                               if (['valorTotal','impostos','comissao','cmv','liquido'].includes(col.id)) {
                                 content = formatBRL(content || (col.id === 'valorTotal' ? venda.precoUnitario : 0));
                                 className += "text-right ";

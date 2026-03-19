@@ -130,7 +130,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           cmv: num(r.cmv),
           margem: r.margem || '',
           liquido: num(r.liquido),
-          devolucao: num(r.devolucao),
+          devolucao: r.devolucao || '',
         };
         return Object.assign({}, r, baseItem);
       });
