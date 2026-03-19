@@ -57,3 +57,32 @@ export function calcMargemReal(
 
 /** Gestor responsável padrão */
 export const GESTOR_PADRAO = 'João';
+
+/**
+ * Known accounts: each entry has a canonical display name and keywords
+ * that match variations of that account name (case-insensitive).
+ * Later this will be configurable from a settings page.
+ */
+export const CONTAS_CONHECIDAS = [
+  { nome: 'Via Flix', keywords: ['via flix', 'viaflix', 'via-flix'] },
+  { nome: 'GS Torneiras', keywords: ['gs torneira', 'gstorneira', 'gs-torneira'] },
+  { nome: 'Decarion (Monaco Metais)', keywords: ['decarion', 'monaco'] },
+];
+
+/** Normalize a raw account name to its canonical display name */
+export function normalizeConta(raw: string): string {
+  if (!raw) return raw;
+  const lower = raw.toLowerCase().trim();
+  for (const conta of CONTAS_CONHECIDAS) {
+    for (const kw of conta.keywords) {
+      if (lower.includes(kw)) return conta.nome;
+    }
+  }
+  return raw; // Unknown account — keep original name
+}
+
+/** Get unique normalized account names from a list of raw names */
+export function getContasNormalizadas(rawContas: string[]): string[] {
+  const normalized = new Set(rawContas.map(c => normalizeConta(c)));
+  return [...normalized].filter(Boolean).sort();
+}

@@ -3,7 +3,7 @@ import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
-import { formatBRL } from '@/lib/utils-vix';
+import { formatBRL, normalizeConta, getContasNormalizadas } from '@/lib/utils-vix';
 import type { MarketplaceAccount, MarketplaceId } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -434,9 +434,9 @@ export function AtualizarDadosPage() {
         items = items.filter(v => v.pedidoOrigem.toLowerCase().includes(filterMarketplace.toLowerCase()));
       }
 
-      // Filter by conta
+      // Filter by conta (normalized)
       if (filterConta !== 'all') {
-        items = items.filter(v => v.conta.toLowerCase() === filterConta.toLowerCase() || v.contaMae.toLowerCase() === filterConta.toLowerCase());
+        items = items.filter(v => normalizeConta(v.conta) === filterConta || normalizeConta(v.contaMae) === filterConta);
       }
 
       // Filter by Canal/Origem category
@@ -1202,9 +1202,9 @@ export function AtualizarDadosPage() {
               ? [...new Set(sheetsData.vendasItems!.map(v => v.pedidoOrigem).filter(Boolean))]
               : [];
 
-            // Get unique contas for filter
+            // Get unique contas for filter (normalized)
             const contasUnicas = useImported
-              ? [...new Set(sheetsData.vendasItems!.map(v => v.conta).filter(Boolean))]
+              ? getContasNormalizadas(sheetsData.vendasItems!.map(v => v.conta).filter(Boolean))
               : [];
 
             const displayList = useImported ? vendasList : mockList;
@@ -1484,7 +1484,7 @@ export function AtualizarDadosPage() {
         <TabsContent value="ads">
           {(() => {
             const perfItems = sheetsData.performanceItems || [];
-            const contasUnicas = [...new Set(perfItems.map(p => p.conta).filter(Boolean))];
+            const contasUnicas = getContasNormalizadas(perfItems.map(p => p.conta).filter(Boolean));
 
             // Sort periods by end date to find the most recent
             const parseEndDate = (ref: string) => {
@@ -1514,7 +1514,7 @@ export function AtualizarDadosPage() {
               filteredByPeriodo = perfSelectedPeriodo === 'all' ? perfItems : perfItems.filter(p => p.dataRef === perfSelectedPeriodo);
             }
 
-            const filteredByConta = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => p.conta === perfFilterConta);
+            const filteredByConta = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => normalizeConta(p.conta) === perfFilterConta);
 
             // Sort
             const sorted = [...filteredByConta].sort((a, b) => {
