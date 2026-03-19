@@ -80,6 +80,8 @@ export function AtualizarDadosPage() {
   const [filterDataInicio, setFilterDataInicio] = useState<string>('');
   const [filterDataFim, setFilterDataFim] = useState<string>('');
   const [pedidosPage, setPedidosPage] = useState(0);
+  const [perfFilterConta, setPerfFilterConta] = useState<string>('all');
+  const [perfPage, setPerfPage] = useState(0);
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1444,14 +1446,12 @@ export function AtualizarDadosPage() {
           {(() => {
             const perfItems = sheetsData.performanceItems || [];
             const contasUnicas = [...new Set(perfItems.map(p => p.conta).filter(Boolean))];
-            const [filterPerfConta, setFilterPerfConta] = [filterMarketplace, setFilterMarketplace];
-            const filtered = filterPerfConta === 'all' ? perfItems : perfItems.filter(p => p.conta === filterPerfConta);
+            const filtered = perfFilterConta === 'all' ? perfItems : perfItems.filter(p => p.conta === perfFilterConta);
             const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
             const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
             const totalCanceladas = filtered.reduce((s, p) => s + p.canceladas, 0);
             const convMedia = filtered.length > 0 ? filtered.reduce((s, p) => s + p.conversao, 0) / filtered.length : 0;
             const PERF_PER_PAGE = 50;
-            const [perfPage, setPerfPage] = [pedidosPage, setPedidosPage];
             const totalPerfPages = Math.ceil(filtered.length / PERF_PER_PAGE);
             const perfPaginated = filtered.slice(perfPage * PERF_PER_PAGE, (perfPage + 1) * PERF_PER_PAGE);
 
@@ -1482,7 +1482,7 @@ export function AtualizarDadosPage() {
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <div className="flex items-center gap-1.5">
                       <label className="text-xs text-muted-foreground">Conta:</label>
-                      <select value={filterPerfConta} onChange={(e) => { setFilterPerfConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                      <select value={perfFilterConta} onChange={(e) => { setPerfFilterConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
                         <option value="all">Todas</option>
                         {contasUnicas.map(c => (
                           <option key={c} value={c}>{c}</option>
