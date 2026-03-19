@@ -75,6 +75,15 @@ async function searchOrders(token: string, dataInicial: string, dataFinal: strin
   return res.json();
 }
 
+function parseTinyDate(dateStr: string): string {
+  // Tiny dates: dd/mm/yyyy
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    return new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00-03:00`).toISOString();
+  }
+  return new Date().toISOString();
+}
+
 function mapTinyStatus(situacao: string): string {
   const s = (situacao || '').toLowerCase();
   if (s.includes('faturado') || s.includes('pronto envio') || s.includes('enviado') || s.includes('entregue') || s.includes('aprovado')) {
@@ -132,38 +141,69 @@ Deno.serve(async (req) => {
               const numEcom = (pedido.numero_ecommerce || '').toString();
               const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
 
-              // If has ecommerce number or marketplace name, skip it
               const isMarketplace = numEcom.length > 0 ||
                 ecommerce.includes('mercado') ||
                 ecommerce.includes('shopee') ||
                 ecommerce.includes('magalu') ||
                 ecommerce.includes('amazon') ||
                 ecommerce.includes('americanas') ||
-                ecommerce.includes('shein');
+                ecommerce.includes('shein') ||
+                ecommerce.includes('tiktok');
 
               if (isMarketplace) {
-                console.log(`Skipping marketplace order: ${pedido.numero} (ecom: ${numEcom}, channel: ${ecommerce})`);
                 continue;
               }
 
-              // Classify canal from order data
-              const obs = (pedido.obs || pedido.observacoes || pedido.obs_internas || '').toLowerCase();
+              // Fetch full order detail for correct values
+              const orderId = pedido.id || pedido.numero;
+              let detail: any = null;
+              try {
+                detail = await fetchOrderDetail(account.api_token, String(orderId));
+              } catch (e) {
+                console.error(`Failed detail for order ${orderId}:`, e);
+              }
+
+              const detailPedido = detail || pedido;
+              const totalAmount = parseFloat(detailPedido.total_pedido || detailPedido.totalPedido || detailPedido.valor || '0');
+
+              // Get vendedor (seller)
+              const vendedor = detailPedido.vendedor || detailPedido.nome_vendedor || '';
+
+              // Classify canal based on vendedor
+              const vendedorLower = vendedor.toLowerCase();
               let canal = 'loja';
-              if (obs.includes('atacado')) canal = 'atacado';
-              else if (obs.includes('showroom')) canal = 'showroom';
+              if (vendedorLower.includes('atacado') || vendedorLower.includes('alexia')) {
+                canal = 'atacado';
+              } else if (vendedorLower.includes('showroom')) {
+                canal = 'showroom';
+              }
+
+              // Get items from detail
+              const itens = detailPedido.itens || [];
+              const items = itens.length > 0 ? itens.map((i: any) => {
+                const it = i.item || i;
+                return {
+                  title: it.descricao || it.nome || '',
+                  sku: it.codigo || '',
+                  quantity: parseInt(it.quantidade || '1'),
+                  unit_price: parseFloat(it.valor_unitario || '0'),
+                };
+              }) : [{
+                title: `Pedido #${detailPedido.numero || orderId}`,
+                sku: '',
+                quantity: 1,
+                unit_price: totalAmount,
+              }];
 
               allOrders.push({
-                id: pedido.id || pedido.numero,
-                status: mapTinyStatus(pedido.situacao),
-                date_created: new Date().toISOString(),
-                total_amount: parseFloat(pedido.totalPedido || pedido.total_pedido || '0'),
-                buyer: pedido.cliente?.nome || pedido.nome || 'N/A',
-                items: [{
-                  title: `Pedido #${pedido.numero || pedido.id}`,
-                  sku: '',
-                  quantity: 1,
-                  unit_price: parseFloat(pedido.totalPedido || pedido.total_pedido || '0'),
-                }],
+                id: orderId,
+                status: mapTinyStatus(detailPedido.situacao || pedido.situacao),
+                date_created: detailPedido.data_pedido ? parseTinyDate(detailPedido.data_pedido) : new Date().toISOString(),
+                total_amount: totalAmount,
+                buyer: detailPedido.cliente?.nome || pedido.cliente?.nome || pedido.nome || 'N/A',
+                vendedor,
+                canal,
+                items,
                 conta: `Tiny|${account.nome}|${canal}`,
                 plataforma: 'tiny',
                 account_id: account.id,

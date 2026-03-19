@@ -21,6 +21,8 @@ interface DashOrder {
   items: { title: string; sku: string; quantity: number; unit_price: number }[];
   conta: string;
   plataforma?: string;
+  vendedor?: string;
+  canal?: string;
   error?: string;
 }
 
@@ -367,6 +369,7 @@ export function DashboardPage() {
                     <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Plataforma</th>
                     <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Conta</th>
                     <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Comprador</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Vendedor</th>
                     <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Produto</th>
                     <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Qtd</th>
                     <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Valor</th>
@@ -385,6 +388,7 @@ export function DashboardPage() {
                       </td>
                       <td className="py-2.5 px-3">{o.conta}</td>
                       <td className="py-2.5 px-3">{o.buyer}</td>
+                      <td className="py-2.5 px-3 text-xs">{o.vendedor || '-'}</td>
                       <td className="py-2.5 px-3 max-w-[180px] truncate" title={o.items.map(i => i.title).join(', ')}>
                         {o.items.map(i => i.sku || i.title?.slice(0, 25)).join(', ')}
                       </td>
