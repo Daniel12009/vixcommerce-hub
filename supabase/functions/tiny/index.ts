@@ -233,6 +233,98 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Fetch marketplace orders from Tiny (TikTok, Shein, Amazon, etc.)
+    if (action === 'get_marketplace_orders') {
+      const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+
+      if (!accounts || accounts.length === 0) {
+        return new Response(JSON.stringify({ orders: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const today = getTodayBR();
+      const allOrders: any[] = [];
+
+      // Marketplaces to look for (not covered by direct APIs)
+      const targetMarketplaces = ['tiktok', 'shein', 'amazon', 'magalu', 'americanas'];
+
+      for (const account of accounts) {
+        try {
+          let pagina = 1;
+          let hasMore = true;
+
+          while (hasMore) {
+            const data = await searchOrders(account.api_token, today, today, pagina);
+
+            if (data?.retorno?.status === 'Erro') {
+              if (data.retorno?.codigo_erro === '2') { hasMore = false; break; }
+              throw new Error(`Tiny error: ${data.retorno?.erros?.[0]?.erro || 'Unknown'}`);
+            }
+
+            const pedidos = data?.retorno?.pedidos || [];
+
+            for (const p of pedidos) {
+              const pedido = p.pedido;
+              const numEcom = (pedido.numero_ecommerce || '').toString();
+              const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
+
+              // Only include orders from target marketplaces
+              const matchedPlatform = targetMarketplaces.find(mp => ecommerce.includes(mp));
+              if (!matchedPlatform && numEcom.length === 0) continue;
+              if (!matchedPlatform) continue; // has ecommerce but not a target one (ML/Shopee handled elsewhere)
+
+              // Fetch full details
+              const orderId = pedido.id || pedido.numero;
+              let detail: any = null;
+              try { detail = await fetchOrderDetail(account.api_token, String(orderId)); } catch (e) { /* skip */ }
+
+              const dp = detail || pedido;
+              const totalAmount = parseFloat(dp.total_pedido || dp.totalPedido || dp.valor || '0');
+
+              const itens = dp.itens || [];
+              const items = itens.length > 0 ? itens.map((i: any) => {
+                const it = i.item || i;
+                return {
+                  title: it.descricao || it.nome || '',
+                  sku: it.codigo || '',
+                  quantity: parseInt(it.quantidade || '1'),
+                  unit_price: parseFloat(it.valor_unitario || '0'),
+                };
+              }) : [{ title: `Pedido #${dp.numero || orderId}`, sku: numEcom, quantity: 1, unit_price: totalAmount }];
+
+              // Platform label
+              const platformName = matchedPlatform === 'tiktok' ? 'TikTok Shop' :
+                matchedPlatform.charAt(0).toUpperCase() + matchedPlatform.slice(1);
+
+              allOrders.push({
+                id: orderId,
+                status: mapTinyStatus(dp.situacao || pedido.situacao),
+                date_created: dp.data_pedido ? parseTinyDate(dp.data_pedido) : new Date().toISOString(),
+                total_amount: totalAmount,
+                buyer: dp.cliente?.nome || pedido.cliente?.nome || pedido.nome || 'N/A',
+                items,
+                conta: `${platformName} | ${account.nome}`,
+                plataforma: matchedPlatform,
+                account_id: account.id,
+              });
+            }
+
+            const totalPaginas = data?.retorno?.numero_paginas || 1;
+            pagina++;
+            hasMore = pagina <= totalPaginas;
+          }
+        } catch (err) {
+          console.error(`Error fetching marketplace orders for ${account.nome}:`, err);
+        }
+      }
+
+      return new Response(JSON.stringify({ orders: allOrders }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     console.error('Tiny API error:', error);

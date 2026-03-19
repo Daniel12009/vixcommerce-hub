@@ -43,7 +43,12 @@ const getPlatformLabel = (p: string) => {
   switch (p) {
     case 'mercadolivre': return 'Mercado Livre';
     case 'shopee': return 'Shopee';
-    case 'tiny': return 'Tiny';
+    case 'tiny': return 'Tiny (Loja)';
+    case 'tiktok': return 'TikTok Shop';
+    case 'shein': return 'Shein';
+    case 'amazon': return 'Amazon';
+    case 'magalu': return 'Magalu';
+    case 'americanas': return 'Americanas';
     default: return p || 'Outros';
   }
 };
@@ -60,10 +65,11 @@ export function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [mlResult, shopeeResult, tinyResult] = await Promise.allSettled([
+      const [mlResult, shopeeResult, tinyResult, mktResult] = await Promise.allSettled([
         supabase.functions.invoke('mercado-livre', { body: { action: 'get_today_orders' } }),
         supabase.functions.invoke('shopee', { body: { action: 'get_today_orders' } }),
         supabase.functions.invoke('tiny', { body: { action: 'get_today_orders' } }),
+        supabase.functions.invoke('tiny', { body: { action: 'get_marketplace_orders' } }),
       ]);
 
       const allFetched: DashOrder[] = [];
@@ -95,6 +101,14 @@ export function DashboardPage() {
         (tinyResult.value.data.orders || []).filter((o: any) => o.error).forEach((e: any) => errors.push(e.error));
       } else if (tinyResult.status === 'rejected') {
         errors.push(`Tiny: ${tinyResult.reason}`);
+      }
+
+      if (mktResult.status === 'fulfilled' && mktResult.value.data) {
+        const mktOrders = (mktResult.value.data.orders || [])
+          .filter((o: any) => !o.error && o.status);
+        allFetched.push(...mktOrders);
+      } else if (mktResult.status === 'rejected') {
+        errors.push(`Marketplace: ${mktResult.reason}`);
       }
 
       setOrders(allFetched);
