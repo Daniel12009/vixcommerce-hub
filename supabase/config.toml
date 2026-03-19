@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.mercado-livre]
 verify_jwt = false
+
+[functions.shopee]
+verify_jwt = false

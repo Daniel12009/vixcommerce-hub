@@ -29,21 +29,43 @@ export function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'get_today_orders' },
-      });
+      // Fetch ML and Shopee in parallel
+      const [mlResult, shopeeResult] = await Promise.allSettled([
+        supabase.functions.invoke('mercado-livre', { body: { action: 'get_today_orders' } }),
+        supabase.functions.invoke('shopee', { body: { action: 'get_today_orders' } }),
+      ]);
 
-      if (fnError) throw new Error(fnError.message);
-      if (data?.error && !data?.orders?.length) throw new Error(data.error);
+      const allFetched: MLOrder[] = [];
+      const errors: string[] = [];
 
-      const validOrders = (data?.orders || []).filter((o: MLOrder) => !o.error && o.status);
-      setOrders(validOrders);
+      // Process ML
+      if (mlResult.status === 'fulfilled' && mlResult.value.data) {
+        const mlOrders = (mlResult.value.data.orders || [])
+          .filter((o: any) => !o.error && o.status)
+          .map((o: any) => ({ ...o, plataforma: 'mercadolivre' }));
+        allFetched.push(...mlOrders);
+        const mlErrors = (mlResult.value.data.orders || []).filter((o: any) => o.error);
+        mlErrors.forEach((e: any) => errors.push(e.error));
+      } else if (mlResult.status === 'rejected') {
+        errors.push(`ML: ${mlResult.reason}`);
+      }
+
+      // Process Shopee
+      if (shopeeResult.status === 'fulfilled' && shopeeResult.value.data) {
+        const shopeeOrders = (shopeeResult.value.data.orders || [])
+          .filter((o: any) => !o.error && o.status);
+        allFetched.push(...shopeeOrders);
+        const spErrors = (shopeeResult.value.data.orders || []).filter((o: any) => o.error);
+        spErrors.forEach((e: any) => errors.push(e.error));
+      } else if (shopeeResult.status === 'rejected') {
+        errors.push(`Shopee: ${shopeeResult.reason}`);
+      }
+
+      setOrders(allFetched);
       setLastRefresh(new Date().toLocaleString('pt-BR'));
 
-      // Check for account-level errors
-      const errors = (data?.orders || []).filter((o: any) => o.error);
       if (errors.length > 0) {
-        console.warn('Some account errors:', errors);
+        console.warn('Account errors:', errors);
       }
     } catch (err: any) {
       setError(err.message);
@@ -124,7 +146,7 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Vendas do dia em tempo real — Mercado Livre"
+        subtitle="Vendas do dia em tempo real — Mercado Livre + Shopee"
       />
 
       {/* Status Bar */}
