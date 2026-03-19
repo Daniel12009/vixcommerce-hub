@@ -59,7 +59,7 @@ export function AppSidebar({ activeModule, onModuleChange }: AppSidebarProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sidebar-primary-foreground text-sm font-medium truncate">João</p>
-            <p className="text-sidebar-foreground text-xs opacity-60">Gestor</p>
+            <p className="text-sidebar-foreground text-xs opacity-60">ROOT</p>
           </div>
           <Settings className="w-4 h-4 text-sidebar-foreground opacity-40" />
         </div>
