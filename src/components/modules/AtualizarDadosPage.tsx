@@ -81,8 +81,11 @@ export function AtualizarDadosPage() {
   const [filterDataFim, setFilterDataFim] = useState<string>('');
   const [pedidosPage, setPedidosPage] = useState(0);
   const [perfFilterConta, setPerfFilterConta] = useState<string>('all');
-  const [perfFilterPeriodo, setPerfFilterPeriodo] = useState<string>('latest');
+  const [perfFilterPeriodo, setPerfFilterPeriodo] = useState<string>('7');
+  const [perfCustomPeriodo, setPerfCustomPeriodo] = useState<string>('all');
   const [perfPage, setPerfPage] = useState(0);
+  const [perfSortField, setPerfSortField] = useState<string>('vendas');
+  const [perfSortDir, setPerfSortDir] = useState<'asc' | 'desc'>('desc');
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1449,10 +1452,52 @@ export function AtualizarDadosPage() {
             const perfItems = sheetsData.performanceItems || [];
             const contasUnicas = [...new Set(perfItems.map(p => p.conta).filter(Boolean))];
             const periodosUnicos = [...new Set(perfItems.map(p => p.dataRef).filter(Boolean))].sort();
-            const periodoMaisRecente = periodosUnicos.length > 0 ? periodosUnicos[periodosUnicos.length - 1] : '';
-            const periodoAtivo = perfFilterPeriodo === 'latest' ? periodoMaisRecente : perfFilterPeriodo;
-            const filteredByPeriodo = periodoAtivo && perfFilterPeriodo !== 'all' ? perfItems.filter(p => p.dataRef === periodoAtivo) : perfItems;
-            const filtered = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => p.conta === perfFilterConta);
+
+            // Parse end date from "DD/MM/YYYY a DD/MM/YYYY"
+            const parseEndDate = (ref: string) => {
+              if (!ref) return null;
+              const parts = ref.split(' a ');
+              const dateStr = (parts[1] || parts[0] || '').trim();
+              const m = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+              if (!m) return null;
+              return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+            };
+
+            // Find most recent end date across all items
+            let maxEndDate: Date | null = null;
+            for (const item of perfItems) {
+              const d = parseEndDate(item.dataRef);
+              if (d && (!maxEndDate || d > maxEndDate)) maxEndDate = d;
+            }
+
+            // Filter by relative period
+            let filteredByPeriodo = perfItems;
+            if (perfFilterPeriodo === 'custom') {
+              filteredByPeriodo = perfCustomPeriodo === 'all' ? perfItems : perfItems.filter(p => p.dataRef === perfCustomPeriodo);
+            } else if (maxEndDate && perfFilterPeriodo !== 'all') {
+              const days = parseInt(perfFilterPeriodo) || 7;
+              const cutoff = new Date(maxEndDate);
+              cutoff.setDate(cutoff.getDate() - days);
+              filteredByPeriodo = perfItems.filter(p => {
+                const d = parseEndDate(p.dataRef);
+                return d && d > cutoff;
+              });
+            }
+
+            const filteredByConta = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => p.conta === perfFilterConta);
+
+            // Sort
+            const sorted = [...filteredByConta].sort((a, b) => {
+              const fieldMap: Record<string, (i: any) => number> = {
+                visitas: i => i.visitas, vendas: i => i.vendas,
+                canceladas: i => i.canceladas, conversao: i => i.conversao,
+              };
+              const fn = fieldMap[perfSortField];
+              if (!fn) return 0;
+              return perfSortDir === 'desc' ? fn(b) - fn(a) : fn(a) - fn(b);
+            });
+            const filtered = sorted;
+
             const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
             const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
             const totalCanceladas = filtered.reduce((s, p) => s + p.canceladas, 0);
@@ -1460,6 +1505,18 @@ export function AtualizarDadosPage() {
             const PERF_PER_PAGE = 50;
             const totalPerfPages = Math.ceil(filtered.length / PERF_PER_PAGE);
             const perfPaginated = filtered.slice(perfPage * PERF_PER_PAGE, (perfPage + 1) * PERF_PER_PAGE);
+
+            // Sort toggle helper
+            const toggleSort = (field: string) => {
+              if (perfSortField === field) {
+                setPerfSortDir(d => d === 'desc' ? 'asc' : 'desc');
+              } else {
+                setPerfSortField(field);
+                setPerfSortDir('desc');
+              }
+              setPerfPage(0);
+            };
+            const sortIcon = (field: string) => perfSortField === field ? (perfSortDir === 'desc' ? ' ↓' : ' ↑') : '';
 
             if (perfItems.length === 0) {
               return (
@@ -1484,34 +1541,40 @@ export function AtualizarDadosPage() {
                 </div>
 
                 {/* Filter by Conta */}
-                {(contasUnicas.length > 0 || periodosUnicos.length > 0) && (
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
-                    {periodosUnicos.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">Período:</label>
-                        <select value={perfFilterPeriodo} onChange={(e) => { setPerfFilterPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                          <option value="latest">📅 Mais recente ({periodoMaisRecente})</option>
-                          <option value="all">Todos os períodos</option>
-                          {periodosUnicos.map(p => (
-                            <option key={p} value={p}>{p}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {contasUnicas.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">Conta:</label>
-                        <select value={perfFilterConta} onChange={(e) => { setPerfFilterConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                          <option value="all">Todas</option>
-                          {contasUnicas.map(c => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs text-muted-foreground">Período:</label>
+                    <select value={perfFilterPeriodo} onChange={(e) => { setPerfFilterPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                      <option value="7">📅 Últimos 7 dias</option>
+                      <option value="15">📅 Últimos 15 dias</option>
+                      <option value="30">📅 Últimos 30 dias</option>
+                      <option value="all">Todos os períodos</option>
+                      <option value="custom">🔍 Personalizado</option>
+                    </select>
                   </div>
-                )}
+                  {perfFilterPeriodo === 'custom' && periodosUnicos.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <select value={perfCustomPeriodo} onChange={(e) => { setPerfCustomPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todos</option>
+                        {periodosUnicos.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {contasUnicas.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-muted-foreground">Conta:</label>
+                      <select value={perfFilterConta} onChange={(e) => { setPerfFilterConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todas</option>
+                        {contasUnicas.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
+                </div>
 
                 {/* Data Table */}
                 <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -1523,10 +1586,10 @@ export function AtualizarDadosPage() {
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">SKU</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Título</th>
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Preço</th>
-                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Visitas</th>
-                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Vendas</th>
-                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Canc.</th>
-                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Conv. %</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('visitas')}>Visitas{sortIcon('visitas')}</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('vendas')}>Vendas{sortIcon('vendas')}</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('canceladas')}>Canc.{sortIcon('canceladas')}</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('conversao')}>Conv. %{sortIcon('conversao')}</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Período</th>
                         </tr>
