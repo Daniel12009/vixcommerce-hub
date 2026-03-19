@@ -80,6 +80,8 @@ export function AtualizarDadosPage() {
   const [filterDataInicio, setFilterDataInicio] = useState<string>('');
   const [filterDataFim, setFilterDataFim] = useState<string>('');
   const [pedidosPage, setPedidosPage] = useState(0);
+  const [perfFilterConta, setPerfFilterConta] = useState<string>('all');
+  const [perfPage, setPerfPage] = useState(0);
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
