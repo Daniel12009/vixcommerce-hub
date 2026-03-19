@@ -60,6 +60,7 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'cmv', label: 'cmv (AN)' },
     { key: 'liquido', label: 'Líquido Custo Real (AK)' },
     { key: 'margem', label: 'Margem sobre Custo Real (AJ)' },
+    { key: 'devolucao', label: 'Devolução' },
     { key: 'frete', label: 'Forma de entrega' },
   ],
   performance: [

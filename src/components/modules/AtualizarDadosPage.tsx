@@ -63,6 +63,7 @@ const DEFAULT_COLUMNS = [
   { id: 'cmv', label: 'CMV', visible: true, onlyImported: true },
   { id: 'liquido', label: 'Líquido', visible: true, onlyImported: true },
   { id: 'margem', label: 'Margem', visible: true, onlyImported: true },
+  { id: 'devolucao', label: 'Devolução', visible: true, onlyImported: true },
   { id: 'comprador', label: 'Comprador', visible: true, onlyMock: true },
   { id: 'status', label: 'Status', visible: true, onlyMock: true },
 ];
@@ -1343,7 +1344,7 @@ export function AtualizarDadosPage() {
                       <thead>
                         <tr className="border-b border-border bg-muted/50">
                           {tableColumns.filter(c => c.visible && (useImported ? !c.onlyMock : !c.onlyImported)).map(col => (
-                            <th key={col.id} className={`py-3 px-4 font-semibold text-muted-foreground ${['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem'].includes(col.id) ? 'text-right' : col.id === 'status' ? 'text-center' : 'text-left'}`}>
+                            <th key={col.id} className={`py-3 px-4 font-semibold text-muted-foreground ${['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem','devolucao'].includes(col.id) ? 'text-right' : col.id === 'status' ? 'text-center' : 'text-left'}`}>
                               {col.label}
                             </th>
                           ))}
@@ -1362,6 +1363,7 @@ export function AtualizarDadosPage() {
                               if (col.id === 'valorTotal') className += "font-semibold text-right ";
                               if (['quantidade','margem'].includes(col.id)) className += "text-right ";
                               if (col.id === 'margem') className += "text-center font-medium ";
+                              if (col.id === 'devolucao') { content = formatBRL(content || 0); className += "text-right text-[hsl(var(--vix-danger))] "; }
                               if (['valorTotal','impostos','comissao','cmv','liquido'].includes(col.id)) {
                                 content = formatBRL(content || (col.id === 'valorTotal' ? venda.precoUnitario : 0));
                                 className += "text-right ";

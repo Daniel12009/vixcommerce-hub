@@ -130,6 +130,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           cmv: num(r.cmv),
           margem: r.margem || '',
           liquido: num(r.liquido),
+          devolucao: num(r.devolucao),
         };
         return Object.assign({}, r, baseItem);
       });
@@ -153,8 +154,12 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         conta: contaOverride || r.conta || '',
         dataRef: r.dataRef || '',
       }));
-    // Merge with existing items (from other sheets/contas)
-    setPerformanceItems(prev => prev ? [...prev, ...items] : items);
+    const conta = contaOverride || items[0]?.conta || '';
+    // Replace items from the same conta (dedup), keep items from other contas
+    setPerformanceItems(prev => {
+      const kept = prev ? prev.filter(p => p.conta !== conta) : [];
+      return [...kept, ...items];
+    });
   }, []);
 
   return (
