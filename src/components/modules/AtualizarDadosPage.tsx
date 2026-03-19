@@ -40,12 +40,14 @@ const moduloLabels: Record<ModuloDestino, string> = {
   estoque: 'Estoque',
   financeiro: 'Financeiro',
   vendas: 'Vendas / Pedidos',
+  performance: 'Performance Anúncios',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
   estoque: 'bg-[hsl(var(--vix-info)/0.1)] text-[hsl(var(--vix-info))]',
   financeiro: 'bg-[hsl(var(--vix-success)/0.1)] text-[hsl(var(--vix-success))]',
   vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
+  performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
 };
 
 // Vendas Table Columns state
@@ -332,6 +334,8 @@ export function AtualizarDadosPage() {
         sheetsData.setFinanceiroFromSheet(parsed);
       } else if (config.moduloDestino === 'vendas') {
         sheetsData.setVendasFromSheet(parsed);
+      } else if (config.moduloDestino === 'performance') {
+        sheetsData.setPerformanceFromSheet(parsed);
       }
 
       // Update last sync
@@ -573,7 +577,7 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
           <TabsTrigger value="contas">Contas & Sync</TabsTrigger>
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
-          <TabsTrigger value="ads">Performance Ads</TabsTrigger>
+          <TabsTrigger value="ads">Performance Anúncios</TabsTrigger>
           <TabsTrigger value="graficos">Gráficos</TabsTrigger>
         </TabsList>
 
@@ -1435,68 +1439,122 @@ export function AtualizarDadosPage() {
           })()}
         </TabsContent>
 
-        {/* Tab: Performance Ads */}
+        {/* Tab: Performance Anúncios */}
         <TabsContent value="ads">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <KpiCard title="Investimento Total (7d)" value={formatBRL(mockAdsCampaigns.reduce((s, c) => s + c.investimento, 0))} icon={DollarSign} delay={0} />
-            <KpiCard title="Receita de Ads (7d)" value={formatBRL(mockAdsCampaigns.reduce((s, c) => s + c.receita, 0))} icon={TrendingUp} delay={50} />
-            <KpiCard
-              title="ROAS Geral (7d)"
-              value={(() => { const inv = mockAdsCampaigns.reduce((s, c) => s + c.investimento, 0); const rec = mockAdsCampaigns.reduce((s, c) => s + c.receita, 0); return inv > 0 ? (rec / inv).toFixed(2) + 'x' : '0x'; })()}
-              icon={TrendingUp} delay={100}
-            />
-          </div>
-          <div className="space-y-3">
-            {mockAdsCampaigns.map((campaign) => {
-              const isExpanded = expandedCampaign === campaign.campanha;
-              const roasRatio = campaign.roasObjetivo > 0 ? campaign.roasRealizado / campaign.roasObjetivo : 0;
-              const roasColor = roasRatio >= 0.8 ? 'text-[hsl(var(--vix-success))]' : roasRatio >= 0.5 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]';
+          {(() => {
+            const perfItems = sheetsData.performanceItems || [];
+            const contasUnicas = [...new Set(perfItems.map(p => p.conta).filter(Boolean))];
+            const [filterPerfConta, setFilterPerfConta] = [filterMarketplace, setFilterMarketplace];
+            const filtered = filterPerfConta === 'all' ? perfItems : perfItems.filter(p => p.conta === filterPerfConta);
+            const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
+            const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
+            const totalCanceladas = filtered.reduce((s, p) => s + p.canceladas, 0);
+            const convMedia = filtered.length > 0 ? filtered.reduce((s, p) => s + p.conversao, 0) / filtered.length : 0;
+            const PERF_PER_PAGE = 50;
+            const [perfPage, setPerfPage] = [pedidosPage, setPedidosPage];
+            const totalPerfPages = Math.ceil(filtered.length / PERF_PER_PAGE);
+            const perfPaginated = filtered.slice(perfPage * PERF_PER_PAGE, (perfPage + 1) * PERF_PER_PAGE);
+
+            if (perfItems.length === 0) {
               return (
-                <div key={campaign.campanha} className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
-                  <button onClick={() => setExpandedCampaign(isExpanded ? null : campaign.campanha)} className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${campaignStatusColors[campaign.status]}`}>
-                        {campaign.status === 'ativo' ? 'Ativo' : campaign.status === 'pausado' ? 'Pausado' : 'Ajustar'}
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <TrendingUp className="w-12 h-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Nenhum dado de performance importado</h3>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    Vá em <strong>Planilhas Google</strong>, adicione uma configuração com módulo <strong>Performance Anúncios</strong> e importe as abas PERF-GS TORNEIRAS, PERF-VIA FLIX e PERF-DECARION TORNEIRAS.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <>
+                {/* KPI Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <KpiCard title="Total Visitas" value={totalVisitas.toLocaleString('pt-BR')} icon={Eye} delay={0} />
+                  <KpiCard title="Total Vendas" value={totalVendas.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
+                  <KpiCard title="Canceladas" value={totalCanceladas.toLocaleString('pt-BR')} icon={AlertTriangle} delay={100} />
+                  <KpiCard title="Conversão Média" value={`${convMedia.toFixed(2)}%`} icon={TrendingUp} delay={150} />
+                </div>
+
+                {/* Filter by Conta */}
+                {contasUnicas.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-muted-foreground">Conta:</label>
+                      <select value={filterPerfConta} onChange={(e) => { setFilterPerfConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todas</option>
+                        {contasUnicas.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
+                  </div>
+                )}
+
+                {/* Data Table */}
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">ID Anúncio</th>
+                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">SKU</th>
+                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Título</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Preço</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Visitas</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Vendas</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Canc.</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Conv. %</th>
+                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
+                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Período</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {perfPaginated.map((item, idx) => (
+                          <tr key={`${item.idAnuncio}-${idx}`} className="border-t border-border hover:bg-muted/30 transition-colors">
+                            <td className="px-3 py-2">
+                              {item.link ? (
+                                <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{item.idAnuncio}</a>
+                              ) : item.idAnuncio}
+                            </td>
+                            <td className="px-3 py-2 font-mono">{item.sku}</td>
+                            <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
+                            <td className="px-3 py-2 text-right">{formatBRL(item.preco)}</td>
+                            <td className="px-3 py-2 text-right font-medium">{item.visitas.toLocaleString('pt-BR')}</td>
+                            <td className="px-3 py-2 text-right font-medium text-[hsl(var(--vix-success))]">{item.vendas.toLocaleString('pt-BR')}</td>
+                            <td className="px-3 py-2 text-right text-[hsl(var(--vix-danger))]">{item.canceladas}</td>
+                            <td className="px-3 py-2 text-right">
+                              <span className={`font-medium ${item.conversao >= 5 ? 'text-[hsl(var(--vix-success))]' : item.conversao >= 2 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]'}`}>
+                                {item.conversao.toFixed(2)}%
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">{item.conta}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{item.dataRef}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPerfPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                      <span className="text-xs text-muted-foreground">
+                        Mostrando {perfPage * PERF_PER_PAGE + 1}–{Math.min((perfPage + 1) * PERF_PER_PAGE, filtered.length)} de {filtered.length}
                       </span>
-                      <span className="text-foreground font-medium text-sm">{campaign.campanha}</span>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Investimento</p>
-                        <p className="text-sm font-semibold text-foreground">{formatBRL(campaign.investimento)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Receita</p>
-                        <p className="text-sm font-semibold text-foreground">{formatBRL(campaign.receita)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">ROAS</p>
-                        <p className={`text-sm font-bold ${roasColor}`}>{campaign.roasRealizado.toFixed(2)}x / {campaign.roasObjetivo}x</p>
-                      </div>
-                      <div className="w-24 hidden lg:block">
-                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all ${roasRatio >= 0.8 ? 'bg-[hsl(var(--vix-success))]' : roasRatio >= 0.5 ? 'bg-[hsl(var(--vix-warning))]' : 'bg-[hsl(var(--vix-danger))]'}`} style={{ width: `${Math.min(100, roasRatio * 100)}%` }} />
-                        </div>
-                      </div>
-                      {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                    </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="px-4 pb-4 border-t border-border pt-3">
-                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
-                        <AlertTriangle className="w-4 h-4 text-[hsl(var(--vix-warning))] mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground mb-1">Recomendação IA</p>
-                          <p className="text-sm text-muted-foreground">{campaign.recomendacao}</p>
-                          <p className="text-xs text-muted-foreground mt-2">Orçamento diário: {formatBRL(campaign.orcamentoDiario)}</p>
-                        </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setPerfPage(p => Math.max(0, p - 1))} disabled={perfPage === 0} className="px-2.5 py-1 rounded text-xs font-medium bg-card border border-border text-foreground hover:bg-muted disabled:opacity-40 transition-colors">← Anterior</button>
+                        <span className="text-xs text-muted-foreground px-2">{perfPage + 1} / {totalPerfPages}</span>
+                        <button onClick={() => setPerfPage(p => Math.min(totalPerfPages - 1, p + 1))} disabled={perfPage >= totalPerfPages - 1} className="px-2.5 py-1 rounded text-xs font-medium bg-card border border-border text-foreground hover:bg-muted disabled:opacity-40 transition-colors">Próximo →</button>
                       </div>
                     </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
+              </>
+            );
+          })()}
         </TabsContent>
 
         {/* Tab: Gráficos */}

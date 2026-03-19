@@ -146,3 +146,18 @@ export interface AdsCampaign {
   status: 'ativo' | 'pausado' | 'ajustar';
   recomendacao: string;
 }
+
+export interface PerformanceItem {
+  plataforma: string;
+  idAnuncio: string;
+  sku: string;
+  titulo: string;
+  preco: number;
+  visitas: number;
+  vendas: number;
+  canceladas: number;
+  conversao: number;
+  link: string;
+  conta: string;
+  dataRef: string;
+}

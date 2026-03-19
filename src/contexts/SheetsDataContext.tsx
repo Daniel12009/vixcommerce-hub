@@ -1,16 +1,19 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { StockItem, FinancialItem, VendaItem } from '@/lib/types';
+import type { StockItem, FinancialItem, VendaItem, PerformanceItem } from '@/lib/types';
 
 interface SheetsData {
   estoqueItems: StockItem[] | null;
   financeiroItems: FinancialItem[] | null;
   vendasItems: VendaItem[] | null;
+  performanceItems: PerformanceItem[] | null;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
+  setPerformanceFromSheet: (rows: Record<string, string>[]) => void;
   clearEstoque: () => void;
   clearFinanceiro: () => void;
   clearVendas: () => void;
+  clearPerformance: () => void;
 }
 
 const SheetsDataContext = createContext<SheetsData | null>(null);
@@ -32,6 +35,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [estoqueItems, setEstoqueItems] = useState<StockItem[] | null>(null);
   const [financeiroItems, setFinanceiroItems] = useState<FinancialItem[] | null>(null);
   const [vendasItems, setVendasItems] = useState<VendaItem[] | null>(null);
+  const [performanceItems, setPerformanceItems] = useState<PerformanceItem[] | null>(null);
 
   const setEstoqueFromSheet = useCallback((rows: Record<string, string>[]) => {
     const items: StockItem[] = rows
@@ -132,17 +136,41 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setVendasItems(items);
   }, []);
 
+  const setPerformanceFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: PerformanceItem[] = rows
+      .filter(r => r.idAnuncio || r.sku)
+      .map(r => ({
+        plataforma: r.plataforma || '',
+        idAnuncio: r.idAnuncio || '',
+        sku: r.sku || '',
+        titulo: r.titulo || '',
+        preco: num(r.preco),
+        visitas: num(r.visitas),
+        vendas: num(r.vendas),
+        canceladas: num(r.canceladas),
+        conversao: num(r.conversao),
+        link: r.link || '',
+        conta: r.conta || '',
+        dataRef: r.dataRef || '',
+      }));
+    // Merge with existing items (from other sheets/contas)
+    setPerformanceItems(prev => prev ? [...prev, ...items] : items);
+  }, []);
+
   return (
     <SheetsDataContext.Provider value={{
       estoqueItems,
       financeiroItems,
       vendasItems,
+      performanceItems,
       setEstoqueFromSheet,
       setFinanceiroFromSheet,
       setVendasFromSheet,
+      setPerformanceFromSheet,
       clearEstoque: () => setEstoqueItems(null),
       clearFinanceiro: () => setFinanceiroItems(null),
       clearVendas: () => setVendasItems(null),
+      clearPerformance: () => setPerformanceItems(null),
     }}>
       {children}
     </SheetsDataContext.Provider>
