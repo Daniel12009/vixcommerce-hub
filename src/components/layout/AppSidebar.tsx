@@ -55,11 +55,11 @@ export function AppSidebar({ activeModule, onModuleChange }: AppSidebarProps) {
       <div className="px-3 py-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-            <span className="text-sidebar-accent-foreground text-xs font-semibold">J</span>
+            <span className="text-sidebar-accent-foreground text-xs font-semibold">R</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sidebar-primary-foreground text-sm font-medium truncate">João</p>
-            <p className="text-sidebar-foreground text-xs opacity-60">ROOT</p>
+            <p className="text-sidebar-primary-foreground text-sm font-medium truncate">Usuário ROOT</p>
+            <p className="text-sidebar-foreground text-xs opacity-60">Setor</p>
           </div>
           <Settings className="w-4 h-4 text-sidebar-foreground opacity-40" />
         </div>
