@@ -178,7 +178,6 @@ Deno.serve(async (req) => {
               time_from: String(timeFrom),
               time_to: String(timeTo),
               page_size: '50',
-              order_status: 'READY_TO_SHIP,PROCESSED,SHIPPED,COMPLETED,IN_CANCEL,CANCELLED,INVOICE_PENDING',
               response_optional_fields: 'order_status',
             };
             if (cursor) params.cursor = cursor;
