@@ -776,6 +776,7 @@ export function AtualizarDadosPage() {
                             <SelectItem value="financeiro">💰 Financeiro</SelectItem>
                             <SelectItem value="vendas">🛒 Vendas / Pedidos</SelectItem>
                             <SelectItem value="performance">📊 Performance Anúncios</SelectItem>
+                            <SelectItem value="ads">📈 Performance ADS</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
