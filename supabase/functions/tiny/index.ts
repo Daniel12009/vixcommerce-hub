@@ -248,7 +248,7 @@ Deno.serve(async (req) => {
       const allOrders: any[] = [];
 
       // Marketplaces to look for (not covered by direct APIs)
-      const targetMarketplaces = ['tiktok', 'shein', 'amazon', 'magalu', 'americanas'];
+      const targetMarketplaces = ['tiktok', 'shein', 'amazon', 'magalu', 'americanas', 'temu'];
 
       for (const account of accounts) {
         try {

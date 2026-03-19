@@ -49,6 +49,7 @@ const getPlatformLabel = (p: string) => {
     case 'amazon': return 'Amazon';
     case 'magalu': return 'Magalu';
     case 'americanas': return 'Americanas';
+    case 'temu': return 'Temu';
     default: return p || 'Outros';
   }
 };
