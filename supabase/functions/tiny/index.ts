@@ -168,12 +168,17 @@ Deno.serve(async (req) => {
 
               // Get vendedor (seller)
               const vendedor = detailPedido.vendedor || detailPedido.nome_vendedor || '';
+              console.log(`Order ${orderId}: vendedor="${vendedor}", buyer="${detailPedido.cliente?.nome || ''}", total=${totalAmount}`);
 
-              // Classify canal based on vendedor
+              // Classify canal based on vendedor name
               const vendedorLower = vendedor.toLowerCase();
               let canal = 'loja';
-              if (vendedorLower.includes('atacado') || vendedorLower.includes('alexia')) {
-                canal = 'atacado';
+              if (vendedorLower.includes('alexia') && vendedorLower.includes('showroom')) {
+                canal = 'showroom';
+              } else if (vendedorLower.includes('alexia') && vendedorLower.includes('atacado')) {
+                canal = 'atacado_alexia';
+              } else if (vendedorLower.includes('atacado') || vendedorLower.includes('wholesale')) {
+                canal = 'atacado_vf';
               } else if (vendedorLower.includes('showroom')) {
                 canal = 'showroom';
               }
@@ -195,6 +200,11 @@ Deno.serve(async (req) => {
                 unit_price: totalAmount,
               }];
 
+              // Build conta label
+              const canalLabel = canal === 'atacado_alexia' ? 'Atacado Alexia' :
+                canal === 'atacado_vf' ? 'Atacado VF' :
+                canal === 'showroom' ? 'Showroom' : 'Loja';
+
               allOrders.push({
                 id: orderId,
                 status: mapTinyStatus(detailPedido.situacao || pedido.situacao),
@@ -204,7 +214,7 @@ Deno.serve(async (req) => {
                 vendedor,
                 canal,
                 items,
-                conta: `Tiny|${account.nome}|${canal}`,
+                conta: `${account.nome} | ${canalLabel}`,
                 plataforma: 'tiny',
                 account_id: account.id,
               });

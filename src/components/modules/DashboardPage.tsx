@@ -26,11 +26,14 @@ interface DashOrder {
   error?: string;
 }
 
-type CanalFilter = 'all' | 'marketplace' | 'loja' | 'atacado' | 'showroom';
+type CanalFilter = 'all' | 'marketplace' | 'loja' | 'atacado_vf' | 'atacado_alexia' | 'atacado_all' | 'showroom';
 
-const classifyCanal = (conta: string): string => {
-  const lower = (conta || '').toLowerCase();
-  if (lower.includes('atacado')) return 'atacado';
+const classifyCanal = (order: DashOrder): string => {
+  // Use canal from Tiny API if available
+  if (order.canal) return order.canal;
+  const lower = (order.conta || '').toLowerCase();
+  if (lower.includes('alexia')) return 'atacado_alexia';
+  if (lower.includes('atacado')) return 'atacado_vf';
   if (lower.includes('showroom')) return 'showroom';
   if (lower.includes('loja')) return 'loja';
   return 'marketplace';
@@ -117,7 +120,11 @@ export function DashboardPage() {
       items = items.filter(o => (o.plataforma || '') === filterPlataforma);
     }
     if (filterCanal !== 'all') {
-      items = items.filter(o => classifyCanal(o.conta) === filterCanal);
+      items = items.filter(o => {
+        const c = classifyCanal(o);
+        if (filterCanal === 'atacado_all') return c === 'atacado_vf' || c === 'atacado_alexia';
+        return c === filterCanal;
+      });
     }
     return items;
   }, [orders, filterPlataforma, filterCanal]);
@@ -231,7 +238,9 @@ export function DashboardPage() {
             <option value="all">Todos os Canais</option>
             <option value="marketplace">Marketplace</option>
             <option value="loja">Loja</option>
-            <option value="atacado">Atacado</option>
+            <option value="atacado_all">Atacado (Todos)</option>
+            <option value="atacado_vf">Atacado VF</option>
+            <option value="atacado_alexia">Atacado Alexia</option>
             <option value="showroom">Showroom</option>
           </select>
         </div>
