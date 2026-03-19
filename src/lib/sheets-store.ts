@@ -81,6 +81,7 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
 
 const STORAGE_KEY = 'vix_sheet_configs';
 
+/** Sync load from localStorage (used for initial render) */
 export function loadSheetConfigs(): SheetConfig[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -90,8 +91,22 @@ export function loadSheetConfigs(): SheetConfig[] {
   }
 }
 
+/** Sync save to localStorage */
 export function saveSheetConfigs(configs: SheetConfig[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+}
+
+/** Async: save configs to Supabase (cross-browser) + localStorage */
+export async function saveSheetConfigsToCloud(configs: SheetConfig[]) {
+  const { saveToCloud } = await import('./persistence');
+  await saveToCloud('sheet_configs', configs);
+}
+
+/** Async: load configs from Supabase first, fallback localStorage */
+export async function loadSheetConfigsFromCloud(): Promise<SheetConfig[]> {
+  const { loadFromCloud } = await import('./persistence');
+  const result = await loadFromCloud<SheetConfig[]>('sheet_configs');
+  return result || loadSheetConfigs();
 }
 
 export function extractSpreadsheetId(url: string): string | null {

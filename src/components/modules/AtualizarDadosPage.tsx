@@ -18,8 +18,10 @@ import { useSheetsData } from '@/contexts/SheetsDataContext';
 import {
   type SheetConfig, type ModuloDestino,
   CAMPOS_POR_MODULO, loadSheetConfigs, saveSheetConfigs,
+  saveSheetConfigsToCloud, loadSheetConfigsFromCloud,
   extractSpreadsheetId, parseSheetRowsWithFixos,
 } from '@/lib/sheets-store';
+import { saveToCloud, loadFromCloud } from '@/lib/persistence';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
   pendente: { icon: Clock, label: 'Pendente', class: 'text-[hsl(var(--vix-warning))] bg-[hsl(var(--vix-warning)/0.1)]' },
@@ -177,10 +179,34 @@ export function AtualizarDadosPage() {
   const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
   const [customColumns, setCustomColumns] = useState<{ id: string; targetName: string; selectedSourceColumn: string }[]>([]);
 
-  // Persist configs
+  // Persist configs to localStorage AND Supabase
   useEffect(() => {
     saveSheetConfigs(sheetConfigs);
+    saveSheetConfigsToCloud(sheetConfigs);
   }, [sheetConfigs]);
+
+  // On mount: load configs from Supabase (cross-browser)
+  const hasLoadedCloud = useRef(false);
+  useEffect(() => {
+    if (hasLoadedCloud.current) return;
+    hasLoadedCloud.current = true;
+    loadSheetConfigsFromCloud().then(cloudConfigs => {
+      if (cloudConfigs && cloudConfigs.length > 0) {
+        setSheetConfigs(cloudConfigs);
+      }
+    });
+    // Also load imported data from cloud
+    loadFromCloud('vendas_data').then((data: any) => {
+      if (data && Array.isArray(data) && data.length > 0 && (!sheetsData.vendasItems || sheetsData.vendasItems.length === 0)) {
+        sheetsData.setVendasFromSheet(data);
+      }
+    });
+    loadFromCloud('performance_data').then((data: any) => {
+      if (data && Array.isArray(data) && data.length > 0 && (!sheetsData.performanceItems || sheetsData.performanceItems.length === 0)) {
+        sheetsData.setPerformanceFromSheet(data);
+      }
+    });
+  }, []);
 
   // Auto-import on page load — run import for all configured sheets
   const hasAutoImported = useRef(false);
@@ -349,12 +375,20 @@ export function AtualizarDadosPage() {
 
       if (config.moduloDestino === 'estoque') {
         sheetsData.setEstoqueFromSheet(parsed);
+        saveToCloud('estoque_data', parsed);
       } else if (config.moduloDestino === 'financeiro') {
         sheetsData.setFinanceiroFromSheet(parsed);
+        saveToCloud('financeiro_data', parsed);
       } else if (config.moduloDestino === 'vendas') {
         sheetsData.setVendasFromSheet(parsed);
+        saveToCloud('vendas_data', parsed);
       } else if (config.moduloDestino === 'performance') {
         sheetsData.setPerformanceFromSheet(parsed, config.abaNome);
+        // For performance, merge with existing data in cloud
+        const existing = await loadFromCloud<any[]>('performance_data') || [];
+        const contaKey = config.abaNome;
+        const merged = [...existing.filter((p: any) => p.conta !== contaKey), ...parsed.map(p => ({ ...p, conta: contaKey }))];
+        saveToCloud('performance_data', merged);
       }
 
       // Update last sync
