@@ -28,11 +28,22 @@ const axisStyle = { fill: 'hsl(var(--muted-foreground))', fontSize: 11 };
 
 // Marketplaces that count for margin charts (exclude showroom, atacado, loja)
 const MARKETPLACE_KEYWORDS = ['mercado livre', 'shopee', 'shein', 'amazon', 'magalu', 'americanas', 'casas bahia', 'magazine'];
-const isMarketplace = (origem: string) => {
-  if (!origem) return false;
+const ATACADO_KEYWORDS = ['atacado'];
+const SHOWROOM_KEYWORDS = ['showroom'];
+const LOJA_KEYWORDS = ['loja'];
+
+type CanalTipo = 'all' | 'marketplace' | 'atacado' | 'showroom' | 'loja';
+
+const classifyCanal = (origem: string): CanalTipo => {
+  if (!origem) return 'marketplace';
   const lower = origem.toLowerCase();
-  return MARKETPLACE_KEYWORDS.some(kw => lower.includes(kw));
+  if (ATACADO_KEYWORDS.some(kw => lower.includes(kw))) return 'atacado';
+  if (SHOWROOM_KEYWORDS.some(kw => lower.includes(kw))) return 'showroom';
+  if (LOJA_KEYWORDS.some(kw => lower.includes(kw))) return 'loja';
+  return 'marketplace';
 };
+
+const isMarketplace = (origem: string) => classifyCanal(origem) === 'marketplace';
 
 export function GraficosTab() {
   const sheetsData = useSheetsData();
@@ -42,16 +53,35 @@ export function GraficosTab() {
   // ---- Filters ----
   const [filterConta, setFilterConta] = useState('all');
   const [filterDias, setFilterDias] = useState(90);
+  const [filterCanal, setFilterCanal] = useState<CanalTipo>('all');
+  const [filterMarketplace, setFilterMarketplace] = useState('all');
 
   const contasVendas = useMemo(() => getContasNormalizadas(allVendas.map(v => v.conta).filter(Boolean)), [allVendas]);
   const contasPerf = useMemo(() => getContasNormalizadas(allPerf.map(p => p.conta).filter(Boolean)), [allPerf]);
   const todasContas = useMemo(() => [...new Set([...contasVendas, ...contasPerf])].sort(), [contasVendas, contasPerf]);
+
+  // Get unique marketplaces for sub-filter
+  const uniqueMarketplaces = useMemo(() => {
+    const origins = new Set<string>();
+    allVendas.forEach(v => {
+      if (v.pedidoOrigem && classifyCanal(v.pedidoOrigem) === 'marketplace') {
+        origins.add(v.pedidoOrigem);
+      }
+    });
+    return [...origins].sort();
+  }, [allVendas]);
 
   // Apply filters
   const vendas = useMemo(() => {
     let items = allVendas;
     if (filterConta !== 'all') {
       items = items.filter(v => normalizeConta(v.conta) === filterConta);
+    }
+    if (filterCanal !== 'all') {
+      items = items.filter(v => classifyCanal(v.pedidoOrigem) === filterCanal);
+      if (filterCanal === 'marketplace' && filterMarketplace !== 'all') {
+        items = items.filter(v => v.pedidoOrigem === filterMarketplace);
+      }
     }
     if (filterDias > 0) {
       const cutoff = new Date();
@@ -68,7 +98,7 @@ export function GraficosTab() {
       });
     }
     return items;
-  }, [allVendas, filterConta, filterDias]);
+  }, [allVendas, filterConta, filterDias, filterCanal, filterMarketplace]);
 
   const perf = useMemo(() => {
     if (filterConta === 'all') return allPerf;
@@ -220,6 +250,25 @@ export function GraficosTab() {
             <option value={0}>Todo o período</option>
           </select>
         </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground font-medium">Canal:</label>
+          <select value={filterCanal} onChange={(e) => { setFilterCanal(e.target.value as CanalTipo); setFilterMarketplace('all'); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+            <option value="all">Todos</option>
+            <option value="marketplace">Marketplace</option>
+            <option value="atacado">Atacado</option>
+            <option value="showroom">Showroom</option>
+            <option value="loja">Loja</option>
+          </select>
+        </div>
+        {filterCanal === 'marketplace' && uniqueMarketplaces.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground font-medium">Marketplace:</label>
+            <select value={filterMarketplace} onChange={(e) => setFilterMarketplace(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+              <option value="all">Todos</option>
+              {uniqueMarketplaces.map(m => (<option key={m} value={m}>{m}</option>))}
+            </select>
+          </div>
+        )}
         <span className="text-xs text-muted-foreground ml-auto">
           {vendas.length} vendas · {perf.length} anúncios
         </span>
