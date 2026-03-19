@@ -127,6 +127,31 @@ Deno.serve(async (req) => {
 
             for (const p of pedidos) {
               const pedido = p.pedido;
+
+              // Skip marketplace orders (already come from ML/Shopee APIs)
+              const numEcom = (pedido.numero_ecommerce || '').toString();
+              const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
+
+              // If has ecommerce number or marketplace name, skip it
+              const isMarketplace = numEcom.length > 0 ||
+                ecommerce.includes('mercado') ||
+                ecommerce.includes('shopee') ||
+                ecommerce.includes('magalu') ||
+                ecommerce.includes('amazon') ||
+                ecommerce.includes('americanas') ||
+                ecommerce.includes('shein');
+
+              if (isMarketplace) {
+                console.log(`Skipping marketplace order: ${pedido.numero} (ecom: ${numEcom}, channel: ${ecommerce})`);
+                continue;
+              }
+
+              // Classify canal from order data
+              const obs = (pedido.obs || pedido.observacoes || pedido.obs_internas || '').toLowerCase();
+              let canal = 'loja';
+              if (obs.includes('atacado')) canal = 'atacado';
+              else if (obs.includes('showroom')) canal = 'showroom';
+
               allOrders.push({
                 id: pedido.id || pedido.numero,
                 status: mapTinyStatus(pedido.situacao),
@@ -135,11 +160,11 @@ Deno.serve(async (req) => {
                 buyer: pedido.cliente?.nome || pedido.nome || 'N/A',
                 items: [{
                   title: `Pedido #${pedido.numero || pedido.id}`,
-                  sku: pedido.numero_ecommerce || '',
+                  sku: '',
                   quantity: 1,
                   unit_price: parseFloat(pedido.totalPedido || pedido.total_pedido || '0'),
                 }],
-                conta: `Tiny|${account.nome}`,
+                conta: `Tiny|${account.nome}|${canal}`,
                 plataforma: 'tiny',
                 account_id: account.id,
               });
