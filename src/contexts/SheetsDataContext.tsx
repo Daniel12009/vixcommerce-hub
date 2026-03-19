@@ -9,7 +9,7 @@ interface SheetsData {
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
-  setPerformanceFromSheet: (rows: Record<string, string>[]) => void;
+  setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   clearEstoque: () => void;
   clearFinanceiro: () => void;
   clearVendas: () => void;
@@ -136,7 +136,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setVendasItems(items);
   }, []);
 
-  const setPerformanceFromSheet = useCallback((rows: Record<string, string>[]) => {
+  const setPerformanceFromSheet = useCallback((rows: Record<string, string>[], contaOverride?: string) => {
     const items: PerformanceItem[] = rows
       .filter(r => r.idAnuncio || r.sku)
       .map(r => ({
@@ -150,7 +150,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         canceladas: num(r.canceladas),
         conversao: num(r.conversao),
         link: r.link || '',
-        conta: r.conta || '',
+        conta: contaOverride || r.conta || '',
         dataRef: r.dataRef || '',
       }));
     // Merge with existing items (from other sheets/contas)

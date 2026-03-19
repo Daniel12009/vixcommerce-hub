@@ -335,7 +335,7 @@ export function AtualizarDadosPage() {
       } else if (config.moduloDestino === 'vendas') {
         sheetsData.setVendasFromSheet(parsed);
       } else if (config.moduloDestino === 'performance') {
-        sheetsData.setPerformanceFromSheet(parsed);
+        sheetsData.setPerformanceFromSheet(parsed, config.abaNome);
       }
 
       // Update last sync
