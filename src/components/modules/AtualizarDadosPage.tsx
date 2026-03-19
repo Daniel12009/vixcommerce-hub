@@ -82,7 +82,7 @@ export function AtualizarDadosPage() {
   const [pedidosPage, setPedidosPage] = useState(0);
   const [perfFilterConta, setPerfFilterConta] = useState<string>('all');
   const [perfFilterPeriodo, setPerfFilterPeriodo] = useState<string>('7');
-  const [perfCustomPeriodo, setPerfCustomPeriodo] = useState<string>('all');
+  const [perfSelectedPeriodo, setPerfSelectedPeriodo] = useState<string>('all');
   const [perfPage, setPerfPage] = useState(0);
   const [perfSortField, setPerfSortField] = useState<string>('vendas');
   const [perfSortDir, setPerfSortDir] = useState<'asc' | 'desc'>('desc');
@@ -1451,9 +1451,8 @@ export function AtualizarDadosPage() {
           {(() => {
             const perfItems = sheetsData.performanceItems || [];
             const contasUnicas = [...new Set(perfItems.map(p => p.conta).filter(Boolean))];
-            const periodosUnicos = [...new Set(perfItems.map(p => p.dataRef).filter(Boolean))].sort();
 
-            // Parse end date from "DD/MM/YYYY a DD/MM/YYYY"
+            // Sort periods by end date to find the most recent
             const parseEndDate = (ref: string) => {
               if (!ref) return null;
               const parts = ref.split(' a ');
@@ -1463,25 +1462,22 @@ export function AtualizarDadosPage() {
               return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
             };
 
-            // Find most recent end date across all items
-            let maxEndDate: Date | null = null;
-            for (const item of perfItems) {
-              const d = parseEndDate(item.dataRef);
-              if (d && (!maxEndDate || d > maxEndDate)) maxEndDate = d;
-            }
-
-            // Filter by relative period
-            let filteredByPeriodo = perfItems;
-            if (perfFilterPeriodo === 'custom') {
-              filteredByPeriodo = perfCustomPeriodo === 'all' ? perfItems : perfItems.filter(p => p.dataRef === perfCustomPeriodo);
-            } else if (maxEndDate && perfFilterPeriodo !== 'all') {
-              const days = parseInt(perfFilterPeriodo) || 7;
-              const cutoff = new Date(maxEndDate);
-              cutoff.setDate(cutoff.getDate() - days);
-              filteredByPeriodo = perfItems.filter(p => {
-                const d = parseEndDate(p.dataRef);
-                return d && d > cutoff;
+            // Get unique periods sorted by end date (most recent last)
+            const periodosUnicos = [...new Set(perfItems.map(p => p.dataRef).filter(Boolean))]
+              .sort((a, b) => {
+                const da = parseEndDate(a);
+                const db = parseEndDate(b);
+                if (!da || !db) return 0;
+                return da.getTime() - db.getTime();
               });
+            const periodoMaisRecente = periodosUnicos.length > 0 ? periodosUnicos[periodosUnicos.length - 1] : '';
+
+            // Filter by period: '7' = most recent only, 'custom' = user picks
+            let filteredByPeriodo = perfItems;
+            if (perfFilterPeriodo === '7') {
+              filteredByPeriodo = periodoMaisRecente ? perfItems.filter(p => p.dataRef === periodoMaisRecente) : perfItems;
+            } else if (perfFilterPeriodo === 'custom') {
+              filteredByPeriodo = perfSelectedPeriodo === 'all' ? perfItems : perfItems.filter(p => p.dataRef === perfSelectedPeriodo);
             }
 
             const filteredByConta = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => p.conta === perfFilterConta);
@@ -1545,18 +1541,15 @@ export function AtualizarDadosPage() {
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs text-muted-foreground">Período:</label>
                     <select value={perfFilterPeriodo} onChange={(e) => { setPerfFilterPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                      <option value="7">📅 Últimos 7 dias</option>
-                      <option value="15">📅 Últimos 15 dias</option>
-                      <option value="30">📅 Últimos 30 dias</option>
-                      <option value="all">Todos os períodos</option>
+                      <option value="7">📅 Últimos 7 dias{periodoMaisRecente ? ` (${periodoMaisRecente})` : ''}</option>
                       <option value="custom">🔍 Personalizado</option>
                     </select>
                   </div>
                   {perfFilterPeriodo === 'custom' && periodosUnicos.length > 0 && (
                     <div className="flex items-center gap-1.5">
-                      <select value={perfCustomPeriodo} onChange={(e) => { setPerfCustomPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                        <option value="all">Todos</option>
-                        {periodosUnicos.map(p => (
+                      <select value={perfSelectedPeriodo} onChange={(e) => { setPerfSelectedPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                        <option value="all">Todos os períodos</option>
+                        {[...periodosUnicos].reverse().map(p => (
                           <option key={p} value={p}>{p}</option>
                         ))}
                       </select>
@@ -1591,7 +1584,7 @@ export function AtualizarDadosPage() {
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('canceladas')}>Canc.{sortIcon('canceladas')}</th>
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('conversao')}>Conv. %{sortIcon('conversao')}</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
-                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Período</th>
+                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap" style={{minWidth: '180px'}}>Período</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1614,7 +1607,7 @@ export function AtualizarDadosPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2">{item.conta}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{item.dataRef}</td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{item.dataRef}</td>
                           </tr>
                         ))}
                       </tbody>
