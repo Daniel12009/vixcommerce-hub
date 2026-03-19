@@ -117,7 +117,9 @@ export function GraficosTab() {
       cur.liquido += v.liquido || 0;
       map.set(d, cur);
     });
-    return [...map.values()].sort((a, b) => a.dia.localeCompare(b.dia)).slice(-30);
+    return [...map.values()]
+      .map(x => ({ ...x, faturamento: Math.round(x.faturamento), liquido: Math.round(x.liquido) }))
+      .sort((a, b) => a.dia.localeCompare(b.dia)).slice(-30);
   }, [vendas]);
 
   const vendasPorConta = useMemo(() => {
@@ -131,7 +133,9 @@ export function GraficosTab() {
       cur.liquido += v.liquido || 0;
       map.set(c, cur);
     });
-    return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
+    return [...map.values()]
+      .map(x => ({ ...x, faturamento: Math.round(x.faturamento), liquido: Math.round(x.liquido) }))
+      .sort((a, b) => b.faturamento - a.faturamento);
   }, [vendas]);
 
   const vendasPorOrigem = useMemo(() => {
@@ -143,7 +147,9 @@ export function GraficosTab() {
       cur.value += v.valorTotal || 0;
       map.set(o, cur);
     });
-    return [...map.values()].sort((a, b) => b.value - a.value).slice(0, 8);
+    return [...map.values()]
+      .map(x => ({ ...x, value: Math.round(x.value) }))
+      .sort((a, b) => b.value - a.value).slice(0, 8);
   }, [vendas]);
 
   const topSkus = useMemo(() => {
@@ -156,7 +162,9 @@ export function GraficosTab() {
       cur.faturamento += v.valorTotal || 0;
       map.set(s, cur);
     });
-    return [...map.values()].sort((a, b) => b.vendas - a.vendas).slice(0, 10);
+    return [...map.values()]
+      .map(x => ({ ...x, faturamento: Math.round(x.faturamento) }))
+      .sort((a, b) => b.vendas - a.vendas).slice(0, 10);
   }, [vendas]);
 
   // Margem only from marketplaces (exclude showroom, atacado, loja)
@@ -218,6 +226,7 @@ export function GraficosTab() {
   }, [perf]);
 
   const hasData = allVendas.length > 0 || allPerf.length > 0;
+  const isMarketplaceView = filterCanal === 'all' || filterCanal === 'marketplace';
 
   if (!hasData) {
     return (
@@ -326,7 +335,7 @@ export function GraficosTab() {
         )}
 
         {/* 4. Faturamento por Marketplace */}
-        {vendasPorOrigem.length > 0 && (
+        {isMarketplaceView && vendasPorOrigem.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🌐 Faturamento por Marketplace</h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -375,7 +384,7 @@ export function GraficosTab() {
         )}
 
         {/* 7. Melhor Margem por SKU (Marketplaces only) */}
-        {melhoresMargens.length > 0 && (
+        {isMarketplaceView && melhoresMargens.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">✅ Melhor Margem (Marketplaces)</h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -391,7 +400,7 @@ export function GraficosTab() {
         )}
 
         {/* 8. Pior Margem por SKU (Marketplaces only) */}
-        {pioresMargens.length > 0 && (
+        {isMarketplaceView && pioresMargens.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">⚠️ Pior Margem (Marketplaces)</h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -407,7 +416,7 @@ export function GraficosTab() {
         )}
 
         {/* 9. Top Anúncios por Vendas - by SKU */}
-        {topAnunciosVendas.length > 0 && (
+        {isMarketplaceView && topAnunciosVendas.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">📊 Top Anúncios por Vendas (SKU)</h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -423,7 +432,7 @@ export function GraficosTab() {
         )}
 
         {/* 10. Top Anúncios por Conversão - by SKU */}
-        {topAnunciosConversao.length > 0 && (
+        {isMarketplaceView && topAnunciosConversao.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🎯 Top Anúncios por Conversão (SKU)</h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -439,7 +448,7 @@ export function GraficosTab() {
         )}
 
         {/* 11. Visitas vs Vendas por Conta */}
-        {perfPorConta.length > 0 && (
+        {isMarketplaceView && perfPorConta.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
             <h3 className="text-foreground font-semibold mb-4">🏬 Visitas vs Vendas por Conta</h3>
             <ResponsiveContainer width="100%" height={280}>
