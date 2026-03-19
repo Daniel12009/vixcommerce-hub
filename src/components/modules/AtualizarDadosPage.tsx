@@ -715,6 +715,7 @@ export function AtualizarDadosPage() {
                             <SelectItem value="estoque">📦 Estoque</SelectItem>
                             <SelectItem value="financeiro">💰 Financeiro</SelectItem>
                             <SelectItem value="vendas">🛒 Vendas / Pedidos</SelectItem>
+                            <SelectItem value="performance">📊 Performance Anúncios</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
