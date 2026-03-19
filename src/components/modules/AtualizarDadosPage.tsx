@@ -1482,7 +1482,7 @@ export function AtualizarDadosPage() {
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <div className="flex items-center gap-1.5">
                       <label className="text-xs text-muted-foreground">Conta:</label>
-                      <select value={filterPerfConta} onChange={(e) => { setFilterPerfConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                      <select value={perfFilterConta} onChange={(e) => { setPerfFilterConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
                         <option value="all">Todas</option>
                         {contasUnicas.map(c => (
                           <option key={c} value={c}>{c}</option>
