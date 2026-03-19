@@ -109,7 +109,7 @@ export function AtualizarDadosPage() {
       const customKeys = Array.from(allKeys).filter(k => !standardKeys.includes(k) && k !== 'id');
 
       setTableColumns(prev => {
-        let updated = [...prev];
+        const updated = [...prev];
         let changed = false;
         customKeys.forEach(ck => {
           if (!updated.find(c => c.id === ck)) {
