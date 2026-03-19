@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart, LineChart, Line } from 'recharts';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
-import { formatBRL, normalizeConta } from '@/lib/utils-vix';
+import { formatBRL, normalizeConta, getContasNormalizadas } from '@/lib/utils-vix';
 
 const COLORS = [
   'hsl(var(--primary))',
@@ -26,10 +26,54 @@ const tooltipStyle = {
 
 const axisStyle = { fill: 'hsl(var(--muted-foreground))', fontSize: 11 };
 
+// Marketplaces that count for margin charts (exclude showroom, atacado, loja)
+const MARKETPLACE_KEYWORDS = ['mercado livre', 'shopee', 'shein', 'amazon', 'magalu', 'americanas', 'casas bahia', 'magazine'];
+const isMarketplace = (origem: string) => {
+  if (!origem) return false;
+  const lower = origem.toLowerCase();
+  return MARKETPLACE_KEYWORDS.some(kw => lower.includes(kw));
+};
+
 export function GraficosTab() {
   const sheetsData = useSheetsData();
-  const vendas = sheetsData.vendasItems || [];
-  const perf = sheetsData.performanceItems || [];
+  const allVendas = sheetsData.vendasItems || [];
+  const allPerf = sheetsData.performanceItems || [];
+
+  // ---- Filters ----
+  const [filterConta, setFilterConta] = useState('all');
+  const [filterDias, setFilterDias] = useState(90);
+
+  const contasVendas = useMemo(() => getContasNormalizadas(allVendas.map(v => v.conta).filter(Boolean)), [allVendas]);
+  const contasPerf = useMemo(() => getContasNormalizadas(allPerf.map(p => p.conta).filter(Boolean)), [allPerf]);
+  const todasContas = useMemo(() => [...new Set([...contasVendas, ...contasPerf])].sort(), [contasVendas, contasPerf]);
+
+  // Apply filters
+  const vendas = useMemo(() => {
+    let items = allVendas;
+    if (filterConta !== 'all') {
+      items = items.filter(v => normalizeConta(v.conta) === filterConta);
+    }
+    if (filterDias > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - filterDias);
+      items = items.filter(v => {
+        if (!v.data) return true;
+        const parts = v.data.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (parts) {
+          const d = new Date(parseInt(parts[3]), parseInt(parts[2]) - 1, parseInt(parts[1]));
+          return d >= cutoff;
+        }
+        const d = new Date(v.data);
+        return !isNaN(d.getTime()) && d >= cutoff;
+      });
+    }
+    return items;
+  }, [allVendas, filterConta, filterDias]);
+
+  const perf = useMemo(() => {
+    if (filterConta === 'all') return allPerf;
+    return allPerf.filter(p => normalizeConta(p.conta) === filterConta);
+  }, [allPerf, filterConta]);
 
   // ---- Vendas aggregations ----
   const vendasPorDia = useMemo(() => {
@@ -85,10 +129,12 @@ export function GraficosTab() {
     return [...map.values()].sort((a, b) => b.vendas - a.vendas).slice(0, 10);
   }, [vendas]);
 
+  // Margem only from marketplaces (exclude showroom, atacado, loja)
   const margemPorSku = useMemo(() => {
     if (vendas.length === 0) return [];
+    const marketplaceVendas = vendas.filter(v => isMarketplace(v.pedidoOrigem));
     const map = new Map<string, { sku: string; margem: number; count: number }>();
-    vendas.forEach(v => {
+    marketplaceVendas.forEach(v => {
       const s = v.sku || 'N/A';
       const m = typeof v.margem === 'string' ? parseFloat(v.margem.replace(/[^0-9.,-]/g,'').replace(',','.')) : 0;
       if (isNaN(m)) return;
@@ -106,19 +152,18 @@ export function GraficosTab() {
   const melhoresMargens = margemPorSku.slice(0, 8);
   const pioresMargens = [...margemPorSku].sort((a, b) => a.margem - b.margem).slice(0, 8);
 
-  // ---- Performance aggregations ----
-  const perfPorAnuncio = useMemo(() => {
+  // ---- Performance aggregations (using SKU) ----
+  const perfPorSku = useMemo(() => {
     if (perf.length === 0) return [];
-    const map = new Map<string, { titulo: string; visitas: number; vendas: number; conversao: number; count: number }>();
+    const map = new Map<string, { sku: string; visitas: number; vendas: number; conversao: number; count: number }>();
     perf.forEach(p => {
-      const key = p.idAnuncio || p.sku || 'N/A';
-      const title = p.titulo?.slice(0, 40) || key;
-      const cur = map.get(key) || { titulo: title, visitas: 0, vendas: 0, conversao: 0, count: 0 };
+      const s = p.sku || p.idAnuncio || 'N/A';
+      const cur = map.get(s) || { sku: s, visitas: 0, vendas: 0, conversao: 0, count: 0 };
       cur.visitas += p.visitas || 0;
       cur.vendas += p.vendas || 0;
       cur.conversao += p.conversao || 0;
       cur.count += 1;
-      map.set(key, cur);
+      map.set(s, cur);
     });
     return [...map.values()].map(x => ({
       ...x,
@@ -126,8 +171,8 @@ export function GraficosTab() {
     }));
   }, [perf]);
 
-  const topAnunciosVendas = [...perfPorAnuncio].sort((a, b) => b.vendas - a.vendas).slice(0, 10);
-  const topAnunciosConversao = [...perfPorAnuncio].sort((a, b) => b.conversao - a.conversao).slice(0, 10);
+  const topAnunciosVendas = [...perfPorSku].sort((a, b) => b.vendas - a.vendas).slice(0, 10);
+  const topAnunciosConversao = [...perfPorSku].sort((a, b) => b.conversao - a.conversao).slice(0, 10);
 
   const perfPorConta = useMemo(() => {
     if (perf.length === 0) return [];
@@ -142,7 +187,7 @@ export function GraficosTab() {
     return [...map.values()].sort((a, b) => b.vendas - a.vendas);
   }, [perf]);
 
-  const hasData = vendas.length > 0 || perf.length > 0;
+  const hasData = allVendas.length > 0 || allPerf.length > 0;
 
   if (!hasData) {
     return (
@@ -154,187 +199,214 @@ export function GraficosTab() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-      {/* 1. Vendas por Dia */}
-      {vendasPorDia.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
-          <h3 className="text-foreground font-semibold mb-4">📈 Vendas por Dia</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={vendasPorDia}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="dia" tick={axisStyle} />
-              <YAxis tick={axisStyle} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Legend />
-              <Area type="monotone" dataKey="faturamento" name="Faturamento" fill="hsl(var(--primary))" stroke="hsl(var(--primary))" fillOpacity={0.3} />
-              <Area type="monotone" dataKey="liquido" name="Líquido" fill="hsl(var(--vix-success))" stroke="hsl(var(--vix-success))" fillOpacity={0.3} />
-            </AreaChart>
-          </ResponsiveContainer>
+    <div className="space-y-6">
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-xl p-4">
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground font-medium">Conta:</label>
+          <select value={filterConta} onChange={(e) => setFilterConta(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+            <option value="all">Todas</option>
+            {todasContas.map(c => (<option key={c} value={c}>{c}</option>))}
+          </select>
         </div>
-      )}
-
-      {/* 2. Pedidos por Dia */}
-      {vendasPorDia.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">📦 Pedidos por Dia</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={vendasPorDia}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="dia" tick={axisStyle} />
-              <YAxis tick={axisStyle} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Line type="monotone" dataKey="pedidos" name="Pedidos" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground font-medium">Período:</label>
+          <select value={filterDias} onChange={(e) => setFilterDias(parseInt(e.target.value))} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+            <option value={7}>Últimos 7 dias</option>
+            <option value={15}>Últimos 15 dias</option>
+            <option value={30}>Últimos 30 dias</option>
+            <option value={60}>Últimos 60 dias</option>
+            <option value={90}>Últimos 90 dias</option>
+            <option value={0}>Todo o período</option>
+          </select>
         </div>
-      )}
+        <span className="text-xs text-muted-foreground ml-auto">
+          {vendas.length} vendas · {perf.length} anúncios
+        </span>
+      </div>
 
-      {/* 3. Faturamento por Conta */}
-      {vendasPorConta.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">🏪 Faturamento por Conta</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie data={vendasPorConta} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={3} dataKey="faturamento" label={({ conta, percent }) => `${conta} ${(percent * 100).toFixed(0)}%`}>
-                {vendasPorConta.map((_, i) => (<Cell key={`pc-${i}`} fill={COLORS[i % COLORS.length]} />))}
-              </Pie>
-              <Tooltip formatter={(value: number) => [formatBRL(value), 'Faturamento']} contentStyle={tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-      {/* 4. Faturamento por Origem/Marketplace */}
-      {vendasPorOrigem.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">🌐 Faturamento por Marketplace</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={vendasPorOrigem} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={axisStyle} tickFormatter={v => formatBRL(v)} />
-              <YAxis type="category" dataKey="origem" tick={axisStyle} width={130} />
-              <Tooltip formatter={(value: number) => [formatBRL(value), 'Faturamento']} contentStyle={tooltipStyle} />
-              <Bar dataKey="value" name="Faturamento" fill="hsl(var(--accent))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 1. Vendas por Dia */}
+        {vendasPorDia.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
+            <h3 className="text-foreground font-semibold mb-4">📈 Vendas por Dia</h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={vendasPorDia}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="dia" tick={axisStyle} />
+                <YAxis tick={axisStyle} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend />
+                <Area type="monotone" dataKey="faturamento" name="Faturamento" fill="hsl(var(--primary))" stroke="hsl(var(--primary))" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="liquido" name="Líquido" fill="hsl(var(--vix-success))" stroke="hsl(var(--vix-success))" fillOpacity={0.3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
-      {/* 5. Líquido por Conta */}
-      {vendasPorConta.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">💰 Líquido por Conta</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={vendasPorConta}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="conta" tick={axisStyle} />
-              <YAxis tick={axisStyle} tickFormatter={v => formatBRL(v)} />
-              <Tooltip formatter={(value: number) => [formatBRL(value)]} contentStyle={tooltipStyle} />
-              <Bar dataKey="liquido" name="Líquido" fill="hsl(var(--vix-success))" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="faturamento" name="Faturamento" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} opacity={0.3} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 2. Pedidos por Dia */}
+        {vendasPorDia.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">📦 Pedidos por Dia</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={vendasPorDia}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="dia" tick={axisStyle} />
+                <YAxis tick={axisStyle} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="pedidos" name="Pedidos" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
-      {/* 6. Top 10 SKUs mais vendidos */}
-      {topSkus.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">🏆 Top 10 SKUs Mais Vendidos</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={topSkus} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={axisStyle} />
-              <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="vendas" name="Unidades" fill="hsl(var(--vix-info))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 3. Faturamento por Conta */}
+        {vendasPorConta.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">🏪 Faturamento por Conta</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={vendasPorConta} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={3} dataKey="faturamento" label={({ conta, percent }) => `${conta} ${(percent * 100).toFixed(0)}%`}>
+                  {vendasPorConta.map((_, i) => (<Cell key={`pc-${i}`} fill={COLORS[i % COLORS.length]} />))}
+                </Pie>
+                <Tooltip formatter={(value: number) => [formatBRL(value), 'Faturamento']} contentStyle={tooltipStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
-      {/* 7. Melhor Margem por SKU */}
-      {melhoresMargens.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">✅ Anúncios com Melhor Margem</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={melhoresMargens} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={axisStyle} tickFormatter={v => `${v.toFixed(1)}%`} />
-              <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
-              <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, 'Margem']} contentStyle={tooltipStyle} />
-              <Bar dataKey="margem" name="Margem %" fill="hsl(var(--vix-success))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 4. Faturamento por Marketplace */}
+        {vendasPorOrigem.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">🌐 Faturamento por Marketplace</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={vendasPorOrigem} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={axisStyle} tickFormatter={v => formatBRL(v)} />
+                <YAxis type="category" dataKey="origem" tick={axisStyle} width={130} />
+                <Tooltip formatter={(value: number) => [formatBRL(value), 'Faturamento']} contentStyle={tooltipStyle} />
+                <Bar dataKey="value" name="Faturamento" fill="hsl(var(--accent))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
-      {/* 8. Pior Margem por SKU */}
-      {pioresMargens.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">⚠️ Anúncios com Pior Margem</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={pioresMargens} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={axisStyle} tickFormatter={v => `${v.toFixed(1)}%`} />
-              <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
-              <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, 'Margem']} contentStyle={tooltipStyle} />
-              <Bar dataKey="margem" name="Margem %" fill="hsl(var(--vix-danger))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 5. Líquido por Conta */}
+        {vendasPorConta.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">💰 Líquido por Conta</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={vendasPorConta}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="conta" tick={axisStyle} />
+                <YAxis tick={axisStyle} tickFormatter={v => formatBRL(v)} />
+                <Tooltip formatter={(value: number) => [formatBRL(value)]} contentStyle={tooltipStyle} />
+                <Bar dataKey="liquido" name="Líquido" fill="hsl(var(--vix-success))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="faturamento" name="Faturamento" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} opacity={0.3} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
-      {/* 9. Top Anúncios por Vendas (Performance) */}
-      {topAnunciosVendas.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">📊 Top Anúncios por Vendas</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={topAnunciosVendas} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={axisStyle} />
-              <YAxis type="category" dataKey="titulo" tick={{ ...axisStyle, fontSize: 9 }} width={160} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="vendas" name="Vendas" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 6. Top 10 SKUs mais vendidos */}
+        {topSkus.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">🏆 Top 10 SKUs Mais Vendidos</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={topSkus} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={axisStyle} />
+                <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="vendas" name="Unidades" fill="hsl(var(--vix-info))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
-      {/* 10. Top Anúncios por Conversão (Performance) */}
-      {topAnunciosConversao.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-          <h3 className="text-foreground font-semibold mb-4">🎯 Top Anúncios por Conversão</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={topAnunciosConversao} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={axisStyle} tickFormatter={v => `${v.toFixed(1)}%`} />
-              <YAxis type="category" dataKey="titulo" tick={{ ...axisStyle, fontSize: 9 }} width={160} />
-              <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, 'Conversão']} contentStyle={tooltipStyle} />
-              <Bar dataKey="conversao" name="Conversão %" fill="hsl(var(--accent))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 7. Melhor Margem por SKU (Marketplaces only) */}
+        {melhoresMargens.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">✅ Melhor Margem (Marketplaces)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={melhoresMargens} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={axisStyle} tickFormatter={v => `${v.toFixed(1)}%`} />
+                <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, 'Margem']} contentStyle={tooltipStyle} />
+                <Bar dataKey="margem" name="Margem %" fill="hsl(var(--vix-success))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
-      {/* 11. Visitas vs Vendas por Conta (Performance) */}
-      {perfPorConta.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
-          <h3 className="text-foreground font-semibold mb-4">🏬 Visitas vs Vendas por Conta</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={perfPorConta}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="conta" tick={axisStyle} />
-              <YAxis tick={axisStyle} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Legend />
-              <Bar dataKey="visitas" name="Visitas" fill="hsl(var(--vix-info))" radius={[4, 4, 0, 0]} opacity={0.5} />
-              <Bar dataKey="vendas" name="Vendas" fill="hsl(var(--vix-success))" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {/* 8. Pior Margem por SKU (Marketplaces only) */}
+        {pioresMargens.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">⚠️ Pior Margem (Marketplaces)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={pioresMargens} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={axisStyle} tickFormatter={v => `${v.toFixed(1)}%`} />
+                <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, 'Margem']} contentStyle={tooltipStyle} />
+                <Bar dataKey="margem" name="Margem %" fill="hsl(var(--vix-danger))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* 9. Top Anúncios por Vendas - by SKU */}
+        {topAnunciosVendas.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">📊 Top Anúncios por Vendas (SKU)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={topAnunciosVendas} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={axisStyle} />
+                <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="vendas" name="Vendas" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* 10. Top Anúncios por Conversão - by SKU */}
+        {topAnunciosConversao.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <h3 className="text-foreground font-semibold mb-4">🎯 Top Anúncios por Conversão (SKU)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={topAnunciosConversao} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={axisStyle} tickFormatter={v => `${v.toFixed(1)}%`} />
+                <YAxis type="category" dataKey="sku" tick={axisStyle} width={80} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, 'Conversão']} contentStyle={tooltipStyle} />
+                <Bar dataKey="conversao" name="Conversão %" fill="hsl(var(--accent))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* 11. Visitas vs Vendas por Conta */}
+        {perfPorConta.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
+            <h3 className="text-foreground font-semibold mb-4">🏬 Visitas vs Vendas por Conta</h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={perfPorConta}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="conta" tick={axisStyle} />
+                <YAxis tick={axisStyle} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend />
+                <Bar dataKey="visitas" name="Visitas" fill="hsl(var(--vix-info))" radius={[4, 4, 0, 0]} opacity={0.5} />
+                <Bar dataKey="vendas" name="Vendas" fill="hsl(var(--vix-success))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
