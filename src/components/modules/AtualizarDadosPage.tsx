@@ -81,6 +81,7 @@ export function AtualizarDadosPage() {
   const [filterDataFim, setFilterDataFim] = useState<string>('');
   const [pedidosPage, setPedidosPage] = useState(0);
   const [perfFilterConta, setPerfFilterConta] = useState<string>('all');
+  const [perfFilterPeriodo, setPerfFilterPeriodo] = useState<string>('latest');
   const [perfPage, setPerfPage] = useState(0);
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
@@ -1447,7 +1448,11 @@ export function AtualizarDadosPage() {
           {(() => {
             const perfItems = sheetsData.performanceItems || [];
             const contasUnicas = [...new Set(perfItems.map(p => p.conta).filter(Boolean))];
-            const filtered = perfFilterConta === 'all' ? perfItems : perfItems.filter(p => p.conta === perfFilterConta);
+            const periodosUnicos = [...new Set(perfItems.map(p => p.dataRef).filter(Boolean))].sort();
+            const periodoMaisRecente = periodosUnicos.length > 0 ? periodosUnicos[periodosUnicos.length - 1] : '';
+            const periodoAtivo = perfFilterPeriodo === 'latest' ? periodoMaisRecente : perfFilterPeriodo;
+            const filteredByPeriodo = periodoAtivo && perfFilterPeriodo !== 'all' ? perfItems.filter(p => p.dataRef === periodoAtivo) : perfItems;
+            const filtered = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => p.conta === perfFilterConta);
             const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
             const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
             const totalCanceladas = filtered.reduce((s, p) => s + p.canceladas, 0);
@@ -1479,17 +1484,31 @@ export function AtualizarDadosPage() {
                 </div>
 
                 {/* Filter by Conta */}
-                {contasUnicas.length > 0 && (
+                {(contasUnicas.length > 0 || periodosUnicos.length > 0) && (
                   <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-xs text-muted-foreground">Conta:</label>
-                      <select value={perfFilterConta} onChange={(e) => { setPerfFilterConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                        <option value="all">Todas</option>
-                        {contasUnicas.map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {periodosUnicos.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-muted-foreground">Período:</label>
+                        <select value={perfFilterPeriodo} onChange={(e) => { setPerfFilterPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                          <option value="latest">📅 Mais recente ({periodoMaisRecente})</option>
+                          <option value="all">Todos os períodos</option>
+                          {periodosUnicos.map(p => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {contasUnicas.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-muted-foreground">Conta:</label>
+                        <select value={perfFilterConta} onChange={(e) => { setPerfFilterConta(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                          <option value="all">Todas</option>
+                          {contasUnicas.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
                   </div>
                 )}
