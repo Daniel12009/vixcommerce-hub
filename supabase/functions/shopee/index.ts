@@ -122,7 +122,9 @@ async function shopeeFetch(account: any, apiPath: string, extraParams: Record<st
   let data = await res.json();
 
   // If auth error, refresh and retry
-  if (data.error && (data.error === 'error_auth' || data.error === 'error_permission')) {
+  const errStr = (data.error || '').toLowerCase();
+  if (data.error && (errStr.includes('token') || errStr.includes('auth') || errStr.includes('permission'))) {
+    console.log(`Shopee auth error detected: ${data.error}, attempting refresh...`);
     account.access_token = await refreshShopeeToken(account);
     url = await buildShopeeUrl(account, apiPath, extraParams);
     res = await fetch(url);
