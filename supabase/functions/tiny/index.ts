@@ -173,14 +173,10 @@ Deno.serve(async (req) => {
               // Classify canal based on vendedor name
               const vendedorLower = vendedor.toLowerCase();
               let canal = 'loja';
-              if (vendedorLower.includes('alexia') && vendedorLower.includes('showroom')) {
-                canal = 'showroom';
-              } else if (vendedorLower.includes('alexia') && vendedorLower.includes('atacado')) {
+              if (vendedorLower.includes('alexia') && vendedorLower.includes('atacado')) {
                 canal = 'atacado_alexia';
               } else if (vendedorLower.includes('atacado') || vendedorLower.includes('wholesale')) {
                 canal = 'atacado_vf';
-              } else if (vendedorLower.includes('showroom')) {
-                canal = 'showroom';
               }
 
               // Get items from detail
@@ -202,8 +198,7 @@ Deno.serve(async (req) => {
 
               // Build conta label
               const canalLabel = canal === 'atacado_alexia' ? 'Atacado Alexia' :
-                canal === 'atacado_vf' ? 'Atacado VF' :
-                canal === 'showroom' ? 'Showroom' : 'Loja';
+                canal === 'atacado_vf' ? 'Atacado VF' : 'Loja';
 
               allOrders.push({
                 id: orderId,

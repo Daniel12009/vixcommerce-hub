@@ -241,7 +241,6 @@ export function DashboardPage() {
             <option value="atacado_all">Atacado (Todos)</option>
             <option value="atacado_vf">Atacado VF</option>
             <option value="atacado_alexia">Atacado Alexia</option>
-            <option value="showroom">Showroom</option>
           </select>
         </div>
 
