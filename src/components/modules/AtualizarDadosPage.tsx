@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
+import { GraficosTab } from './GraficosTab';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -596,6 +597,7 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="contas">Contas & Sync</TabsTrigger>
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
           <TabsTrigger value="ads">Performance Anúncios</TabsTrigger>
+          <TabsTrigger value="perf-ads">Performance ADS</TabsTrigger>
           <TabsTrigger value="graficos">Gráficos</TabsTrigger>
         </TabsList>
 
@@ -1678,48 +1680,14 @@ export function AtualizarDadosPage() {
 
         {/* Tab: Gráficos */}
         <TabsContent value="graficos">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-              <h3 className="text-foreground font-semibold mb-4">Vendas por Dia (7d)</h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={mockSalesByDay}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="dia" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }} />
-                  <Legend />
-                  <Area type="monotone" dataKey="ml1" name="VixStore" stackId="1" fill="hsl(var(--primary))" stroke="hsl(var(--primary))" fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="ml2" name="VixHome" stackId="1" fill="hsl(var(--accent))" stroke="hsl(var(--accent))" fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="ml3" name="VixSport" stackId="1" fill="hsl(var(--vix-warning))" stroke="hsl(var(--vix-warning))" fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="tiny" name="Tiny" stackId="1" fill="hsl(var(--vix-info))" stroke="hsl(var(--vix-info))" fillOpacity={0.4} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
-              <h3 className="text-foreground font-semibold mb-4">Faturamento por Marketplace</h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={mockRevenueByMarketplace} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, percent }) => `${name.split(' - ')[1] || name} ${(percent * 100).toFixed(0)}%`}>
-                    {mockRevenueByMarketplace.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.fill} />))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => [formatBRL(value), 'Faturamento']} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
-              <h3 className="text-foreground font-semibold mb-4">ROAS Realizado vs Objetivo por Campanha</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={mockAdsCampaigns.filter(c => c.investimento > 0)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="campanha" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} angle={-15} textAnchor="end" height={60} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickFormatter={(v) => `${v}x`} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }} formatter={(value: number) => [`${value.toFixed(2)}x`]} />
-                  <Legend />
-                  <Bar dataKey="roasRealizado" name="ROAS Realizado" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="roasObjetivo" name="ROAS Objetivo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} opacity={0.4} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <GraficosTab />
+        </TabsContent>
+
+        {/* Tab: Performance ADS */}
+        <TabsContent value="perf-ads">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-muted-foreground text-sm mb-2">🚧 Aba Performance ADS em desenvolvimento</p>
+            <p className="text-muted-foreground text-xs">Os dados serão importados via planilha. Em breve!</p>
           </div>
         </TabsContent>
       </Tabs>
