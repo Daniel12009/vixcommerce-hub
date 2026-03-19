@@ -123,10 +123,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Get today's date range (UTC-3 / São Paulo)
+      // Get today's date range in São Paulo time (UTC-3)
       const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const dateFrom = todayStart.toISOString();
+      const spOffset = -3 * 60; // São Paulo UTC-3
+      const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
+      const todayStart = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate(), 0, 0, 0);
+      // Convert back to UTC for API
+      const dateFrom = new Date(todayStart.getTime() - (spOffset + now.getTimezoneOffset()) * 60000).toISOString();
       const dateTo = now.toISOString();
 
       const allOrders: any[] = [];
@@ -138,37 +141,47 @@ Deno.serve(async (req) => {
           if (!sellerId) {
             const me = await mlFetch(account, '/users/me');
             sellerId = me.id;
-            // Save seller_id for future use
             await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
               method: 'PATCH',
               body: JSON.stringify({ seller_id: String(sellerId) }),
             });
           }
 
-          // Fetch orders
-          const ordersData = await mlFetch(
-            account,
-            `/orders/search?seller=${sellerId}&order.date_created.from=${dateFrom}&order.date_created.to=${dateTo}&sort=date_desc&limit=50`
-          );
+          // Fetch ALL orders with pagination
+          let offset = 0;
+          const limit = 50;
+          let hasMore = true;
 
-          const orders = (ordersData.results || []).map((o: any) => ({
-            id: o.id,
-            status: o.status,
-            date_created: o.date_created,
-            total_amount: o.total_amount,
-            currency_id: o.currency_id,
-            buyer: o.buyer?.nickname || o.buyer?.first_name || 'N/A',
-            items: (o.order_items || []).map((item: any) => ({
-              title: item.item?.title || '',
-              sku: item.item?.seller_sku || '',
-              quantity: item.quantity,
-              unit_price: item.unit_price,
-            })),
-            conta: account.nome,
-            account_id: account.id,
-          }));
+          while (hasMore) {
+            const ordersData = await mlFetch(
+              account,
+              `/orders/search?seller=${sellerId}&order.date_created.from=${dateFrom}&order.date_created.to=${dateTo}&sort=date_desc&limit=${limit}&offset=${offset}`
+            );
 
-          allOrders.push(...orders);
+            const results = ordersData.results || [];
+            const total = ordersData.paging?.total || 0;
+
+            const orders = results.map((o: any) => ({
+              id: o.id,
+              status: o.status,
+              date_created: o.date_created,
+              total_amount: o.total_amount,
+              currency_id: o.currency_id,
+              buyer: o.buyer?.nickname || o.buyer?.first_name || 'N/A',
+              items: (o.order_items || []).map((item: any) => ({
+                title: item.item?.title || '',
+                sku: item.item?.seller_sku || '',
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+              })),
+              conta: account.nome,
+              account_id: account.id,
+            }));
+
+            allOrders.push(...orders);
+            offset += limit;
+            hasMore = offset < total;
+          }
         } catch (err) {
           console.error(`Error fetching orders for ${account.nome}:`, err);
           allOrders.push({ error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`, conta: account.nome });

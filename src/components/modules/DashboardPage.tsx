@@ -60,8 +60,8 @@ export function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
-  // Filter only paid/completed orders (exclude cancelled)
-  const paidOrders = orders.filter(o => ['paid', 'partially_paid'].includes(o.status));
+  // Filter orders by status
+  const paidOrders = orders.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
   const allValidOrders = orders.filter(o => o.status !== 'cancelled');
 
   // KPIs
