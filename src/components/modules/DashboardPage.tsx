@@ -55,9 +55,10 @@ export function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [mlResult, shopeeResult] = await Promise.allSettled([
+      const [mlResult, shopeeResult, tinyResult] = await Promise.allSettled([
         supabase.functions.invoke('mercado-livre', { body: { action: 'get_today_orders' } }),
         supabase.functions.invoke('shopee', { body: { action: 'get_today_orders' } }),
+        supabase.functions.invoke('tiny', { body: { action: 'get_today_orders' } }),
       ]);
 
       const allFetched: DashOrder[] = [];
@@ -80,6 +81,15 @@ export function DashboardPage() {
         (shopeeResult.value.data.orders || []).filter((o: any) => o.error).forEach((e: any) => errors.push(e.error));
       } else if (shopeeResult.status === 'rejected') {
         errors.push(`Shopee: ${shopeeResult.reason}`);
+      }
+
+      if (tinyResult.status === 'fulfilled' && tinyResult.value.data) {
+        const tinyOrders = (tinyResult.value.data.orders || [])
+          .filter((o: any) => !o.error && o.status);
+        allFetched.push(...tinyOrders);
+        (tinyResult.value.data.orders || []).filter((o: any) => o.error).forEach((e: any) => errors.push(e.error));
+      } else if (tinyResult.status === 'rejected') {
+        errors.push(`Tiny: ${tinyResult.reason}`);
       }
 
       setOrders(allFetched);
