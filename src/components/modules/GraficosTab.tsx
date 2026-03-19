@@ -52,7 +52,7 @@ export function GraficosTab() {
 
   // ---- Filters ----
   const [filterConta, setFilterConta] = useState('all');
-  const [filterDias, setFilterDias] = useState(90);
+  const [filterDias, setFilterDias] = useState(30);
   const [filterCanal, setFilterCanal] = useState<CanalTipo>('all');
   const [filterMarketplace, setFilterMarketplace] = useState('all');
 
