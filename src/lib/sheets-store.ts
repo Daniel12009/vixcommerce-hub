@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'financeiro' | 'vendas' | 'performance';
+export type ModuloDestino = 'estoque' | 'financeiro' | 'vendas' | 'performance' | 'ads';
 
 export interface SheetConfig {
   id: string;
@@ -76,6 +76,23 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'link', label: 'Link' },
     { key: 'conta', label: 'Conta' },
     { key: 'dataRef', label: 'Data Ref' },
+  ],
+  ads: [
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'dataRef', label: 'Data Ref' },
+    { key: 'conta', label: 'Conta', obrigatorio: true },
+    { key: 'campanha', label: 'Campanha' },
+    { key: 'idCampanha', label: 'ID Campanha' },
+    { key: 'idAnuncio', label: 'ID Anúncio', obrigatorio: true },
+    { key: 'titulo', label: 'Título' },
+    { key: 'investimento', label: 'Investimento', obrigatorio: true },
+    { key: 'receita', label: 'Receita' },
+    { key: 'vendasQtd', label: 'Vendas (Qtd)' },
+    { key: 'acos', label: 'ACOS' },
+    { key: 'roas', label: 'ROAS' },
+    { key: 'cliques', label: 'Cliques' },
+    { key: 'impressoes', label: 'Impressões' },
+    { key: 'ultAtualizacao', label: 'Ult. Atualização' },
   ],
 };
 

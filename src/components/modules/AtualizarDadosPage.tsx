@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { GraficosTab } from './GraficosTab';
+import { PerformanceAdsTab } from './PerformanceAdsTab';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -44,6 +45,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   financeiro: 'Financeiro',
   vendas: 'Vendas / Pedidos',
   performance: 'Performance Anúncios',
+  ads: 'Performance ADS',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
@@ -51,6 +53,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   financeiro: 'bg-[hsl(var(--vix-success)/0.1)] text-[hsl(var(--vix-success))]',
   vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
   performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
+  ads: 'bg-[hsl(142,76%,36%,0.1)] text-[hsl(142,76%,36%)]',
 };
 
 // Vendas Table Columns state
@@ -389,6 +392,9 @@ export function AtualizarDadosPage() {
         const contaKey = config.abaNome;
         const merged = [...existing.filter((p: any) => p.conta !== contaKey), ...parsed.map(p => ({ ...p, conta: contaKey }))];
         saveToCloud('performance_data', merged);
+      } else if (config.moduloDestino === 'ads') {
+        sheetsData.setAdsFromSheet(parsed);
+        saveToCloud('ads_data', parsed);
       }
 
       // Update last sync
@@ -1719,10 +1725,7 @@ export function AtualizarDadosPage() {
 
         {/* Tab: Performance ADS */}
         <TabsContent value="perf-ads">
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-muted-foreground text-sm mb-2">🚧 Aba Performance ADS em desenvolvimento</p>
-            <p className="text-muted-foreground text-xs">Os dados serão importados via planilha. Em breve!</p>
-          </div>
+          <PerformanceAdsTab />
         </TabsContent>
       </Tabs>
     </div>

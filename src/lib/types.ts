@@ -162,3 +162,21 @@ export interface PerformanceItem {
   conta: string;
   dataRef: string;
 }
+
+export interface AdsImportItem {
+  tipo: string;
+  dataRef: string;
+  conta: string;
+  campanha: string;
+  idCampanha: string;
+  idAnuncio: string;
+  titulo: string;
+  investimento: number;
+  receita: number;
+  vendasQtd: number;
+  acos: number;
+  roas: number;
+  cliques: number;
+  impressoes: number;
+  ultAtualizacao: string;
+}

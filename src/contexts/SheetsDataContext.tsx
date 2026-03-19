@@ -1,19 +1,22 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { StockItem, FinancialItem, VendaItem, PerformanceItem } from '@/lib/types';
+import type { StockItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem } from '@/lib/types';
 
 interface SheetsData {
   estoqueItems: StockItem[] | null;
   financeiroItems: FinancialItem[] | null;
   vendasItems: VendaItem[] | null;
   performanceItems: PerformanceItem[] | null;
+  adsItems: AdsImportItem[] | null;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
   setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
+  setAdsFromSheet: (rows: Record<string, string>[]) => void;
   clearEstoque: () => void;
   clearFinanceiro: () => void;
   clearVendas: () => void;
   clearPerformance: () => void;
+  clearAds: () => void;
 }
 
 const SheetsDataContext = createContext<SheetsData | null>(null);
@@ -162,20 +165,47 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
+  const setAdsFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: AdsImportItem[] = rows
+      .filter(r => r.idAnuncio || r.investimento)
+      .map(r => ({
+        tipo: r.tipo || '',
+        dataRef: r.dataRef || '',
+        conta: r.conta || '',
+        campanha: r.campanha || '',
+        idCampanha: r.idCampanha || '',
+        idAnuncio: r.idAnuncio || '',
+        titulo: r.titulo || '',
+        investimento: num(r.investimento),
+        receita: num(r.receita),
+        vendasQtd: num(r.vendasQtd),
+        acos: num(r.acos),
+        roas: num(r.roas),
+        cliques: num(r.cliques),
+        impressoes: num(r.impressoes),
+        ultAtualizacao: r.ultAtualizacao || '',
+      }));
+    setAdsItems(items);
+  }, []);
+
   return (
     <SheetsDataContext.Provider value={{
       estoqueItems,
       financeiroItems,
       vendasItems,
       performanceItems,
+      adsItems,
       setEstoqueFromSheet,
       setFinanceiroFromSheet,
       setVendasFromSheet,
       setPerformanceFromSheet,
+      setAdsFromSheet,
       clearEstoque: () => setEstoqueItems(null),
       clearFinanceiro: () => setFinanceiroItems(null),
       clearVendas: () => setVendasItems(null),
       clearPerformance: () => setPerformanceItems(null),
+      clearAds: () => setAdsItems(null),
     }}>
       {children}
     </SheetsDataContext.Provider>
