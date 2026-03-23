@@ -14,7 +14,291 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      estoque_items: {
+        Row: {
+          conta: string
+          created_at: string
+          dias_cobertura: number
+          em_transferencia: number
+          em_transito: number
+          estoque_atual: number
+          estoque_minimo: number
+          extra_fields: Json | null
+          id: string
+          lead_time: number
+          necessidade_reposicao: number
+          nome: string
+          sku_principal: string
+          status_cobertura: string
+          vmd: number
+        }
+        Insert: {
+          conta?: string
+          created_at?: string
+          dias_cobertura?: number
+          em_transferencia?: number
+          em_transito?: number
+          estoque_atual?: number
+          estoque_minimo?: number
+          extra_fields?: Json | null
+          id?: string
+          lead_time?: number
+          necessidade_reposicao?: number
+          nome?: string
+          sku_principal: string
+          status_cobertura?: string
+          vmd?: number
+        }
+        Update: {
+          conta?: string
+          created_at?: string
+          dias_cobertura?: number
+          em_transferencia?: number
+          em_transito?: number
+          estoque_atual?: number
+          estoque_minimo?: number
+          extra_fields?: Json | null
+          id?: string
+          lead_time?: number
+          necessidade_reposicao?: number
+          nome?: string
+          sku_principal?: string
+          status_cobertura?: string
+          vmd?: number
+        }
+        Relationships: []
+      }
+      financeiro_items: {
+        Row: {
+          created_at: string
+          custo: number
+          extra_fields: Json | null
+          frete: number
+          id: string
+          impostos: number
+          margem_percent: number
+          margem_real: number
+          nome: string
+          receita: number
+          sku_principal: string
+          taxas: number
+          unidades_vendidas: number
+        }
+        Insert: {
+          created_at?: string
+          custo?: number
+          extra_fields?: Json | null
+          frete?: number
+          id?: string
+          impostos?: number
+          margem_percent?: number
+          margem_real?: number
+          nome?: string
+          receita?: number
+          sku_principal: string
+          taxas?: number
+          unidades_vendidas?: number
+        }
+        Update: {
+          created_at?: string
+          custo?: number
+          extra_fields?: Json | null
+          frete?: number
+          id?: string
+          impostos?: number
+          margem_percent?: number
+          margem_real?: number
+          nome?: string
+          receita?: number
+          sku_principal?: string
+          taxas?: number
+          unidades_vendidas?: number
+        }
+        Relationships: []
+      }
+      performance_items: {
+        Row: {
+          canceladas: number
+          conta: string
+          conversao: number
+          created_at: string
+          data_ref: string
+          id: string
+          id_anuncio: string
+          link: string
+          plataforma: string
+          preco: number
+          sku: string
+          titulo: string
+          vendas: number
+          visitas: number
+        }
+        Insert: {
+          canceladas?: number
+          conta?: string
+          conversao?: number
+          created_at?: string
+          data_ref?: string
+          id?: string
+          id_anuncio?: string
+          link?: string
+          plataforma?: string
+          preco?: number
+          sku?: string
+          titulo?: string
+          vendas?: number
+          visitas?: number
+        }
+        Update: {
+          canceladas?: number
+          conta?: string
+          conversao?: number
+          created_at?: string
+          data_ref?: string
+          id?: string
+          id_anuncio?: string
+          link?: string
+          plataforma?: string
+          preco?: number
+          sku?: string
+          titulo?: string
+          vendas?: number
+          visitas?: number
+        }
+        Relationships: []
+      }
+      sheet_configs: {
+        Row: {
+          aba_nome: string
+          created_at: string
+          id: string
+          linha_inicial: number
+          mapeamento: Json
+          modulo_destino: string
+          nome: string
+          spreadsheet_id: string
+          ultima_sync: string | null
+          updated_at: string
+          url: string
+          valores_fixos: Json | null
+        }
+        Insert: {
+          aba_nome: string
+          created_at?: string
+          id: string
+          linha_inicial?: number
+          mapeamento?: Json
+          modulo_destino: string
+          nome: string
+          spreadsheet_id: string
+          ultima_sync?: string | null
+          updated_at?: string
+          url: string
+          valores_fixos?: Json | null
+        }
+        Update: {
+          aba_nome?: string
+          created_at?: string
+          id?: string
+          linha_inicial?: number
+          mapeamento?: Json
+          modulo_destino?: string
+          nome?: string
+          spreadsheet_id?: string
+          ultima_sync?: string | null
+          updated_at?: string
+          url?: string
+          valores_fixos?: Json | null
+        }
+        Relationships: []
+      }
+      vendas_items: {
+        Row: {
+          ads: number
+          cmv: number
+          comissao: number
+          comprador: string
+          conta: string
+          conta_mae: string
+          created_at: string
+          custo_envio: number
+          data: string
+          devolucao: number
+          extra_fields: Json | null
+          frete: number
+          id: string
+          impostos: number
+          liquido: number
+          margem: string
+          numero_pedido: string
+          origem: string
+          pedido_origem: string
+          preco_unitario: number
+          produto: string
+          quantidade: number
+          sku: string
+          sku_produto: string
+          status_pedido: string
+          valor_total: number
+        }
+        Insert: {
+          ads?: number
+          cmv?: number
+          comissao?: number
+          comprador?: string
+          conta?: string
+          conta_mae?: string
+          created_at?: string
+          custo_envio?: number
+          data?: string
+          devolucao?: number
+          extra_fields?: Json | null
+          frete?: number
+          id?: string
+          impostos?: number
+          liquido?: number
+          margem?: string
+          numero_pedido?: string
+          origem?: string
+          pedido_origem?: string
+          preco_unitario?: number
+          produto?: string
+          quantidade?: number
+          sku?: string
+          sku_produto?: string
+          status_pedido?: string
+          valor_total?: number
+        }
+        Update: {
+          ads?: number
+          cmv?: number
+          comissao?: number
+          comprador?: string
+          conta?: string
+          conta_mae?: string
+          created_at?: string
+          custo_envio?: number
+          data?: string
+          devolucao?: number
+          extra_fields?: Json | null
+          frete?: number
+          id?: string
+          impostos?: number
+          liquido?: number
+          margem?: string
+          numero_pedido?: string
+          origem?: string
+          pedido_origem?: string
+          preco_unitario?: number
+          produto?: string
+          quantidade?: number
+          sku?: string
+          sku_produto?: string
+          status_pedido?: string
+          valor_total?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
