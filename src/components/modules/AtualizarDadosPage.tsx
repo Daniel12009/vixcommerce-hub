@@ -1458,8 +1458,20 @@ export function AtualizarDadosPage() {
             const itemsWithDate = perfItems.map(p => ({ ...p, _date: parsePerfDate(p.dataRef) })).filter(p => p._date !== null);
 
             // Filter by current period
-            const curPeriodItems = itemsWithDate.filter(p => p._date! >= curStart && p._date! <= curEnd);
-            const prevPeriodItems = itemsWithDate.filter(p => p._date! >= prevStart && p._date! <= prevEnd);
+            const curPeriodRaw = itemsWithDate.filter(p => p._date! >= curStart && p._date! <= curEnd);
+            const prevPeriodRaw = itemsWithDate.filter(p => p._date! >= prevStart && p._date! <= prevEnd);
+
+            // Deduplicate: same idAnuncio + same day = keep only ONE (last occurrence wins)
+            const dedup = (items: typeof curPeriodRaw) => {
+              const map = new Map<string, typeof items[0]>();
+              items.forEach(p => {
+                const key = `${p.idAnuncio}__${p.dataRef}`;
+                map.set(key, p); // last wins
+              });
+              return Array.from(map.values());
+            };
+            const curPeriodItems = dedup(curPeriodRaw);
+            const prevPeriodItems = dedup(prevPeriodRaw);
 
             // Filter by conta
             const curByConta = perfFilterConta === 'all' ? curPeriodItems : curPeriodItems.filter(p => normalizeConta(p.conta) === perfFilterConta);
