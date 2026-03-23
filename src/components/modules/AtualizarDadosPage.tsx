@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download, Settings2, ArrowRight, Check, CalendarDays } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, Download, Settings2, ArrowRight, Check, CalendarDays, Bot, Zap, PackageX, BarChart2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
@@ -573,7 +573,7 @@ export function AtualizarDadosPage() {
 
   return (
     <div>
-      <PageHeader title="Atualizar Dados" subtitle="Sincronização de vendas e gestão de marketplaces" />
+      <PageHeader title="Performance" subtitle="Análise de vendas, anúncios e métricas de desempenho" />
 
       {/* Date filter row at top */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -631,14 +631,14 @@ export function AtualizarDadosPage() {
         );
       })()}
 
-      <Tabs defaultValue="planilhas" className="space-y-6">
+      <Tabs defaultValue="alertas" className="space-y-6">
         <TabsList className="bg-card border border-border">
-          <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
-          <TabsTrigger value="contas">Contas & Sync</TabsTrigger>
+          <TabsTrigger value="alertas">🤖 Alertas</TabsTrigger>
+          <TabsTrigger value="graficos">Gráficos</TabsTrigger>
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
           <TabsTrigger value="ads">Performance Anúncios</TabsTrigger>
           <TabsTrigger value="perf-ads">Performance ADS</TabsTrigger>
-          <TabsTrigger value="graficos">Gráficos</TabsTrigger>
+          <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
         </TabsList>
 
         {/* Tab: Planilhas Google */}
@@ -1080,165 +1080,53 @@ export function AtualizarDadosPage() {
           </div>
         </TabsContent>
 
-        {/* Tab: Contas */}
-        <TabsContent value="contas">
-          <div className="flex justify-end gap-3 mb-4">
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-muted transition-colors">
-                  <Plus className="w-4 h-4" />
-                  Adicionar Conta
-                </button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Adicionar Nova Conta</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-2">
-                    <Label>Nome da Conta</Label>
-                    <Input placeholder="Ex: VixStore Premium" value={newAccount.nome} onChange={e => setNewAccount(p => ({ ...p, nome: e.target.value }))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Plataforma</Label>
-                    <Select value={newAccount.plataforma} onValueChange={v => setNewAccount(p => ({ ...p, plataforma: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Selecione a plataforma" /></SelectTrigger>
-                      <SelectContent>
-                        {plataformaOptions.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ID da Loja</Label>
-                    <Input placeholder="Ex: VIXSTORE_PREM" value={newAccount.loja} onChange={e => setNewAccount(p => ({ ...p, loja: e.target.value }))} />
-                  </div>
-
-                  {newAccount.plataforma === 'Mercado Livre' && (
-                    <div className="space-y-3 pt-2 border-t border-border">
-                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <Key className="w-4 h-4 text-primary" />
-                        Credenciais da API (Mercado Livre)
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Obtenha as credenciais em{' '}
-                        <a href="https://developers.mercadolivre.com.br" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                          developers.mercadolivre.com.br
-                        </a>
-                      </p>
-                      <div className="space-y-2">
-                        <Label>Client ID (App ID)</Label>
-                        <Input placeholder="Ex: 1234567890" value={newAccount.clientId} onChange={e => setNewAccount(p => ({ ...p, clientId: e.target.value }))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Client Secret</Label>
-                        <div className="relative">
-                          <Input type={showSecrets ? 'text' : 'password'} placeholder="Sua client secret" value={newAccount.clientSecret} onChange={e => setNewAccount(p => ({ ...p, clientSecret: e.target.value }))} />
-                          <button type="button" onClick={() => setShowSecrets(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                            {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Access Token</Label>
-                        <Input type={showSecrets ? 'text' : 'password'} placeholder="APP_USR-..." value={newAccount.accessToken} onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Refresh Token</Label>
-                        <Input type={showSecrets ? 'text' : 'password'} placeholder="TG-..." value={newAccount.refreshToken} onChange={e => setNewAccount(p => ({ ...p, refreshToken: e.target.value }))} />
-                      </div>
-                      <div className="flex items-start gap-2 p-3 rounded-lg bg-[hsl(var(--vix-warning)/0.1)] border border-[hsl(var(--vix-warning)/0.2)]">
-                        <AlertTriangle className="w-4 h-4 text-[hsl(var(--vix-warning))] mt-0.5 flex-shrink-0" />
-                        <p className="text-xs text-muted-foreground">
-                          Para produção, recomendamos ativar o <strong>Lovable Cloud</strong> para armazenar credenciais de forma segura.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {newAccount.plataforma === 'Tiny' && (
-                    <div className="space-y-3 pt-2 border-t border-border">
-                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <Key className="w-4 h-4 text-primary" />
-                        Credenciais da API (Tiny ERP)
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Token da API</Label>
-                        <div className="relative">
-                          <Input type={showSecrets ? 'text' : 'password'} placeholder="Seu token Tiny" value={newAccount.accessToken} onChange={e => setNewAccount(p => ({ ...p, accessToken: e.target.value }))} />
-                          <button type="button" onClick={() => setShowSecrets(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                            {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <button onClick={handleAddAccount} disabled={!newAccount.nome || !newAccount.plataforma || !newAccount.loja} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                    <Plus className="w-4 h-4" />
-                    Adicionar
-                  </button>
+        {/* Tab: Alertas - AI Analysis */}
+        <TabsContent value="alertas">
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-primary/10 via-card to-accent/10 border border-border rounded-2xl p-8 text-center animate-fade-in">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/20 mb-4">
+                <Bot className="w-8 h-8 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold text-foreground mb-2">Análise Inteligente</h2>
+              <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+                O agente de IA analisa seus dados em tempo real e identifica oportunidades e riscos para priorizar suas ações.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '100ms'}}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-warning)/0.1)]"><BarChart2 className="w-5 h-5 text-[hsl(var(--vix-warning))]" /></div>
+                  <div><h3 className="text-sm font-semibold text-foreground">Anúncios com Baixa Performance</h3><p className="text-xs text-muted-foreground">Anúncios que não estão performando como deveriam</p></div>
                 </div>
-              </DialogContent>
-            </Dialog>
-            <button onClick={handleSyncAll} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity">
-              <RefreshCw className="w-4 h-4" />
-              Sincronizar Tudo
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {accounts.map((account) => {
-              const isSyncing = syncingAccounts.has(account.id);
-              return (
-                <div key={account.id} className="bg-card border border-border rounded-xl p-5 vix-card-hover animate-fade-in">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-foreground font-semibold text-sm">{account.nome}</h3>
-                      <p className="text-muted-foreground text-xs">{account.plataforma} — {account.loja}</p>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
-                      account.status === 'connected' ? 'text-[hsl(var(--vix-success))] bg-[hsl(var(--vix-success)/0.1)]' :
-                      account.status === 'syncing' ? 'text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.1)]' :
-                      'text-[hsl(var(--vix-danger))] bg-[hsl(var(--vix-danger)/0.1)]'
-                    }`}>
-                      {account.status === 'connected' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                      {account.status === 'connected' ? 'Conectado' : account.status === 'syncing' ? 'Sincronizando...' : 'Desconectado'}
-                    </div>
-                  </div>
-                  {account.status === 'connected' && (
-                    <>
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div>
-                          <p className="text-muted-foreground text-xs">Pedidos</p>
-                          <p className="text-foreground font-semibold">{account.totalPedidos?.toLocaleString('pt-BR')}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs">Faturamento</p>
-                          <p className="text-foreground font-semibold text-sm">{formatBRL(account.faturamento || 0)}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-muted-foreground text-xs">Última sync: {account.ultimaSync}</p>
-                        <button onClick={() => handleSync(account.id)} disabled={isSyncing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-colors disabled:opacity-50">
-                          <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
-                          {isSyncing ? 'Sincronizando...' : 'Sync'}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {account.status === 'disconnected' && (
-                    <div className="flex gap-2 mt-2">
-                      <button className="flex-1 px-3 py-2 rounded-lg border border-border text-foreground text-xs font-medium hover:bg-muted transition-colors">
-                        Conectar Conta
-                      </button>
-                      <button onClick={() => handleRemoveAccount(account.id)} className="px-3 py-2 rounded-lg border border-[hsl(var(--vix-danger)/0.3)] text-[hsl(var(--vix-danger))] text-xs font-medium hover:bg-[hsl(var(--vix-danger)/0.1)] transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA analisará visitas, vendas e conversão</span></div>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '200ms'}}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-danger)/0.1)]"><Zap className="w-5 h-5 text-[hsl(var(--vix-danger))]" /></div>
+                  <div><h3 className="text-sm font-semibold text-foreground">ADS em Estado Crítico</h3><p className="text-xs text-muted-foreground">Campanhas com ROAS muito baixo gastando sem retorno</p></div>
                 </div>
-              );
-            })}
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA identificará campanhas queimando investimento</span></div>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '300ms'}}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-info)/0.1)]"><PackageX className="w-5 h-5 text-[hsl(var(--vix-info))]" /></div>
+                  <div><h3 className="text-sm font-semibold text-foreground">Risco de Ruptura de Estoque</h3><p className="text-xs text-muted-foreground">Produtos com profundidade crítica vs vendas diárias</p></div>
+                </div>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA cruzará estoque, VMD e transferências</span></div>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '400ms'}}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-success)/0.1)]"><TrendingUp className="w-5 h-5 text-[hsl(var(--vix-success))]" /></div>
+                  <div><h3 className="text-sm font-semibold text-foreground">Insights & Oportunidades</h3><p className="text-xs text-muted-foreground">Tendências positivas e oportunidades de crescimento</p></div>
+                </div>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA identificará tendências e oportunidades</span></div>
+              </div>
+            </div>
+            <div className="bg-card border border-dashed border-primary/30 rounded-xl p-6 text-center animate-fade-in" style={{animationDelay: '500ms'}}>
+              <Bot className="w-10 h-10 text-primary/40 mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground mb-1">Agente de IA em Desenvolvimento</p>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">Em breve, um robô inteligente analisará automaticamente todos os seus dados e priorizará as ações mais urgentes.</p>
+            </div>
           </div>
         </TabsContent>
 
