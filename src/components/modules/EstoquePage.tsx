@@ -30,10 +30,19 @@ export function EstoquePage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'ruptura' | 'critico' | 'ok'>('all');
+  const [filterConta, setFilterConta] = useState<string>('all');
 
   const hasFullData = estoqueFullItems && estoqueFullItems.length > 0;
   const hasTinyData = estoqueTinyItems && estoqueTinyItems.length > 0;
   const hasAnyData = hasFullData || hasTinyData;
+
+  // Extract unique contas from Full data
+  const contasUnicas = useMemo(() => {
+    if (!estoqueFullItems) return [];
+    const set = new Set<string>();
+    estoqueFullItems.forEach(i => { if (i.conta) set.add(i.conta); });
+    return Array.from(set).sort();
+  }, [estoqueFullItems]);
 
   // Compute VMD from performance data (last 7 days of vendas per SKU)
   const vmdBySku = useMemo(() => {
@@ -76,9 +85,10 @@ export function EstoquePage() {
       contas: Set<string>;
     }>();
 
-    // Aggregate Full data by SKU (sum across contas)
+    // Aggregate Full data by SKU (filter by conta if selected)
     if (estoqueFullItems) {
-      estoqueFullItems.forEach(item => {
+      const filteredFull = filterConta === 'all' ? estoqueFullItems : estoqueFullItems.filter(i => i.conta === filterConta);
+      filteredFull.forEach(item => {
         const sku = item.sku.trim().toUpperCase();
         if (!sku || sku === 'TOTAL' || sku === '-') return;
         const existing = skuMap.get(sku) || { fullML: 0, entradaPendente: 0, emTransferencia: 0, tinyLocal: 0, contas: new Set<string>() };
@@ -133,7 +143,7 @@ export function EstoquePage() {
     });
 
     return rows;
-  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo, filterConta]);
 
   // Filtered and sorted
   const displayData = useMemo(() => {
@@ -275,6 +285,23 @@ export function EstoquePage() {
                 </button>
               )}
             </div>
+
+            {/* Conta filter */}
+            {contasUnicas.length > 0 && (
+              <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
+                <span className="text-xs text-muted-foreground font-medium">Conta:</span>
+                <select
+                  value={filterConta}
+                  onChange={e => setFilterConta(e.target.value)}
+                  className="text-sm bg-transparent border-none outline-none font-semibold text-primary cursor-pointer"
+                >
+                  <option value="all">Todas</option>
+                  {contasUnicas.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Search */}
             <div className="relative">
