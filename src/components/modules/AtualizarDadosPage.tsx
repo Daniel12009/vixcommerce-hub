@@ -119,7 +119,7 @@ export function AtualizarDadosPage() {
     if (sheetsData.vendasItems && sheetsData.vendasItems.length > 0) {
       const allKeys = new Set<string>();
       sheetsData.vendasItems.forEach(item => Object.keys(item).forEach(k => allKeys.add(k)));
-      
+
       const standardKeys = [...CAMPOS_POR_MODULO['vendas'].map(c => c.key), 'devolucao'];
       const customKeys = Array.from(allKeys).filter(k => !standardKeys.includes(k) && k !== 'id');
 
@@ -259,11 +259,11 @@ export function AtualizarDadosPage() {
       if (data?.error) throw new Error(data.error);
       const headers = data.values?.[0] || [];
       setMappingHeaders(headers);
-      
+
       if (existingMapping) {
         setNewConfigMapping(existingMapping);
         setNewConfigValoresFixos(existingFixos || {});
-        
+
         // Extract custom columns that are not in CAMPOS_POR_MODULO
         const camposPadraoKeys = CAMPOS_POR_MODULO[newConfigModulo].map(c => c.key);
         const mappedCustoms = Object.entries(existingMapping)
@@ -275,7 +275,7 @@ export function AtualizarDadosPage() {
         setNewConfigValoresFixos({});
         setCustomColumns([]);
       }
-      
+
       setShowMappingDialog(true);
     } catch (err: any) {
       toast.error(`Erro ao ler cabeçalhos: ${err.message}`);
@@ -582,22 +582,20 @@ export function AtualizarDadosPage() {
             <button
               key={d}
               onClick={() => { setFilterDias(d); setShowCustomDate(false); setPedidosPage(0); }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                !showCustomDate && filterDias === d
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${!showCustomDate && filterDias === d
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               {d}d
             </button>
           ))}
           <button
             onClick={() => setShowCustomDate(prev => !prev)}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-              showCustomDate
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${showCustomDate
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-            }`}
+              }`}
           >
             <CalendarDays className="w-3 h-3" />
             Personalizado
@@ -659,9 +657,8 @@ export function AtualizarDadosPage() {
                     {sheetConfigs.map(config => (
                       <div
                         key={config.id}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors border ${
-                          selectedConfig === config.id ? 'border-primary/30 bg-primary/5' : 'border-transparent hover:bg-muted'
-                        }`}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors border ${selectedConfig === config.id ? 'border-primary/30 bg-primary/5' : 'border-transparent hover:bg-muted'
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <button onClick={() => handlePreviewConfig(config)} className="flex-1 text-left">
@@ -877,7 +874,7 @@ export function AtualizarDadosPage() {
                       );
                     })}
                   </div>
-                  
+
                   {/* Custom columns section */}
                   <div className="mt-4 pt-4 border-t border-border">
                     <div className="flex items-center justify-between mb-3">
@@ -890,7 +887,7 @@ export function AtualizarDadosPage() {
                         Adicionar Coluna
                       </button>
                     </div>
-                    
+
                     {customColumns.length === 0 ? (
                       <p className="text-xs text-muted-foreground italic">Nenhuma coluna extra adicionada. Use isso para importar dados adicionais que não estão na lista padrão.</p>
                     ) : (
@@ -988,9 +985,8 @@ export function AtualizarDadosPage() {
                             const cfg = sheetConfigs.find(c => c.id === selectedConfig);
                             const isMapped = cfg && Object.values(cfg.mapeamento).includes(header);
                             return (
-                              <th key={i} className={`text-left py-2.5 px-3 font-semibold text-xs whitespace-nowrap ${
-                                isMapped ? 'text-primary' : 'text-muted-foreground'
-                              }`}>
+                              <th key={i} className={`text-left py-2.5 px-3 font-semibold text-xs whitespace-nowrap ${isMapped ? 'text-primary' : 'text-muted-foreground'
+                                }`}>
                                 {header || `Col ${i + 1}`}
                                 {isMapped && <span className="ml-1">✓</span>}
                               </th>
@@ -1093,28 +1089,28 @@ export function AtualizarDadosPage() {
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '100ms'}}>
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '100ms' }}>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-[hsl(var(--vix-warning)/0.1)]"><BarChart2 className="w-5 h-5 text-[hsl(var(--vix-warning))]" /></div>
                   <div><h3 className="text-sm font-semibold text-foreground">Anúncios com Baixa Performance</h3><p className="text-xs text-muted-foreground">Anúncios que não estão performando como deveriam</p></div>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA analisará visitas, vendas e conversão</span></div>
               </div>
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '200ms'}}>
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '200ms' }}>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-[hsl(var(--vix-danger)/0.1)]"><Zap className="w-5 h-5 text-[hsl(var(--vix-danger))]" /></div>
                   <div><h3 className="text-sm font-semibold text-foreground">ADS em Estado Crítico</h3><p className="text-xs text-muted-foreground">Campanhas com ROAS muito baixo gastando sem retorno</p></div>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA identificará campanhas queimando investimento</span></div>
               </div>
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '300ms'}}>
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '300ms' }}>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-[hsl(var(--vix-info)/0.1)]"><PackageX className="w-5 h-5 text-[hsl(var(--vix-info))]" /></div>
                   <div><h3 className="text-sm font-semibold text-foreground">Risco de Ruptura de Estoque</h3><p className="text-xs text-muted-foreground">Produtos com profundidade crítica vs vendas diárias</p></div>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA cruzará estoque, VMD e transferências</span></div>
               </div>
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{animationDelay: '400ms'}}>
+              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '400ms' }}>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-[hsl(var(--vix-success)/0.1)]"><TrendingUp className="w-5 h-5 text-[hsl(var(--vix-success))]" /></div>
                   <div><h3 className="text-sm font-semibold text-foreground">Insights & Oportunidades</h3><p className="text-xs text-muted-foreground">Tendências positivas e oportunidades de crescimento</p></div>
@@ -1122,7 +1118,7 @@ export function AtualizarDadosPage() {
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA identificará tendências e oportunidades</span></div>
               </div>
             </div>
-            <div className="bg-card border border-dashed border-primary/30 rounded-xl p-6 text-center animate-fade-in" style={{animationDelay: '500ms'}}>
+            <div className="bg-card border border-dashed border-primary/30 rounded-xl p-6 text-center animate-fade-in" style={{ animationDelay: '500ms' }}>
               <Bot className="w-10 h-10 text-primary/40 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground mb-1">Agente de IA em Desenvolvimento</p>
               <p className="text-xs text-muted-foreground max-w-md mx-auto">Em breve, um robô inteligente analisará automaticamente todos os seus dados e priorizará as ações mais urgentes.</p>
@@ -1150,13 +1146,13 @@ export function AtualizarDadosPage() {
             const displayList = useImported ? vendasList : mockList;
 
             // Sort displayList
-            const sortableVendasCols = ['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem','devolucao'];
+            const sortableVendasCols = ['quantidade', 'valorTotal', 'impostos', 'comissao', 'cmv', 'liquido', 'margem', 'devolucao'];
             const sortedDisplayList = vendasSortField && sortableVendasCols.includes(vendasSortField)
               ? [...displayList].sort((a: any, b: any) => {
-                  const va = typeof a[vendasSortField] === 'string' ? parseFloat(a[vendasSortField]?.replace(/[^\d.,-]/g,'')?.replace(',','.') || '0') : (a[vendasSortField] || 0);
-                  const vb = typeof b[vendasSortField] === 'string' ? parseFloat(b[vendasSortField]?.replace(/[^\d.,-]/g,'')?.replace(',','.') || '0') : (b[vendasSortField] || 0);
-                  return vendasSortDir === 'desc' ? vb - va : va - vb;
-                })
+                const va = typeof a[vendasSortField] === 'string' ? parseFloat(a[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (a[vendasSortField] || 0);
+                const vb = typeof b[vendasSortField] === 'string' ? parseFloat(b[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (b[vendasSortField] || 0);
+                return vendasSortDir === 'desc' ? vb - va : va - vb;
+              })
               : displayList;
 
             const toggleVendasSort = (field: string) => {
@@ -1227,73 +1223,73 @@ export function AtualizarDadosPage() {
                     </div>
                   )}
 
-                   <span className="text-xs text-muted-foreground ml-auto">
-                     {useImported && <span className="text-[hsl(var(--vix-success))] mr-2">● Dados importados</span>}
-                     {displayList.length} pedidos
-                   </span>
-                 </div>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {useImported && <span className="text-[hsl(var(--vix-success))] mr-2">● Dados importados</span>}
+                    {displayList.length} pedidos
+                  </span>
+                </div>
 
-                  {/* Col Config Modal */}
-                  {showColConfig && (
-                    <div className="mb-4 p-4 bg-card border border-border rounded-xl animate-fade-in">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                          <Settings2 className="w-4 h-4 text-primary" />
-                          Configurar Colunas da Tabela
-                        </h4>
-                        <button onClick={() => setShowColConfig(false)} className="text-muted-foreground hover:text-foreground"><XCircle className="w-4 h-4" /></button>
-                      </div>
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                        {tableColumns.filter(c => useImported ? !c.onlyMock : !c.onlyImported).map((col: any, idx: number, arr: any[]) => (
-                          <div key={col.id} className="flex items-center justify-between p-2 rounded-lg border border-border bg-background hover:border-primary/30 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <button onClick={() => toggleColumn(col.id)} className={`w-4 h-4 rounded flex items-center justify-center border ${col.visible ? 'bg-primary border-primary text-primary-foreground' : 'border-input bg-transparent'}`}>
-                                {col.visible && <Check className="w-3 h-3" />}
-                              </button>
-                              <span className="text-xs font-medium text-foreground">
-                                {col.label} {col.isCustom && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-normal text-muted-foreground">Extra</span>}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => moveColumn(tableColumns.findIndex(c => c.id === col.id), 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => moveColumn(tableColumns.findIndex(c => c.id === col.id), 'down')} disabled={idx === arr.length - 1} className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
-                            </div>
+                {/* Col Config Modal */}
+                {showColConfig && (
+                  <div className="mb-4 p-4 bg-card border border-border rounded-xl animate-fade-in">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Settings2 className="w-4 h-4 text-primary" />
+                        Configurar Colunas da Tabela
+                      </h4>
+                      <button onClick={() => setShowColConfig(false)} className="text-muted-foreground hover:text-foreground"><XCircle className="w-4 h-4" /></button>
+                    </div>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                      {tableColumns.filter(c => useImported ? !c.onlyMock : !c.onlyImported).map((col: any, idx: number, arr: any[]) => (
+                        <div key={col.id} className="flex items-center justify-between p-2 rounded-lg border border-border bg-background hover:border-primary/30 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => toggleColumn(col.id)} className={`w-4 h-4 rounded flex items-center justify-center border ${col.visible ? 'bg-primary border-primary text-primary-foreground' : 'border-input bg-transparent'}`}>
+                              {col.visible && <Check className="w-3 h-3" />}
+                            </button>
+                            <span className="text-xs font-medium text-foreground">
+                              {col.label} {col.isCustom && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-normal text-muted-foreground">Extra</span>}
+                            </span>
                           </div>
-                        ))}
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => moveColumn(tableColumns.findIndex(c => c.id === col.id), 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => moveColumn(tableColumns.findIndex(c => c.id === col.id), 'down')} disabled={idx === arr.length - 1} className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(() => {
+                  const fat = vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0);
+                  const liq = vendasList.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
+                  const unid = vendasList.reduce((s: number, v: any) => s + (v.quantidade || 1), 0);
+                  const margemPct = fat > 0 ? ((liq / fat) * 100) : 0;
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                      <div className="bg-card border border-border rounded-xl p-3">
+                        <p className="text-[10px] text-muted-foreground">Faturamento</p>
+                        <p className="text-sm font-bold text-foreground">{formatBRL(fat)}</p>
+                      </div>
+                      <div className="bg-card border border-border rounded-xl p-3">
+                        <p className="text-[10px] text-muted-foreground">Líquido Total</p>
+                        <p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(liq)}</p>
+                      </div>
+                      <div className="bg-card border border-border rounded-xl p-3">
+                        <p className="text-[10px] text-muted-foreground">Margem %</p>
+                        <p className={`text-sm font-bold ${margemPct >= 0 ? 'text-[hsl(var(--vix-success))]' : 'text-[hsl(var(--vix-danger))]'}`}>{margemPct.toFixed(1)}%</p>
+                      </div>
+                      <div className="bg-card border border-border rounded-xl p-3">
+                        <p className="text-[10px] text-muted-foreground">Unidades</p>
+                        <p className="text-sm font-bold text-foreground">{unid}</p>
+                      </div>
+                      <div className="bg-card border border-border rounded-xl p-3">
+                        <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
+                        <p className="text-sm font-bold text-foreground">{formatBRL(fat / (vendasList.length || 1))}</p>
                       </div>
                     </div>
-                  )}
-
-                  {(() => {
-                    const fat = vendasList.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0);
-                    const liq = vendasList.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
-                    const unid = vendasList.reduce((s: number, v: any) => s + (v.quantidade || 1), 0);
-                    const margemPct = fat > 0 ? ((liq / fat) * 100) : 0;
-                    return (
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-                        <div className="bg-card border border-border rounded-xl p-3">
-                          <p className="text-[10px] text-muted-foreground">Faturamento</p>
-                          <p className="text-sm font-bold text-foreground">{formatBRL(fat)}</p>
-                        </div>
-                        <div className="bg-card border border-border rounded-xl p-3">
-                          <p className="text-[10px] text-muted-foreground">Líquido Total</p>
-                          <p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(liq)}</p>
-                        </div>
-                        <div className="bg-card border border-border rounded-xl p-3">
-                          <p className="text-[10px] text-muted-foreground">Margem %</p>
-                          <p className={`text-sm font-bold ${margemPct >= 0 ? 'text-[hsl(var(--vix-success))]' : 'text-[hsl(var(--vix-danger))]'}`}>{margemPct.toFixed(1)}%</p>
-                        </div>
-                        <div className="bg-card border border-border rounded-xl p-3">
-                          <p className="text-[10px] text-muted-foreground">Unidades</p>
-                          <p className="text-sm font-bold text-foreground">{unid}</p>
-                        </div>
-                        <div className="bg-card border border-border rounded-xl p-3">
-                          <p className="text-[10px] text-muted-foreground">Ticket Médio</p>
-                          <p className="text-sm font-bold text-foreground">{formatBRL(fat / (vendasList.length || 1))}</p>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  );
+                })()}
 
                 <div className="flex items-center justify-end mb-3">
                   <button onClick={() => setShowColConfig(!showColConfig)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:bg-muted transition-colors">
@@ -1309,7 +1305,7 @@ export function AtualizarDadosPage() {
                         <tr className="border-b border-border bg-muted/50">
                           {tableColumns.filter(c => c.visible && (useImported ? !c.onlyMock : !c.onlyImported)).map(col => {
                             const isSortable = sortableVendasCols.includes(col.id);
-                            const isRight = ['quantidade','valorTotal','impostos','comissao','cmv','liquido','margem'].includes(col.id);
+                            const isRight = ['quantidade', 'valorTotal', 'impostos', 'comissao', 'cmv', 'liquido', 'margem'].includes(col.id);
                             return (
                               <th
                                 key={col.id}
@@ -1328,15 +1324,15 @@ export function AtualizarDadosPage() {
                             {tableColumns.filter(c => c.visible && !c.onlyMock).map(col => {
                               let content: any = venda[col.id];
                               let className = "py-3 px-4 text-xs text-foreground ";
-                              
+
                               if (col.id === 'numeroPedido' || col.id === 'sku') className += "font-mono ";
-                              if (['impostos','comissao','cmv','data','conta'].includes(col.id)) className += "text-muted-foreground ";
+                              if (['impostos', 'comissao', 'cmv', 'data', 'conta'].includes(col.id)) className += "text-muted-foreground ";
                               if (col.id === 'liquido') className += "font-semibold text-[hsl(var(--vix-success))] text-right ";
                               if (col.id === 'valorTotal') className += "font-semibold text-right ";
-                              if (['quantidade','margem'].includes(col.id)) className += "text-right ";
+                              if (['quantidade', 'margem'].includes(col.id)) className += "text-right ";
                               if (col.id === 'margem') className += "text-center font-medium ";
                               if (col.id === 'devolucao') { className += "text-muted-foreground "; }
-                              if (['valorTotal','impostos','comissao','cmv','liquido'].includes(col.id)) {
+                              if (['valorTotal', 'impostos', 'comissao', 'cmv', 'liquido'].includes(col.id)) {
                                 content = formatBRL(content || (col.id === 'valorTotal' ? venda.precoUnitario : 0));
                                 className += "text-right ";
                               }
@@ -1630,43 +1626,43 @@ export function AtualizarDadosPage() {
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('canceladas')}>Canc.{sortIcon('canceladas')}</th>
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('conversao')}>Conv. %{sortIcon('conversao')}</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
-                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap" style={{minWidth: '180px'}}>Período</th>
+                          <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap" style={{ minWidth: '180px' }}>Período</th>
                         </tr>
                       </thead>
                       <tbody>
                         {perfPaginated.map((item, idx) => {
                           const prev = prevPerfMap.get(item.idAnuncio);
                           return (
-                          <tr key={`${item.idAnuncio}-${idx}`} className="border-t border-border hover:bg-muted/30 transition-colors">
-                            <td className="px-3 py-2">
-                              {item.link ? (
-                                <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{item.idAnuncio}</a>
-                              ) : item.idAnuncio}
-                            </td>
-                            <td className="px-3 py-2 font-mono">{item.sku}</td>
-                            <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
-                            <td className="px-3 py-2 text-right">
-                              {formatBRL(item.preco)}
-                              {prev && <PerfDelta cur={item.preco} prev={prev.preco} />}
-                            </td>
-                            <td className="px-3 py-2 text-right font-medium">
-                              {item.visitas.toLocaleString('pt-BR')}
-                              {prev && <PerfDelta cur={item.visitas} prev={prev.visitas} />}
-                            </td>
-                            <td className="px-3 py-2 text-right font-medium text-[hsl(var(--vix-success))]">
-                              {item.vendas.toLocaleString('pt-BR')}
-                              {prev && <PerfDelta cur={item.vendas} prev={prev.vendas} />}
-                            </td>
-                            <td className="px-3 py-2 text-right text-[hsl(var(--vix-danger))]">{item.canceladas}</td>
-                            <td className="px-3 py-2 text-right">
-                              <span className={`font-medium ${item.conversao >= 5 ? 'text-[hsl(var(--vix-success))]' : item.conversao >= 2 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]'}`}>
-                                {item.conversao.toFixed(2)}%
-                              </span>
-                              {prev && <PerfDelta cur={item.conversao} prev={prev.conversao} />}
-                            </td>
-                            <td className="px-3 py-2">{item.conta}</td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{curLabel}</td>
-                          </tr>
+                            <tr key={`${item.idAnuncio}-${idx}`} className="border-t border-border hover:bg-muted/30 transition-colors">
+                              <td className="px-3 py-2">
+                                {item.link ? (
+                                  <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{item.idAnuncio}</a>
+                                ) : item.idAnuncio}
+                              </td>
+                              <td className="px-3 py-2 font-mono">{item.sku}</td>
+                              <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
+                              <td className="px-3 py-2 text-right">
+                                {formatBRL(item.preco)}
+                                {prev && <PerfDelta cur={item.preco} prev={prev.preco} />}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium">
+                                {item.visitas.toLocaleString('pt-BR')}
+                                {prev && <PerfDelta cur={item.visitas} prev={prev.visitas} />}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium text-[hsl(var(--vix-success))]">
+                                {item.vendas.toLocaleString('pt-BR')}
+                                {prev && <PerfDelta cur={item.vendas} prev={prev.vendas} />}
+                              </td>
+                              <td className="px-3 py-2 text-right text-[hsl(var(--vix-danger))]">{item.canceladas}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={`font-medium ${item.conversao >= 5 ? 'text-[hsl(var(--vix-success))]' : item.conversao >= 2 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]'}`}>
+                                  {item.conversao.toFixed(2)}%
+                                </span>
+                                {prev && <PerfDelta cur={item.conversao} prev={prev.conversao} />}
+                              </td>
+                              <td className="px-3 py-2">{item.conta}</td>
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{curLabel}</td>
+                            </tr>
                           );
                         })}
                       </tbody>
