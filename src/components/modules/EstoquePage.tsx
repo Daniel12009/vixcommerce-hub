@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Package, AlertTriangle, TrendingDown, Truck, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, FileSpreadsheet, Search, Loader2, RefreshCw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KpiCard } from '@/components/shared/KpiCard';
@@ -7,8 +7,181 @@ import { formatNumber } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 
 interface MergedStockRow {
-...
-  // Fetch pending shipments
+  sku: string;
+  venSemanal: number;
+  vmd: number;
+  tinyLocal: number;
+  fullML: number;
+  entradaPendente: number;
+  emTransferencia: number;
+  sugestaoEnvio: number;
+  coberturaDias: number;
+  status: 'ruptura' | 'critico' | 'ok';
+  contas: string[];
+}
+
+type SortField = 'sku' | 'venSemanal' | 'vmd' | 'tinyLocal' | 'fullML' | 'entradaPendente' | 'emTransferencia' | 'sugestaoEnvio' | 'coberturaDias';
+
+export function EstoquePage() {
+  const { estoqueFullItems, estoqueTinyItems, performanceItems } = useSheetsData();
+  const [diasCoberturaAlvo, setDiasCoberturaAlvo] = useState<number>(5);
+  const [editingCobertura, setEditingCobertura] = useState(false);
+  const [tempCobertura, setTempCobertura] = useState('5');
+  const [sortField, setSortField] = useState<SortField>('coberturaDias');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'ruptura' | 'critico' | 'ok'>('all');
+  const [filterConta, setFilterConta] = useState<string>('all');
+
+  const [pendingShipments, setPendingShipments] = useState<any[]>([]);
+  const [loadingShipments, setLoadingShipments] = useState(false);
+  const [shipmentsError, setShipmentsError] = useState('');
+  const [shipmentsFilterConta, setShipmentsFilterConta] = useState<string>('all');
+
+  const hasFullData = !!estoqueFullItems?.length;
+  const hasTinyData = !!estoqueTinyItems?.length;
+  const hasAnyData = hasFullData || hasTinyData;
+
+  const contasUnicas = useMemo(() => {
+    const set = new Set<string>();
+    (estoqueFullItems || []).forEach(i => {
+      if (i.conta) set.add(i.conta);
+    });
+    return Array.from(set).sort();
+  }, [estoqueFullItems]);
+
+  const vmdBySku = useMemo(() => {
+    const map = new Map<string, number>();
+    const grouped = new Map<string, { totalVendas: number; dias: Set<string> }>();
+
+    (performanceItems || []).forEach(item => {
+      if (!item.sku) return;
+      const sku = item.sku.trim().toUpperCase();
+      const dateKey = item.dataRef || 'sem-data';
+      const current = grouped.get(sku) || { totalVendas: 0, dias: new Set<string>() };
+      current.totalVendas += Number(item.vendas || 0);
+      current.dias.add(dateKey);
+      grouped.set(sku, current);
+    });
+
+    grouped.forEach((value, sku) => {
+      const dias = Math.max(1, value.dias.size);
+      map.set(sku, value.totalVendas / dias);
+    });
+
+    return map;
+  }, [performanceItems]);
+
+  const mergedData = useMemo<MergedStockRow[]>(() => {
+    const fullMap = new Map<string, { fullML: number; entradaPendente: number; emTransferencia: number; contas: Set<string> }>();
+    const tinyMap = new Map<string, number>();
+
+    (estoqueFullItems || []).forEach(item => {
+      const sku = item.sku?.trim().toUpperCase();
+      if (!sku) return;
+      const current = fullMap.get(sku) || { fullML: 0, entradaPendente: 0, emTransferencia: 0, contas: new Set<string>() };
+      current.fullML += Number(item.aptasParaVenda || 0);
+      current.entradaPendente += Number(item.entradaPendente || 0);
+      current.emTransferencia += Number(item.emTransferencia || 0);
+      if (item.conta) current.contas.add(item.conta);
+      fullMap.set(sku, current);
+    });
+
+    (estoqueTinyItems || []).forEach(item => {
+      const sku = item.sku?.trim().toUpperCase();
+      if (!sku) return;
+      tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
+    });
+
+    const allSkus = new Set<string>([...fullMap.keys(), ...tinyMap.keys()]);
+
+    return Array.from(allSkus).map((sku) => {
+      const full = fullMap.get(sku);
+      const tinyLocal = tinyMap.get(sku) || 0;
+      const fullML = full?.fullML || 0;
+      const entradaPendente = full?.entradaPendente || 0;
+      const emTransferencia = full?.emTransferencia || 0;
+      const vmd = vmdBySku.get(sku) || 0;
+      const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
+      const sugestaoEnvio = Math.max(0, Math.ceil((vmd * diasCoberturaAlvo) - (fullML + entradaPendente + emTransferencia)));
+
+      let status: 'ruptura' | 'critico' | 'ok' = 'ok';
+      if (fullML <= 0) status = 'ruptura';
+      else if (coberturaDias < diasCoberturaAlvo) status = 'critico';
+
+      return {
+        sku,
+        venSemanal: Math.round(vmd * 7),
+        vmd,
+        tinyLocal,
+        fullML,
+        entradaPendente,
+        emTransferencia,
+        sugestaoEnvio,
+        coberturaDias,
+        status,
+        contas: Array.from(full?.contas || []),
+      };
+    });
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo]);
+
+  const totalSkus = mergedData.length;
+  const skusRuptura = mergedData.filter(r => r.status === 'ruptura').length;
+  const skusCriticos = mergedData.filter(r => r.status === 'critico').length;
+  const skusEntradaPendente = mergedData.filter(r => r.entradaPendente > 0).length;
+  const skusEmTransferencia = mergedData.filter(r => r.emTransferencia > 0).length;
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortField(field);
+    setSortDir(field === 'coberturaDias' ? 'asc' : 'desc');
+  };
+
+  const sortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="inline w-3.5 h-3.5 ml-1 opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="inline w-3.5 h-3.5 ml-1" />
+      : <ArrowDown className="inline w-3.5 h-3.5 ml-1" />;
+  };
+
+  const statusBadge = (status: 'ruptura' | 'critico' | 'ok') => {
+    const c = {
+      ruptura: { label: 'Ruptura', cls: 'bg-[hsl(var(--vix-danger)/0.15)] text-[hsl(var(--vix-danger))]' },
+      critico: { label: 'Crítico', cls: 'bg-[hsl(var(--vix-warning)/0.15)] text-[hsl(var(--vix-warning))]' },
+      ok: { label: 'OK', cls: 'bg-[hsl(var(--vix-success)/0.15)] text-[hsl(var(--vix-success))]' },
+    }[status];
+
+    return <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${c.cls}`}>{c.label}</span>;
+  };
+
+  const displayData = useMemo(() => {
+    const term = searchTerm.trim().toUpperCase();
+
+    const filtered = mergedData.filter(row => {
+      if (term && !row.sku.includes(term)) return false;
+      if (filterStatus !== 'all' && row.status !== filterStatus) return false;
+      if (filterConta !== 'all' && !row.contas.includes(filterConta)) return false;
+      return true;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+
+      const diff = Number(aVal) - Number(bVal);
+      return sortDir === 'asc' ? diff : -diff;
+    });
+
+    return sorted;
+  }, [mergedData, searchTerm, filterStatus, filterConta, sortField, sortDir]);
+
   const fetchPendingShipments = async () => {
     setLoadingShipments(true);
     setShipmentsError('');
@@ -52,7 +225,6 @@ interface MergedStockRow {
     }
   };
 
-  // Shipments filtered
   const filteredShipments = useMemo(() => {
     if (shipmentsFilterConta === 'all') return pendingShipments.filter(s => !s.error);
     return pendingShipments.filter(s => !s.error && s.conta === shipmentsFilterConta);
@@ -64,7 +236,6 @@ interface MergedStockRow {
     return Array.from(set).sort();
   }, [pendingShipments]);
 
-  // Transfer items from Full_Estoque
   const transferItems = useMemo(() => {
     if (!estoqueFullItems) return [];
     return estoqueFullItems
