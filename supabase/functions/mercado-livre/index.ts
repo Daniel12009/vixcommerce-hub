@@ -193,6 +193,104 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'get_pending_shipments') {
+      // Get all active accounts or specific one
+      let accountsRes;
+      if (account_id) {
+        accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      } else {
+        accountsRes = await supabaseFetch('/ml_accounts?ativo=eq.true');
+      }
+      const accounts = await accountsRes.json();
+
+      if (!accounts || accounts.length === 0) {
+        return new Response(JSON.stringify({ shipments: [], error: 'No ML accounts configured' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const allShipments: any[] = [];
+
+      for (const account of accounts) {
+        try {
+          let sellerId = account.seller_id;
+          if (!sellerId) {
+            const me = await mlFetch(account, '/users/me');
+            sellerId = me.id;
+            await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ seller_id: String(sellerId) }),
+            });
+          }
+
+          // Fetch orders with status ready_to_ship (pending shipment)
+          let offset = 0;
+          const limit = 50;
+          let hasMore = true;
+
+          while (hasMore) {
+            const ordersData = await mlFetch(
+              account,
+              `/orders/search?seller=${sellerId}&order.status=ready_to_ship&sort=date_desc&limit=${limit}&offset=${offset}`
+            );
+
+            const results = ordersData.results || [];
+            const total = ordersData.paging?.total || 0;
+
+            for (const o of results) {
+              const shipmentId = o.shipping?.id;
+              let shipmentInfo: any = null;
+
+              if (shipmentId) {
+                try {
+                  shipmentInfo = await mlFetch(account, `/shipments/${shipmentId}`);
+                } catch (_) { /* ignore shipment detail errors */ }
+              }
+
+              allShipments.push({
+                orderId: o.id,
+                status: o.status,
+                dateCreated: o.date_created,
+                totalAmount: o.total_amount,
+                buyer: o.buyer?.nickname || o.buyer?.first_name || 'N/A',
+                items: (o.order_items || []).map((item: any) => ({
+                  title: item.item?.title || '',
+                  sku: item.item?.seller_sku || '',
+                  quantity: item.quantity,
+                  unitPrice: item.unit_price,
+                  itemId: item.item?.id || '',
+                })),
+                conta: account.nome,
+                accountId: account.id,
+                shipment: shipmentInfo ? {
+                  id: shipmentInfo.id,
+                  status: shipmentInfo.status,
+                  substatus: shipmentInfo.substatus,
+                  logisticType: shipmentInfo.logistic_type,
+                  dateCreated: shipmentInfo.date_created,
+                  lastUpdated: shipmentInfo.last_updated,
+                  receiverCity: shipmentInfo.receiver_address?.city?.name || '',
+                } : null,
+              });
+            }
+
+            offset += limit;
+            hasMore = offset < total;
+          }
+        } catch (err) {
+          console.error(`Error fetching shipments for ${account.nome}:`, err);
+          allShipments.push({
+            error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            conta: account.nome,
+          });
+        }
+      }
+
+      return new Response(JSON.stringify({ shipments: allShipments }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     console.error('ML API error:', error);
