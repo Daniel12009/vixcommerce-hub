@@ -194,104 +194,90 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'get_pending_shipments') {
-      try {
-        // Get all active accounts or specific one
-        let accountsRes;
-        if (account_id) {
-          accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
-        } else {
-          accountsRes = await supabaseFetch('/ml_accounts?ativo=eq.true');
-        }
-        const accounts = await accountsRes.json();
+      // Step 1: Get accounts
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
 
-        if (!accounts || accounts.length === 0) {
-          return new Response(JSON.stringify({ shipments: [], error: 'No ML accounts configured' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        const allShipments: any[] = [];
-
-        for (const account of accounts) {
-          try {
-            let sellerId = account.seller_id;
-            if (!sellerId) {
-              const me = await mlFetch(account, '/users/me');
-              sellerId = me.id;
-              await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ seller_id: String(sellerId) }),
-              });
-            }
-
-            // Fetch recent orders (last 7 days) and filter by shipping status
-            const now = new Date();
-            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            const dateFrom = weekAgo.toISOString();
-            const dateTo = now.toISOString();
-
-            let offset = 0;
-            const limit = 50;
-            let hasMore = true;
-
-            while (hasMore) {
-              const ordersData = await mlFetch(
-                account,
-                `/orders/search?seller=${sellerId}&order.status=paid&order.date_created.from=${dateFrom}&order.date_created.to=${dateTo}&sort=date_desc&limit=${limit}&offset=${offset}`
-              );
-
-              const results = ordersData.results || [];
-              const total = ordersData.paging?.total || 0;
-
-              for (const o of results) {
-                // Include orders that have shipping pending
-                const shippingStatus = o.shipping?.status || '';
-                if (shippingStatus && shippingStatus !== 'delivered' && shippingStatus !== 'cancelled') {
-                  allShipments.push({
-                    orderId: o.id,
-                    status: o.status,
-                    shippingStatus,
-                    dateCreated: o.date_created,
-                    totalAmount: o.total_amount,
-                    buyer: o.buyer?.nickname || o.buyer?.first_name || 'N/A',
-                    items: (o.order_items || []).map((item: any) => ({
-                      title: item.item?.title || '',
-                      sku: item.item?.seller_sku || '',
-                      quantity: item.quantity,
-                      unitPrice: item.unit_price,
-                      itemId: item.item?.id || '',
-                    })),
-                    conta: account.nome,
-                    accountId: account.id,
-                    shipment: {
-                      id: o.shipping?.id || null,
-                      logisticType: o.shipping?.logistic_type || '',
-                    },
-                  });
-                }
-              }
-
-              offset += limit;
-              hasMore = offset < total;
-            }
-          } catch (err) {
-            console.error(`Error fetching shipments for ${account.nome}:`, err);
-            allShipments.push({
-              error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-              conta: account.nome,
-            });
-          }
-        }
-
-        return new Response(JSON.stringify({ shipments: allShipments }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } catch (err) {
-        console.error('get_pending_shipments error:', err);
-        return new Response(JSON.stringify({ shipments: [], error: err instanceof Error ? err.message : 'Unknown error' }), {
+      if (!accounts || accounts.length === 0) {
+        return new Response(JSON.stringify({ shipments: [] }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      const allShipments: any[] = [];
+
+      for (const account of accounts) {
+        try {
+          let sellerId = account.seller_id;
+          if (!sellerId) {
+            const me = await mlFetch(account, '/users/me');
+            sellerId = me.id;
+            await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ seller_id: String(sellerId) }),
+            });
+          }
+
+          // Fetch recent paid orders (last 7 days)
+          const now = new Date();
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+          let offset = 0;
+          const limit = 50;
+          let hasMore = true;
+
+          while (hasMore) {
+            const url = `/orders/search?seller=${sellerId}&order.status=paid&order.date_created.from=${weekAgo.toISOString()}&order.date_created.to=${now.toISOString()}&sort=date_desc&limit=${limit}&offset=${offset}`;
+            
+            let ordersData;
+            try {
+              ordersData = await mlFetch(account, url);
+            } catch (fetchErr) {
+              console.error(`ML fetch error for ${account.nome}:`, fetchErr);
+              allShipments.push({ error: `${account.nome}: ${fetchErr instanceof Error ? fetchErr.message : 'API error'}`, conta: account.nome });
+              break;
+            }
+
+            const results = ordersData.results || [];
+            const total = ordersData.paging?.total || 0;
+
+            for (const o of results) {
+              const shippingStatus = o.shipping?.status || '';
+              if (shippingStatus && shippingStatus !== 'delivered' && shippingStatus !== 'cancelled') {
+                allShipments.push({
+                  orderId: o.id,
+                  status: o.status,
+                  shippingStatus,
+                  dateCreated: o.date_created,
+                  totalAmount: o.total_amount,
+                  buyer: o.buyer?.nickname || o.buyer?.first_name || 'N/A',
+                  items: (o.order_items || []).map((item: any) => ({
+                    title: item.item?.title || '',
+                    sku: item.item?.seller_sku || '',
+                    quantity: item.quantity,
+                    unitPrice: item.unit_price,
+                  })),
+                  conta: account.nome,
+                  accountId: account.id,
+                  logisticType: o.shipping?.logistic_type || '',
+                });
+              }
+            }
+
+            offset += limit;
+            hasMore = offset < total;
+          }
+        } catch (err) {
+          console.error(`Error for ${account.nome}:`, err);
+          allShipments.push({ error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown'}`, conta: account.nome });
+        }
+      }
+
+      return new Response(JSON.stringify({ shipments: allShipments }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     throw new Error(`Unknown action: ${action}`);
