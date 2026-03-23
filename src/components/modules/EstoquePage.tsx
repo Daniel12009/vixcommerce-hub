@@ -5,6 +5,7 @@ import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatNumber } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface MergedStockRow {
   sku: string;
@@ -187,29 +188,13 @@ export function EstoquePage() {
     setShipmentsError('');
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mercado-livre`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ action: 'get_pending_shipments' }),
+      const { data, error } = await supabase.functions.invoke('mercado-livre', {
+        body: { action: 'get_pending_shipments' },
       });
 
-      const responseText = await response.text();
-      let data: any = {};
-
-      if (responseText) {
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          throw new Error(`Resposta inválida da Edge Function (${response.status})`);
-        }
-      }
-
-      if (!response.ok) {
-        throw new Error(data?.error || `Edge Function retornou status ${response.status}`);
+      if (error) {
+        const msg = typeof error === 'object' && error.message ? error.message : String(error);
+        throw new Error(msg);
       }
 
       if (data?.error) {
