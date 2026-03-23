@@ -1,11 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Package, AlertTriangle, TrendingDown, Truck, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, FileSpreadsheet, Search, Loader2, RefreshCw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatNumber } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
-import { supabase } from '@/integrations/supabase/client';
 
 interface MergedStockRow {
   sku: string;
@@ -34,135 +33,189 @@ export function EstoquePage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'ruptura' | 'critico' | 'ok'>('all');
   const [filterConta, setFilterConta] = useState<string>('all');
 
-  // Envios & Coletas state
   const [pendingShipments, setPendingShipments] = useState<any[]>([]);
   const [loadingShipments, setLoadingShipments] = useState(false);
   const [shipmentsError, setShipmentsError] = useState('');
   const [shipmentsFilterConta, setShipmentsFilterConta] = useState<string>('all');
 
-  const hasFullData = estoqueFullItems && estoqueFullItems.length > 0;
-  const hasTinyData = estoqueTinyItems && estoqueTinyItems.length > 0;
+  const hasFullData = !!estoqueFullItems?.length;
+  const hasTinyData = !!estoqueTinyItems?.length;
   const hasAnyData = hasFullData || hasTinyData;
 
-  // Extract unique contas from Full data
   const contasUnicas = useMemo(() => {
-    if (!estoqueFullItems) return [];
     const set = new Set<string>();
-    estoqueFullItems.forEach(i => { if (i.conta) set.add(i.conta); });
+    (estoqueFullItems || []).forEach(i => {
+      if (i.conta) set.add(i.conta);
+    });
     return Array.from(set).sort();
   }, [estoqueFullItems]);
 
-  // Compute VMD from performance data
   const vmdBySku = useMemo(() => {
     const map = new Map<string, number>();
-    if (!performanceItems || performanceItems.length === 0) return map;
-    const skuVendas = new Map<string, { totalVendas: number; days: Set<string> }>();
-    performanceItems.forEach(p => {
-      if (!p.sku || !p.dataRef) return;
-      const parts = p.dataRef.split(' a ');
-      if (parts.length === 2 && parts[0].trim() !== parts[1].trim()) return;
-      const sku = p.sku.trim().toUpperCase();
-      const existing = skuVendas.get(sku) || { totalVendas: 0, days: new Set<string>() };
-      const dateKey = parts[0].trim();
-      if (!existing.days.has(dateKey)) {
-        existing.totalVendas += p.vendas;
-        existing.days.add(dateKey);
-      }
-      skuVendas.set(sku, existing);
+    const grouped = new Map<string, { totalVendas: number; dias: Set<string> }>();
+
+    (performanceItems || []).forEach(item => {
+      if (!item.sku) return;
+      const sku = item.sku.trim().toUpperCase();
+      const dateKey = item.dataRef || 'sem-data';
+      const current = grouped.get(sku) || { totalVendas: 0, dias: new Set<string>() };
+      current.totalVendas += Number(item.vendas || 0);
+      current.dias.add(dateKey);
+      grouped.set(sku, current);
     });
-    skuVendas.forEach((val, sku) => {
-      const numDays = val.days.size || 1;
-      map.set(sku, val.totalVendas / numDays);
+
+    grouped.forEach((value, sku) => {
+      const dias = Math.max(1, value.dias.size);
+      map.set(sku, value.totalVendas / dias);
     });
+
     return map;
   }, [performanceItems]);
 
-  // Merge Full + Tiny data by SKU
-  const mergedData = useMemo((): MergedStockRow[] => {
-    const skuMap = new Map<string, { fullML: number; entradaPendente: number; emTransferencia: number; tinyLocal: number; contas: Set<string> }>();
-    if (estoqueFullItems) {
-      const filteredFull = filterConta === 'all' ? estoqueFullItems : estoqueFullItems.filter(i => i.conta === filterConta);
-      filteredFull.forEach(item => {
-        const sku = item.sku.trim().toUpperCase();
-        if (!sku || sku === 'TOTAL' || sku === '-') return;
-        const existing = skuMap.get(sku) || { fullML: 0, entradaPendente: 0, emTransferencia: 0, tinyLocal: 0, contas: new Set<string>() };
-        existing.fullML += item.aptasParaVenda;
-        existing.entradaPendente += item.entradaPendente;
-        existing.emTransferencia += item.emTransferencia;
-        if (item.conta) existing.contas.add(item.conta);
-        skuMap.set(sku, existing);
-      });
-    }
-    if (estoqueTinyItems) {
-      estoqueTinyItems.forEach(item => {
-        const sku = item.sku.trim().toUpperCase();
-        if (!sku) return;
-        const existing = skuMap.get(sku) || { fullML: 0, entradaPendente: 0, emTransferencia: 0, tinyLocal: 0, contas: new Set<string>() };
-        existing.tinyLocal += item.quantidade;
-        skuMap.set(sku, existing);
-      });
-    }
-    const rows: MergedStockRow[] = [];
-    skuMap.forEach((data, sku) => {
+  const mergedData = useMemo<MergedStockRow[]>(() => {
+    const fullMap = new Map<string, { fullML: number; entradaPendente: number; emTransferencia: number; contas: Set<string> }>();
+    const tinyMap = new Map<string, number>();
+
+    (estoqueFullItems || []).forEach(item => {
+      const sku = item.sku?.trim().toUpperCase();
+      if (!sku) return;
+      const current = fullMap.get(sku) || { fullML: 0, entradaPendente: 0, emTransferencia: 0, contas: new Set<string>() };
+      current.fullML += Number(item.aptasParaVenda || 0);
+      current.entradaPendente += Number(item.entradaPendente || 0);
+      current.emTransferencia += Number(item.emTransferencia || 0);
+      if (item.conta) current.contas.add(item.conta);
+      fullMap.set(sku, current);
+    });
+
+    (estoqueTinyItems || []).forEach(item => {
+      const sku = item.sku?.trim().toUpperCase();
+      if (!sku) return;
+      tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
+    });
+
+    const allSkus = new Set<string>([...fullMap.keys(), ...tinyMap.keys()]);
+
+    return Array.from(allSkus).map((sku) => {
+      const full = fullMap.get(sku);
+      const tinyLocal = tinyMap.get(sku) || 0;
+      const fullML = full?.fullML || 0;
+      const entradaPendente = full?.entradaPendente || 0;
+      const emTransferencia = full?.emTransferencia || 0;
       const vmd = vmdBySku.get(sku) || 0;
-      const venSemanal = Math.round(vmd * 7);
-      const totalDisponivel = data.fullML + data.entradaPendente + data.emTransferencia;
-      const coberturaDias = vmd > 0 ? Math.round(data.fullML / vmd) : (data.fullML > 0 ? 999 : 0);
-      const sugestaoEnvio = Math.max(0, Math.ceil((vmd * diasCoberturaAlvo) - totalDisponivel));
+      const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
+      const sugestaoEnvio = Math.max(0, Math.ceil((vmd * diasCoberturaAlvo) - (fullML + entradaPendente + emTransferencia)));
+
       let status: 'ruptura' | 'critico' | 'ok' = 'ok';
-      if (data.fullML <= 0) status = 'ruptura';
+      if (fullML <= 0) status = 'ruptura';
       else if (coberturaDias < diasCoberturaAlvo) status = 'critico';
-      rows.push({ sku, venSemanal, vmd: Math.round(vmd * 100) / 100, tinyLocal: data.tinyLocal, fullML: data.fullML, entradaPendente: data.entradaPendente, emTransferencia: data.emTransferencia, sugestaoEnvio, coberturaDias: Math.min(coberturaDias, 999), status, contas: Array.from(data.contas) });
-    });
-    return rows;
-  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo, filterConta]);
 
-  // Filtered and sorted
-  const displayData = useMemo(() => {
-    let data = mergedData;
-    if (searchTerm) { const term = searchTerm.toLowerCase(); data = data.filter(r => r.sku.toLowerCase().includes(term)); }
-    if (filterStatus !== 'all') data = data.filter(r => r.status === filterStatus);
-    return [...data].sort((a, b) => {
-      const aVal = a[sortField]; const bVal = b[sortField];
-      if (typeof aVal === 'string' && typeof bVal === 'string') return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+      return {
+        sku,
+        venSemanal: Math.round(vmd * 7),
+        vmd,
+        tinyLocal,
+        fullML,
+        entradaPendente,
+        emTransferencia,
+        sugestaoEnvio,
+        coberturaDias,
+        status,
+        contas: Array.from(full?.contas || []),
+      };
     });
-  }, [mergedData, searchTerm, filterStatus, sortField, sortDir]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo]);
 
-  // KPIs
   const totalSkus = mergedData.length;
   const skusRuptura = mergedData.filter(r => r.status === 'ruptura').length;
   const skusCriticos = mergedData.filter(r => r.status === 'critico').length;
   const skusEntradaPendente = mergedData.filter(r => r.entradaPendente > 0).length;
   const skusEmTransferencia = mergedData.filter(r => r.emTransferencia > 0).length;
 
-  // Sort helpers
-  const toggleSort = (field: SortField) => { if (sortField === field) setSortDir(prev => prev === 'asc' ? 'desc' : 'asc'); else { setSortField(field); setSortDir('asc'); } };
-  const sortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 inline opacity-30" />;
-    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 ml-1 inline text-primary" /> : <ArrowDown className="w-3 h-3 ml-1 inline text-primary" />;
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortField(field);
+    setSortDir(field === 'coberturaDias' ? 'asc' : 'desc');
   };
+
+  const sortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="inline w-3.5 h-3.5 ml-1 opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="inline w-3.5 h-3.5 ml-1" />
+      : <ArrowDown className="inline w-3.5 h-3.5 ml-1" />;
+  };
+
   const statusBadge = (status: 'ruptura' | 'critico' | 'ok') => {
-    const c = { ruptura: { label: 'Ruptura', cls: 'bg-[hsl(var(--vix-danger)/0.15)] text-[hsl(var(--vix-danger))]' }, critico: { label: 'Crítico', cls: 'bg-[hsl(var(--vix-warning)/0.15)] text-[hsl(var(--vix-warning))]' }, ok: { label: 'OK', cls: 'bg-[hsl(var(--vix-success)/0.15)] text-[hsl(var(--vix-success))]' } }[status];
+    const c = {
+      ruptura: { label: 'Ruptura', cls: 'bg-[hsl(var(--vix-danger)/0.15)] text-[hsl(var(--vix-danger))]' },
+      critico: { label: 'Crítico', cls: 'bg-[hsl(var(--vix-warning)/0.15)] text-[hsl(var(--vix-warning))]' },
+      ok: { label: 'OK', cls: 'bg-[hsl(var(--vix-success)/0.15)] text-[hsl(var(--vix-success))]' },
+    }[status];
+
     return <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${c.cls}`}>{c.label}</span>;
   };
 
-  // Fetch pending shipments
+  const displayData = useMemo(() => {
+    const term = searchTerm.trim().toUpperCase();
+
+    const filtered = mergedData.filter(row => {
+      if (term && !row.sku.includes(term)) return false;
+      if (filterStatus !== 'all' && row.status !== filterStatus) return false;
+      if (filterConta !== 'all' && !row.contas.includes(filterConta)) return false;
+      return true;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+
+      const diff = Number(aVal) - Number(bVal);
+      return sortDir === 'asc' ? diff : -diff;
+    });
+
+    return sorted;
+  }, [mergedData, searchTerm, filterStatus, filterConta, sortField, sortDir]);
+
   const fetchPendingShipments = async () => {
     setLoadingShipments(true);
     setShipmentsError('');
+
     try {
-      const { data, error } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'get_pending_shipments' },
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mercado-livre`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ action: 'get_pending_shipments' }),
       });
-      if (error) {
-        // Try to extract a more useful error message
-        const msg = typeof error === 'object' && error.message ? error.message : String(error);
-        throw new Error(msg);
+
+      const responseText = await response.text();
+      let data: any = {};
+
+      if (responseText) {
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          throw new Error(`Resposta inválida da Edge Function (${response.status})`);
+        }
       }
+
+      if (!response.ok) {
+        throw new Error(data?.error || `Edge Function retornou status ${response.status}`);
+      }
+
       if (data?.error) {
         throw new Error(data.error);
       }
+
       setPendingShipments(data?.shipments || []);
     } catch (err: any) {
       console.error('Shipments fetch error:', err);
@@ -172,7 +225,6 @@ export function EstoquePage() {
     }
   };
 
-  // Shipments filtered
   const filteredShipments = useMemo(() => {
     if (shipmentsFilterConta === 'all') return pendingShipments.filter(s => !s.error);
     return pendingShipments.filter(s => !s.error && s.conta === shipmentsFilterConta);
@@ -184,7 +236,6 @@ export function EstoquePage() {
     return Array.from(set).sort();
   }, [pendingShipments]);
 
-  // Transfer items from Full_Estoque
   const transferItems = useMemo(() => {
     if (!estoqueFullItems) return [];
     return estoqueFullItems
