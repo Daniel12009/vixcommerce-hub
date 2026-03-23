@@ -1577,9 +1577,9 @@ export function AtualizarDadosPage() {
               : [];
 
             // Build map: idAnuncio -> prev metrics
-            const prevPerfMap = new Map<string, { visitas: number; vendas: number; canceladas: number; conversao: number }>();
+            const prevPerfMap = new Map<string, { visitas: number; vendas: number; canceladas: number; conversao: number; preco: number }>();
             prevPerfItems.forEach(p => {
-              prevPerfMap.set(p.idAnuncio, { visitas: p.visitas, vendas: p.vendas, canceladas: p.canceladas, conversao: p.conversao });
+              prevPerfMap.set(p.idAnuncio, { visitas: p.visitas, vendas: p.vendas, canceladas: p.canceladas, conversao: p.conversao, preco: p.preco });
             });
             const hasPrevPerf = prevPerfItems.length > 0;
 
@@ -1720,7 +1720,10 @@ export function AtualizarDadosPage() {
                             </td>
                             <td className="px-3 py-2 font-mono">{item.sku}</td>
                             <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
-                            <td className="px-3 py-2 text-right">{formatBRL(item.preco)}</td>
+                            <td className="px-3 py-2 text-right">
+                              {formatBRL(item.preco)}
+                              {prev && <PerfDelta cur={item.preco} prev={prev.preco} />}
+                            </td>
                             <td className="px-3 py-2 text-right font-medium">
                               {item.visitas.toLocaleString('pt-BR')}
                               {prev && <PerfDelta cur={item.visitas} prev={prev.visitas} />}
