@@ -155,10 +155,18 @@ export function EstoquePage() {
       const { data, error } = await supabase.functions.invoke('mercado-livre', {
         body: { action: 'get_pending_shipments' },
       });
-      if (error) throw error;
+      if (error) {
+        // Try to extract a more useful error message
+        const msg = typeof error === 'object' && error.message ? error.message : String(error);
+        throw new Error(msg);
+      }
+      if (data?.error) {
+        throw new Error(data.error);
+      }
       setPendingShipments(data?.shipments || []);
     } catch (err: any) {
-      setShipmentsError(err.message || 'Erro ao buscar envios');
+      console.error('Shipments fetch error:', err);
+      setShipmentsError(err.message || 'Erro ao buscar envios pendentes');
     } finally {
       setLoadingShipments(false);
     }
