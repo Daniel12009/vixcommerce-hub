@@ -1557,6 +1557,7 @@ export function AtualizarDadosPage() {
                 return da.getTime() - db.getTime();
               });
             const periodoMaisRecente = periodosUnicos.length > 0 ? periodosUnicos[periodosUnicos.length - 1] : '';
+            const periodoAnterior = periodosUnicos.length > 1 ? periodosUnicos[periodosUnicos.length - 2] : '';
 
             // Filter by period: '7' = most recent only, 'custom' = user picks
             let filteredByPeriodo = perfItems;
@@ -1567,6 +1568,20 @@ export function AtualizarDadosPage() {
             }
 
             const filteredByConta = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => normalizeConta(p.conta) === perfFilterConta);
+
+            // Previous period data (for comparison arrows)
+            const prevPerfItems = periodoAnterior && perfFilterPeriodo === '7'
+              ? (perfFilterConta === 'all'
+                  ? perfItems.filter(p => p.dataRef === periodoAnterior)
+                  : perfItems.filter(p => p.dataRef === periodoAnterior && normalizeConta(p.conta) === perfFilterConta))
+              : [];
+
+            // Build map: idAnuncio -> prev metrics
+            const prevPerfMap = new Map<string, { visitas: number; vendas: number; canceladas: number; conversao: number }>();
+            prevPerfItems.forEach(p => {
+              prevPerfMap.set(p.idAnuncio, { visitas: p.visitas, vendas: p.vendas, canceladas: p.canceladas, conversao: p.conversao });
+            });
+            const hasPrevPerf = prevPerfItems.length > 0;
 
             // Sort
             const sorted = [...filteredByConta].sort((a, b) => {
@@ -1584,6 +1599,26 @@ export function AtualizarDadosPage() {
             const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
             const totalCanceladas = filtered.reduce((s, p) => s + p.canceladas, 0);
             const convMedia = filtered.length > 0 ? filtered.reduce((s, p) => s + p.conversao, 0) / filtered.length : 0;
+            const prevTotalVisitas = prevPerfItems.reduce((s, p) => s + p.visitas, 0);
+            const prevTotalVendas = prevPerfItems.reduce((s, p) => s + p.vendas, 0);
+            const prevTotalCanc = prevPerfItems.reduce((s, p) => s + p.canceladas, 0);
+            const prevConvMedia = prevPerfItems.length > 0 ? prevPerfItems.reduce((s, p) => s + p.conversao, 0) / prevPerfItems.length : 0;
+
+            // Delta helper
+            const PerfDelta = ({ cur, prev, invert }: { cur: number; prev: number; invert?: boolean }) => {
+              if (!hasPrevPerf) return null;
+              if (prev === 0 && cur === 0) return <span className="text-[10px] text-muted-foreground ml-1">—</span>;
+              if (prev === 0) return <span className="text-[10px] text-emerald-500 ml-1">↑ novo</span>;
+              const pct = ((cur - prev) / Math.abs(prev)) * 100;
+              const isUp = pct > 0;
+              const isSame = Math.abs(pct) < 0.5;
+              if (isSame) return <span className="text-[10px] text-muted-foreground ml-1">→</span>;
+              const goodUp = invert ? !isUp : isUp;
+              const color = goodUp ? 'text-emerald-500' : 'text-red-500';
+              const arrow = isUp ? '↑' : '↓';
+              return <span className={`text-[10px] font-medium ${color} ml-1`} title={`Anterior: ${prev}`}>{arrow} {Math.abs(pct).toFixed(0)}%</span>;
+            };
+
             const PERF_PER_PAGE = 50;
             const totalPerfPages = Math.ceil(filtered.length / PERF_PER_PAGE);
             const perfPaginated = filtered.slice(perfPage * PERF_PER_PAGE, (perfPage + 1) * PERF_PER_PAGE);
@@ -1614,12 +1649,12 @@ export function AtualizarDadosPage() {
 
             return (
               <>
-                {/* KPI Cards */}
+                {/* KPI Cards with Delta */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <KpiCard title="Total Visitas" value={totalVisitas.toLocaleString('pt-BR')} icon={Eye} delay={0} />
-                  <KpiCard title="Total Vendas" value={totalVendas.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
-                  <KpiCard title="Canceladas" value={totalCanceladas.toLocaleString('pt-BR')} icon={AlertTriangle} delay={100} />
-                  <KpiCard title="Conversão Média" value={`${convMedia.toFixed(2)}%`} icon={TrendingUp} delay={150} />
+                  <KpiCard title="Total Visitas" value={totalVisitas.toLocaleString('pt-BR')} icon={Eye} delay={0} extra={hasPrevPerf ? <PerfDelta cur={totalVisitas} prev={prevTotalVisitas} /> : undefined} />
+                  <KpiCard title="Total Vendas" value={totalVendas.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} extra={hasPrevPerf ? <PerfDelta cur={totalVendas} prev={prevTotalVendas} /> : undefined} />
+                  <KpiCard title="Canceladas" value={totalCanceladas.toLocaleString('pt-BR')} icon={AlertTriangle} delay={100} extra={hasPrevPerf ? <PerfDelta cur={totalCanceladas} prev={prevTotalCanc} invert /> : undefined} />
+                  <KpiCard title="Conversão Média" value={`${convMedia.toFixed(2)}%`} icon={TrendingUp} delay={150} extra={hasPrevPerf ? <PerfDelta cur={convMedia} prev={prevConvMedia} /> : undefined} />
                 </div>
 
                 {/* Filter by Conta */}
@@ -1652,7 +1687,7 @@ export function AtualizarDadosPage() {
                       </select>
                     </div>
                   )}
-                  <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
+                  <span className="text-xs text-muted-foreground">{filtered.length} anúncios {hasPrevPerf && `| vs ${periodoAnterior}`}</span>
                 </div>
 
                 {/* Data Table */}
@@ -1674,7 +1709,9 @@ export function AtualizarDadosPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {perfPaginated.map((item, idx) => (
+                        {perfPaginated.map((item, idx) => {
+                          const prev = prevPerfMap.get(item.idAnuncio);
+                          return (
                           <tr key={`${item.idAnuncio}-${idx}`} className="border-t border-border hover:bg-muted/30 transition-colors">
                             <td className="px-3 py-2">
                               {item.link ? (
@@ -1684,18 +1721,26 @@ export function AtualizarDadosPage() {
                             <td className="px-3 py-2 font-mono">{item.sku}</td>
                             <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
                             <td className="px-3 py-2 text-right">{formatBRL(item.preco)}</td>
-                            <td className="px-3 py-2 text-right font-medium">{item.visitas.toLocaleString('pt-BR')}</td>
-                            <td className="px-3 py-2 text-right font-medium text-[hsl(var(--vix-success))]">{item.vendas.toLocaleString('pt-BR')}</td>
+                            <td className="px-3 py-2 text-right font-medium">
+                              {item.visitas.toLocaleString('pt-BR')}
+                              {prev && <PerfDelta cur={item.visitas} prev={prev.visitas} />}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-[hsl(var(--vix-success))]">
+                              {item.vendas.toLocaleString('pt-BR')}
+                              {prev && <PerfDelta cur={item.vendas} prev={prev.vendas} />}
+                            </td>
                             <td className="px-3 py-2 text-right text-[hsl(var(--vix-danger))]">{item.canceladas}</td>
                             <td className="px-3 py-2 text-right">
                               <span className={`font-medium ${item.conversao >= 5 ? 'text-[hsl(var(--vix-success))]' : item.conversao >= 2 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]'}`}>
                                 {item.conversao.toFixed(2)}%
                               </span>
+                              {prev && <PerfDelta cur={item.conversao} prev={prev.conversao} />}
                             </td>
                             <td className="px-3 py-2">{item.conta}</td>
                             <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{item.dataRef}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
