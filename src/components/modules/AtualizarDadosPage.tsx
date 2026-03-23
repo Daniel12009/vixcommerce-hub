@@ -790,6 +790,8 @@ export function AtualizarDadosPage() {
                           <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="estoque">📦 Estoque</SelectItem>
+                            <SelectItem value="estoque-full">📦 Estoque Full (ML)</SelectItem>
+                            <SelectItem value="estoque-tiny">🏠 Estoque Tiny (Local)</SelectItem>
                             <SelectItem value="financeiro">💰 Financeiro</SelectItem>
                             <SelectItem value="vendas">🛒 Vendas / Pedidos</SelectItem>
                             <SelectItem value="performance">📊 Performance Anúncios</SelectItem>
