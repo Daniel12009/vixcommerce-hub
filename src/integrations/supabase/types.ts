@@ -116,6 +116,45 @@ export type Database = {
         }
         Relationships: []
       }
+      ml_accounts: {
+        Row: {
+          access_token: string
+          ativo: boolean
+          client_id: string
+          client_secret: string
+          created_at: string
+          id: string
+          nome: string
+          refresh_token: string
+          seller_id: string | null
+          token_expires_at: string | null
+        }
+        Insert: {
+          access_token?: string
+          ativo?: boolean
+          client_id?: string
+          client_secret?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          refresh_token?: string
+          seller_id?: string | null
+          token_expires_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          ativo?: boolean
+          client_id?: string
+          client_secret?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          refresh_token?: string
+          seller_id?: string | null
+          token_expires_at?: string | null
+        }
+        Relationships: []
+      }
       performance_items: {
         Row: {
           canceladas: number
