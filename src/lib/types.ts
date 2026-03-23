@@ -45,6 +45,24 @@ export interface StockItem {
   statusCobertura: 'green' | 'yellow' | 'red';
 }
 
+export interface EstoqueFullItem {
+  data: string;
+  conta: string;
+  sku: string;
+  tamanho: string;
+  statusAnuncio: string;
+  entradaPendente: number;
+  emTransferencia: number;
+  devolvidasComprador: number;
+  aptasParaVenda: number;
+  unidadesOcupamEspaco: number;
+}
+
+export interface EstoqueTinyItem {
+  sku: string;
+  quantidade: number;
+}
+
 export interface FinancialItem {
   skuPrincipal: string;
   nome: string;

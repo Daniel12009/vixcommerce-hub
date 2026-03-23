@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'financeiro' | 'vendas' | 'performance' | 'ads';
+export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads';
 
 export interface SheetConfig {
   id: string;
@@ -93,6 +93,22 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'cliques', label: 'Cliques' },
     { key: 'impressoes', label: 'Impressões' },
     { key: 'ultAtualizacao', label: 'Ult. Atualização' },
+  ],
+  'estoque-full': [
+    { key: 'data', label: 'Data' },
+    { key: 'conta', label: 'Conta', obrigatorio: true },
+    { key: 'sku', label: 'SKU', obrigatorio: true },
+    { key: 'tamanho', label: 'Tamanho' },
+    { key: 'statusAnuncio', label: 'Status do anúncio' },
+    { key: 'entradaPendente', label: 'Entrada pendente' },
+    { key: 'emTransferencia', label: 'Em transferência' },
+    { key: 'devolvidasComprador', label: 'Devolvidas pelo comprador' },
+    { key: 'aptasParaVenda', label: 'Aptas para venda', obrigatorio: true },
+    { key: 'unidadesOcupamEspaco', label: 'Unidades que ocupam espaço em Full' },
+  ],
+  'estoque-tiny': [
+    { key: 'sku', label: 'SKU', obrigatorio: true },
+    { key: 'quantidade', label: 'Quantidade (UND)', obrigatorio: true },
   ],
 };
 

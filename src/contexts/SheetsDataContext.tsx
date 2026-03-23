@@ -1,18 +1,24 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { StockItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem } from '@/lib/types';
+import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem } from '@/lib/types';
 
 interface SheetsData {
   estoqueItems: StockItem[] | null;
+  estoqueFullItems: EstoqueFullItem[] | null;
+  estoqueTinyItems: EstoqueTinyItem[] | null;
   financeiroItems: FinancialItem[] | null;
   vendasItems: VendaItem[] | null;
   performanceItems: PerformanceItem[] | null;
   adsItems: AdsImportItem[] | null;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
+  setEstoqueFullFromSheet: (rows: Record<string, string>[]) => void;
+  setEstoqueTinyFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
   setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   setAdsFromSheet: (rows: Record<string, string>[]) => void;
   clearEstoque: () => void;
+  clearEstoqueFull: () => void;
+  clearEstoqueTiny: () => void;
   clearFinanceiro: () => void;
   clearVendas: () => void;
   clearPerformance: () => void;
@@ -36,6 +42,8 @@ function num(v: string | undefined): number {
 
 export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [estoqueItems, setEstoqueItems] = useState<StockItem[] | null>(null);
+  const [estoqueFullItems, setEstoqueFullItems] = useState<EstoqueFullItem[] | null>(null);
+  const [estoqueTinyItems, setEstoqueTinyItems] = useState<EstoqueTinyItem[] | null>(null);
   const [financeiroItems, setFinanceiroItems] = useState<FinancialItem[] | null>(null);
   const [vendasItems, setVendasItems] = useState<VendaItem[] | null>(null);
   const [performanceItems, setPerformanceItems] = useState<PerformanceItem[] | null>(null);
@@ -69,6 +77,34 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         return Object.assign({}, r, baseItem);
       });
     setEstoqueItems(items);
+  }, []);
+
+  const setEstoqueFullFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: EstoqueFullItem[] = rows
+      .filter(r => r.sku)
+      .map(r => ({
+        data: r.data || '',
+        conta: r.conta || '',
+        sku: r.sku || '',
+        tamanho: r.tamanho || '',
+        statusAnuncio: r.statusAnuncio || '',
+        entradaPendente: num(r.entradaPendente),
+        emTransferencia: num(r.emTransferencia),
+        devolvidasComprador: num(r.devolvidasComprador),
+        aptasParaVenda: num(r.aptasParaVenda),
+        unidadesOcupamEspaco: num(r.unidadesOcupamEspaco),
+      }));
+    setEstoqueFullItems(items);
+  }, []);
+
+  const setEstoqueTinyFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: EstoqueTinyItem[] = rows
+      .filter(r => r.sku)
+      .map(r => ({
+        sku: r.sku || '',
+        quantidade: num(r.quantidade),
+      }));
+    setEstoqueTinyItems(items);
   }, []);
 
   const setFinanceiroFromSheet = useCallback((rows: Record<string, string>[]) => {
@@ -192,16 +228,22 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   return (
     <SheetsDataContext.Provider value={{
       estoqueItems,
+      estoqueFullItems,
+      estoqueTinyItems,
       financeiroItems,
       vendasItems,
       performanceItems,
       adsItems,
       setEstoqueFromSheet,
+      setEstoqueFullFromSheet,
+      setEstoqueTinyFromSheet,
       setFinanceiroFromSheet,
       setVendasFromSheet,
       setPerformanceFromSheet,
       setAdsFromSheet,
       clearEstoque: () => setEstoqueItems(null),
+      clearEstoqueFull: () => setEstoqueFullItems(null),
+      clearEstoqueTiny: () => setEstoqueTinyItems(null),
       clearFinanceiro: () => setFinanceiroItems(null),
       clearVendas: () => setVendasItems(null),
       clearPerformance: () => setPerformanceItems(null),

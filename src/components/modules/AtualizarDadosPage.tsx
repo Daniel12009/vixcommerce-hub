@@ -42,6 +42,8 @@ const plataformaOptions = ['Mercado Livre', 'Tiny', 'Shopee', 'Amazon', 'Magalu'
 
 const moduloLabels: Record<ModuloDestino, string> = {
   estoque: 'Estoque',
+  'estoque-full': 'Estoque Full (ML)',
+  'estoque-tiny': 'Estoque Tiny (Local)',
   financeiro: 'Financeiro',
   vendas: 'Vendas / Pedidos',
   performance: 'Performance Anúncios',
@@ -50,6 +52,8 @@ const moduloLabels: Record<ModuloDestino, string> = {
 
 const moduloColors: Record<ModuloDestino, string> = {
   estoque: 'bg-[hsl(var(--vix-info)/0.1)] text-[hsl(var(--vix-info))]',
+  'estoque-full': 'bg-[hsl(var(--vix-info)/0.1)] text-[hsl(var(--vix-info))]',
+  'estoque-tiny': 'bg-[hsl(200,80%,50%,0.1)] text-[hsl(200,80%,50%)]',
   financeiro: 'bg-[hsl(var(--vix-success)/0.1)] text-[hsl(var(--vix-success))]',
   vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
   performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
@@ -207,6 +211,16 @@ export function AtualizarDadosPage() {
     loadFromCloud('performance_data').then((data: any) => {
       if (data && Array.isArray(data) && data.length > 0 && (!sheetsData.performanceItems || sheetsData.performanceItems.length === 0)) {
         sheetsData.setPerformanceFromSheet(data);
+      }
+    });
+    loadFromCloud('estoque_full_data').then((data: any) => {
+      if (data && Array.isArray(data) && data.length > 0 && (!sheetsData.estoqueFullItems || sheetsData.estoqueFullItems.length === 0)) {
+        sheetsData.setEstoqueFullFromSheet(data);
+      }
+    });
+    loadFromCloud('estoque_tiny_data').then((data: any) => {
+      if (data && Array.isArray(data) && data.length > 0 && (!sheetsData.estoqueTinyItems || sheetsData.estoqueTinyItems.length === 0)) {
+        sheetsData.setEstoqueTinyFromSheet(data);
       }
     });
   }, []);
@@ -379,6 +393,12 @@ export function AtualizarDadosPage() {
       if (config.moduloDestino === 'estoque') {
         sheetsData.setEstoqueFromSheet(parsed);
         saveToCloud('estoque_data', parsed);
+      } else if (config.moduloDestino === 'estoque-full') {
+        sheetsData.setEstoqueFullFromSheet(parsed);
+        saveToCloud('estoque_full_data', parsed);
+      } else if (config.moduloDestino === 'estoque-tiny') {
+        sheetsData.setEstoqueTinyFromSheet(parsed);
+        saveToCloud('estoque_tiny_data', parsed);
       } else if (config.moduloDestino === 'financeiro') {
         sheetsData.setFinanceiroFromSheet(parsed);
         saveToCloud('financeiro_data', parsed);
