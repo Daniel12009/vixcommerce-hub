@@ -1426,53 +1426,89 @@ export function AtualizarDadosPage() {
             const perfItems = sheetsData.performanceItems || [];
             const contasUnicas = getContasNormalizadas(perfItems.map(p => p.conta).filter(Boolean));
 
-            // Sort periods by end date to find the most recent
-            const parseEndDate = (ref: string) => {
+            // Parse dataRef "DD/MM/YYYY a DD/MM/YYYY" or "DD/MM/YYYY" to Date
+            const parsePerfDate = (ref: string): Date | null => {
               if (!ref) return null;
               const parts = ref.split(' a ');
-              const dateStr = (parts[1] || parts[0] || '').trim();
+              const dateStr = (parts[0] || '').trim();
               const m = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
               if (!m) return null;
               return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
             };
 
-            // Get unique periods sorted by end date (most recent last)
-            const periodosUnicos = [...new Set(perfItems.map(p => p.dataRef).filter(Boolean))]
-              .sort((a, b) => {
-                const da = parseEndDate(a);
-                const db = parseEndDate(b);
-                if (!da || !db) return 0;
-                return da.getTime() - db.getTime();
+            // Compute date ranges based on global filterDias
+            const today = new Date();
+            today.setHours(23, 59, 59, 999);
+            const curEnd = new Date(today);
+            const curStart = new Date(today);
+            curStart.setDate(curStart.getDate() - filterDias + 1);
+            curStart.setHours(0, 0, 0, 0);
+            const prevEnd = new Date(curStart);
+            prevEnd.setDate(prevEnd.getDate() - 1);
+            prevEnd.setHours(23, 59, 59, 999);
+            const prevStart = new Date(prevEnd);
+            prevStart.setDate(prevStart.getDate() - filterDias + 1);
+            prevStart.setHours(0, 0, 0, 0);
+
+            const fmtDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+            const curLabel = `${fmtDate(curStart)} a ${fmtDate(curEnd)}`;
+            const prevLabel = `${fmtDate(prevStart)} a ${fmtDate(prevEnd)}`;
+
+            // Tag each item with its parsed date
+            const itemsWithDate = perfItems.map(p => ({ ...p, _date: parsePerfDate(p.dataRef) })).filter(p => p._date !== null);
+
+            // Filter by current period
+            const curPeriodItems = itemsWithDate.filter(p => p._date! >= curStart && p._date! <= curEnd);
+            const prevPeriodItems = itemsWithDate.filter(p => p._date! >= prevStart && p._date! <= prevEnd);
+
+            // Filter by conta
+            const curByConta = perfFilterConta === 'all' ? curPeriodItems : curPeriodItems.filter(p => normalizeConta(p.conta) === perfFilterConta);
+            const prevByConta = perfFilterConta === 'all' ? prevPeriodItems : prevPeriodItems.filter(p => normalizeConta(p.conta) === perfFilterConta);
+
+            // Aggregate by idAnuncio: sum visitas/vendas/canceladas, avg conversao, keep latest preco/titulo/sku/link/conta
+            type AggItem = { idAnuncio: string; sku: string; titulo: string; preco: number; visitas: number; vendas: number; canceladas: number; conversao: number; link: string; conta: string; dataRef: string; plataforma: string };
+            const aggregate = (items: typeof curByConta): AggItem[] => {
+              const map = new Map<string, { sum: AggItem; count: number }>();
+              items.forEach(p => {
+                const existing = map.get(p.idAnuncio);
+                if (existing) {
+                  existing.sum.visitas += p.visitas;
+                  existing.sum.vendas += p.vendas;
+                  existing.sum.canceladas += p.canceladas;
+                  existing.sum.conversao += p.conversao;
+                  existing.count++;
+                  // Keep latest preco
+                  if (p._date! > parsePerfDate(existing.sum.dataRef)!) {
+                    existing.sum.preco = p.preco;
+                    existing.sum.dataRef = p.dataRef;
+                  }
+                } else {
+                  map.set(p.idAnuncio, {
+                    sum: { idAnuncio: p.idAnuncio, sku: p.sku, titulo: p.titulo, preco: p.preco, visitas: p.visitas, vendas: p.vendas, canceladas: p.canceladas, conversao: p.conversao, link: p.link, conta: p.conta, dataRef: p.dataRef, plataforma: p.plataforma },
+                    count: 1,
+                  });
+                }
               });
-            const periodoMaisRecente = periodosUnicos.length > 0 ? periodosUnicos[periodosUnicos.length - 1] : '';
-            const periodoAnterior = periodosUnicos.length > 1 ? periodosUnicos[periodosUnicos.length - 2] : '';
+              // Finalize conversao as average
+              return Array.from(map.values()).map(({ sum, count }) => {
+                const totalVisitas = sum.visitas;
+                const totalVendas = sum.vendas;
+                return { ...sum, conversao: totalVisitas > 0 ? (totalVendas / totalVisitas) * 100 : 0 };
+              });
+            };
 
-            // Filter by period: '7' = most recent only, 'custom' = user picks
-            let filteredByPeriodo = perfItems;
-            if (perfFilterPeriodo === '7') {
-              filteredByPeriodo = periodoMaisRecente ? perfItems.filter(p => p.dataRef === periodoMaisRecente) : perfItems;
-            } else if (perfFilterPeriodo === 'custom') {
-              filteredByPeriodo = perfSelectedPeriodo === 'all' ? perfItems : perfItems.filter(p => p.dataRef === perfSelectedPeriodo);
-            }
-
-            const filteredByConta = perfFilterConta === 'all' ? filteredByPeriodo : filteredByPeriodo.filter(p => normalizeConta(p.conta) === perfFilterConta);
-
-            // Previous period data (for comparison arrows)
-            const prevPerfItems = periodoAnterior && perfFilterPeriodo === '7'
-              ? (perfFilterConta === 'all'
-                  ? perfItems.filter(p => p.dataRef === periodoAnterior)
-                  : perfItems.filter(p => p.dataRef === periodoAnterior && normalizeConta(p.conta) === perfFilterConta))
-              : [];
+            const curAgg = aggregate(curByConta);
+            const prevAgg = aggregate(prevByConta);
 
             // Build map: idAnuncio -> prev metrics
             const prevPerfMap = new Map<string, { visitas: number; vendas: number; canceladas: number; conversao: number; preco: number }>();
-            prevPerfItems.forEach(p => {
+            prevAgg.forEach(p => {
               prevPerfMap.set(p.idAnuncio, { visitas: p.visitas, vendas: p.vendas, canceladas: p.canceladas, conversao: p.conversao, preco: p.preco });
             });
-            const hasPrevPerf = prevPerfItems.length > 0;
+            const hasPrevPerf = prevAgg.length > 0;
 
             // Sort
-            const sorted = [...filteredByConta].sort((a, b) => {
+            const sorted = [...curAgg].sort((a, b) => {
               const fieldMap: Record<string, (i: any) => number> = {
                 visitas: i => i.visitas, vendas: i => i.vendas,
                 canceladas: i => i.canceladas, conversao: i => i.conversao,
@@ -1486,11 +1522,11 @@ export function AtualizarDadosPage() {
             const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
             const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
             const totalCanceladas = filtered.reduce((s, p) => s + p.canceladas, 0);
-            const convMedia = filtered.length > 0 ? filtered.reduce((s, p) => s + p.conversao, 0) / filtered.length : 0;
-            const prevTotalVisitas = prevPerfItems.reduce((s, p) => s + p.visitas, 0);
-            const prevTotalVendas = prevPerfItems.reduce((s, p) => s + p.vendas, 0);
-            const prevTotalCanc = prevPerfItems.reduce((s, p) => s + p.canceladas, 0);
-            const prevConvMedia = prevPerfItems.length > 0 ? prevPerfItems.reduce((s, p) => s + p.conversao, 0) / prevPerfItems.length : 0;
+            const convMedia = totalVisitas > 0 ? (totalVendas / totalVisitas) * 100 : 0;
+            const prevTotalVisitas = prevAgg.reduce((s, p) => s + p.visitas, 0);
+            const prevTotalVendas = prevAgg.reduce((s, p) => s + p.vendas, 0);
+            const prevTotalCanc = prevAgg.reduce((s, p) => s + p.canceladas, 0);
+            const prevConvMedia = (() => { const pv = prevAgg.reduce((s, p) => s + p.visitas, 0); return pv > 0 ? (prevTotalVendas / pv) * 100 : 0; })();
 
             // Delta helper
             const PerfDelta = ({ cur, prev, invert }: { cur: number; prev: number; invert?: boolean }) => {
@@ -1506,6 +1542,7 @@ export function AtualizarDadosPage() {
               const arrow = isUp ? '↑' : '↓';
               return <span className={`text-[10px] font-medium ${color} ml-1`} title={`Anterior: ${prev}`}>{arrow} {Math.abs(pct).toFixed(0)}%</span>;
             };
+
 
             const PERF_PER_PAGE = 50;
             const totalPerfPages = Math.ceil(filtered.length / PERF_PER_PAGE);
@@ -1545,25 +1582,12 @@ export function AtualizarDadosPage() {
                   <KpiCard title="Conversão Média" value={`${convMedia.toFixed(2)}%`} icon={TrendingUp} delay={150} extra={hasPrevPerf ? <PerfDelta cur={convMedia} prev={prevConvMedia} /> : undefined} />
                 </div>
 
-                {/* Filter by Conta */}
+                {/* Filters & Period Info */}
                 <div className="flex flex-wrap items-center gap-3 mb-4">
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs text-muted-foreground">Período:</label>
-                    <select value={perfFilterPeriodo} onChange={(e) => { setPerfFilterPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                      <option value="7">📅 Últimos 7 dias{periodoMaisRecente ? ` (${periodoMaisRecente})` : ''}</option>
-                      <option value="custom">🔍 Personalizado</option>
-                    </select>
+                    <span className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs font-medium">📅 {curLabel}</span>
                   </div>
-                  {perfFilterPeriodo === 'custom' && periodosUnicos.length > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <select value={perfSelectedPeriodo} onChange={(e) => { setPerfSelectedPeriodo(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
-                        <option value="all">Todos os períodos</option>
-                        {[...periodosUnicos].reverse().map(p => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
                   {contasUnicas.length > 0 && (
                     <div className="flex items-center gap-1.5">
                       <label className="text-xs text-muted-foreground">Conta:</label>
@@ -1575,7 +1599,8 @@ export function AtualizarDadosPage() {
                       </select>
                     </div>
                   )}
-                  <span className="text-xs text-muted-foreground">{filtered.length} anúncios {hasPrevPerf && `| vs ${periodoAnterior}`}</span>
+                  <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
+                  {hasPrevPerf && <span className="px-2 py-1 rounded-md bg-primary/10 text-primary text-[11px] font-medium">vs {prevLabel}</span>}
                 </div>
 
                 {/* Data Table */}
@@ -1628,7 +1653,7 @@ export function AtualizarDadosPage() {
                               {prev && <PerfDelta cur={item.conversao} prev={prev.conversao} />}
                             </td>
                             <td className="px-3 py-2">{item.conta}</td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{item.dataRef}</td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{curLabel}</td>
                           </tr>
                           );
                         })}
