@@ -1501,11 +1501,11 @@ export function AtualizarDadosPage() {
                   });
                 }
               });
-              // Finalize conversao as average
+              // Finalize conversao: (vendas - canceladas) / visitas
               return Array.from(map.values()).map(({ sum, count }) => {
                 const totalVisitas = sum.visitas;
-                const totalVendas = sum.vendas;
-                return { ...sum, conversao: totalVisitas > 0 ? (totalVendas / totalVisitas) * 100 : 0 };
+                const vendasLiquidas = Math.max(0, sum.vendas - sum.canceladas);
+                return { ...sum, conversao: totalVisitas > 0 ? (vendasLiquidas / totalVisitas) * 100 : 0 };
               });
             };
 
@@ -1534,11 +1534,11 @@ export function AtualizarDadosPage() {
             const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
             const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
             const totalCanceladas = filtered.reduce((s, p) => s + p.canceladas, 0);
-            const convMedia = totalVisitas > 0 ? (totalVendas / totalVisitas) * 100 : 0;
+            const convMedia = totalVisitas > 0 ? (Math.max(0, totalVendas - totalCanceladas) / totalVisitas) * 100 : 0;
             const prevTotalVisitas = prevAgg.reduce((s, p) => s + p.visitas, 0);
             const prevTotalVendas = prevAgg.reduce((s, p) => s + p.vendas, 0);
             const prevTotalCanc = prevAgg.reduce((s, p) => s + p.canceladas, 0);
-            const prevConvMedia = (() => { const pv = prevAgg.reduce((s, p) => s + p.visitas, 0); return pv > 0 ? (prevTotalVendas / pv) * 100 : 0; })();
+            const prevConvMedia = (() => { const pv = prevAgg.reduce((s, p) => s + p.visitas, 0); return pv > 0 ? (Math.max(0, prevTotalVendas - prevTotalCanc) / pv) * 100 : 0; })();
 
             // Delta helper
             const PerfDelta = ({ cur, prev, invert }: { cur: number; prev: number; invert?: boolean }) => {
