@@ -56,33 +56,36 @@ export function EnviosTab() {
   // Load envios from Supabase — returns fresh data
   const loadEnvios = useCallback(async (): Promise<Envio[]> => {
     try {
+      // Limit to 200 most recent envios to avoid overloading NANO plan
       const { data: enviosData, error: enviosErr } = await db
         .from('envios_full')
         .select('*')
         .order('data_inicio', { ascending: false })
-        .limit(5000);
+        .limit(200);
 
       if (enviosErr) throw enviosErr;
-
-      // Fetch ALL items — paginate to avoid Supabase 1000-row default limit
-      let allItems: any[] = [];
-      let from = 0;
-      const PAGE = 1000;
-      while (true) {
-        const { data: page, error: pageErr } = await db
-          .from('envios_full_items')
-          .select('*')
-          .range(from, from + PAGE - 1);
-        if (pageErr) throw pageErr;
-        if (!page || page.length === 0) break;
-        allItems = allItems.concat(page);
-        if (page.length < PAGE) break; // last page
-        from += PAGE;
+      if (!enviosData || enviosData.length === 0) {
+        setEnvios([]);
+        return [];
       }
 
-      console.log(`loadEnvios: ${(enviosData || []).length} envios, ${allItems.length} items loaded`);
+      // Only fetch items for the loaded envios (batched to avoid URL-length issues)
+      const envioIds = enviosData.map((e: any) => e.id);
+      let allItems: any[] = [];
+      const BATCH = 50;
+      for (let i = 0; i < envioIds.length; i += BATCH) {
+        const batch = envioIds.slice(i, i + BATCH);
+        const { data: items, error: itemsErr } = await db
+          .from('envios_full_items')
+          .select('*')
+          .in('envio_id', batch);
+        if (itemsErr) throw itemsErr;
+        if (items) allItems = allItems.concat(items);
+      }
 
-      const enviosWithItems: Envio[] = (enviosData || []).map((e: any) => ({
+      console.log(`loadEnvios: ${enviosData.length} envios, ${allItems.length} items loaded`);
+
+      const enviosWithItems: Envio[] = enviosData.map((e: any) => ({
         ...e,
         items: allItems.filter((i: any) => i.envio_id === e.id),
       }));
