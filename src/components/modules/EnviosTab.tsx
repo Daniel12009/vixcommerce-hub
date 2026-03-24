@@ -117,6 +117,53 @@ export function EnviosTab() {
   const coletados = envios.filter(e => e.coletado).length;
   const totalUnidades = envios.reduce((s, e) => s + e.items.reduce((ss, i) => ss + i.quantidade, 0), 0);
 
+  // Sync ALL envios to sheet (full rewrite) — keeps sheet as backup mirror
+  const syncAllToSheet = async (updatedEnvios?: Envio[]) => {
+    try {
+      const data = updatedEnvios || envios;
+      // Build rows in the same format as the original sheet
+      const header = ['FEITO', 'DATA DE INICIO', 'DATA DE COLETA', 'COLETADO', 'ENVIO', 'sku', 'UN', 'CAIXAS', 'CONTA', 'LOCAL'];
+      const rows: string[][] = [header];
+
+      for (const envio of data) {
+        if (envio.items.length === 0) {
+          rows.push([
+            envio.preparado ? 'TRUE' : 'FALSE',
+            envio.data_inicio || '', envio.data_coleta || '',
+            envio.coletado ? 'TRUE' : 'FALSE',
+            envio.envio_numero || '', '', '0',
+            String(envio.caixas || 0), envio.conta || '', envio.local || '',
+          ]);
+        } else {
+          envio.items.forEach((item, idx) => {
+            if (idx === 0) {
+              rows.push([
+                envio.preparado ? 'TRUE' : 'FALSE',
+                envio.data_inicio || '', envio.data_coleta || '',
+                envio.coletado ? 'TRUE' : 'FALSE',
+                envio.envio_numero || '', item.sku, String(item.quantidade),
+                String(envio.caixas || 0), envio.conta || '', envio.local || '',
+              ]);
+            } else {
+              rows.push(['', '', '', '', '', item.sku, String(item.quantidade), '', '', '']);
+            }
+          });
+        }
+      }
+
+      await supabase.functions.invoke('google-sheets', {
+        body: {
+          action: 'write',
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${SHEET_NAME}!A1:J${rows.length}`,
+          values: rows,
+        },
+      });
+    } catch (err) {
+      console.warn('Sheet sync failed (non-critical):', err);
+    }
+  };
+
   // Toggle checkbox
   const toggleField = async (envioId: string, field: 'preparado' | 'coletado', value: boolean) => {
     const update: any = { [field]: value };
@@ -127,7 +174,9 @@ export function EnviosTab() {
       console.error('Update error:', err);
       return;
     }
-    setEnvios(prev => prev.map(e => e.id === envioId ? { ...e, ...update } : e));
+    const updated = envios.map(e => e.id === envioId ? { ...e, ...update } : e);
+    setEnvios(updated);
+    syncAllToSheet(updated);
   };
 
   // Open edit modal
@@ -201,38 +250,15 @@ export function EnviosTab() {
           quantidade: i.quantidade,
         }));
         await db.from('envios_full_items').insert(itemInserts);
-
-        // Sync to sheet (append rows — only for new envios)
-        try {
-          const rows = validItems.map((item, idx) => {
-            if (idx === 0) {
-              return [
-                'FALSE', formEnvio.data_inicio, formEnvio.data_coleta, 'FALSE',
-                formEnvio.envio_numero, item.sku.trim().toUpperCase(), String(item.quantidade),
-                String(formEnvio.caixas), formEnvio.conta.trim().toUpperCase(), formEnvio.local.trim(),
-              ];
-            }
-            return ['', '', '', '', '', item.sku.trim().toUpperCase(), String(item.quantidade), '', '', ''];
-          });
-
-          await supabase.functions.invoke('google-sheets', {
-            body: {
-              action: 'append',
-              spreadsheetId: SPREADSHEET_ID,
-              range: `${SHEET_NAME}!A:J`,
-              values: rows,
-            },
-          });
-        } catch (sheetErr) {
-          console.warn('Sheet sync failed (non-critical):', sheetErr);
-        }
       }
 
       setShowModal(false);
       setEditingEnvio(null);
       setFormEnvio({ envio_numero: '', data_inicio: new Date().toISOString().split('T')[0], data_coleta: '', caixas: 0, conta: '', local: '' });
       setFormItems([{ sku: '', quantidade: 0 }]);
-      loadEnvios();
+      await loadEnvios();
+      // Sync after reload to get fresh data
+      setTimeout(() => syncAllToSheet(), 500);
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar envio');
     } finally {
