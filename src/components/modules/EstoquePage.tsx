@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Package, AlertTriangle, TrendingDown, Truck, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, FileSpreadsheet, Search, Loader2, RefreshCw } from 'lucide-react';
+import { Package, AlertTriangle, TrendingDown, Truck, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, FileSpreadsheet, Search } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatNumber } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
-import { supabase } from '@/integrations/supabase/client';
+import { EnviosTab } from './EnviosTab';
 
 interface MergedStockRow {
   sku: string;
@@ -34,10 +34,7 @@ export function EstoquePage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'ruptura' | 'critico' | 'ok'>('all');
   const [filterConta, setFilterConta] = useState<string>('all');
 
-  const [pendingShipments, setPendingShipments] = useState<any[]>([]);
-  const [loadingShipments, setLoadingShipments] = useState(false);
-  const [shipmentsError, setShipmentsError] = useState('');
-  const [shipmentsFilterConta, setShipmentsFilterConta] = useState<string>('all');
+
 
   const hasFullData = !!estoqueFullItems?.length;
   const hasTinyData = !!estoqueTinyItems?.length;
@@ -183,43 +180,6 @@ export function EstoquePage() {
     return sorted;
   }, [mergedData, searchTerm, filterStatus, filterConta, sortField, sortDir]);
 
-  const fetchPendingShipments = async () => {
-    setLoadingShipments(true);
-    setShipmentsError('');
-
-    try {
-      const { data, error } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'get_pending_shipments' },
-      });
-
-      if (error) {
-        const msg = typeof error === 'object' && error.message ? error.message : String(error);
-        throw new Error(msg);
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      setPendingShipments(data?.shipments || []);
-    } catch (err: any) {
-      console.error('Shipments fetch error:', err);
-      setShipmentsError(err.message || 'Erro ao buscar envios pendentes');
-    } finally {
-      setLoadingShipments(false);
-    }
-  };
-
-  const filteredShipments = useMemo(() => {
-    if (shipmentsFilterConta === 'all') return pendingShipments.filter(s => !s.error);
-    return pendingShipments.filter(s => !s.error && s.conta === shipmentsFilterConta);
-  }, [pendingShipments, shipmentsFilterConta]);
-
-  const shipmentContas = useMemo(() => {
-    const set = new Set<string>();
-    pendingShipments.forEach(s => { if (s.conta && !s.error) set.add(s.conta); });
-    return Array.from(set).sort();
-  }, [pendingShipments]);
 
   const transferItems = useMemo(() => {
     if (!estoqueFullItems) return [];
@@ -368,91 +328,7 @@ export function EstoquePage() {
 
         {/* ===== ABA 2: ENVIOS & COLETAS ===== */}
         <TabsContent value="envios">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={fetchPendingShipments} disabled={loadingShipments}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                {loadingShipments ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                {loadingShipments ? 'Buscando...' : 'Buscar Envios Pendentes'}
-              </button>
-
-              {shipmentContas.length > 0 && (
-                <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
-                  <span className="text-xs text-muted-foreground font-medium">Conta:</span>
-                  <select value={shipmentsFilterConta} onChange={e => setShipmentsFilterConta(e.target.value)} className="text-sm bg-transparent border-none outline-none font-semibold text-primary cursor-pointer">
-                    <option value="all">Todas</option>
-                    {shipmentContas.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-              )}
-
-              {pendingShipments.length > 0 && (
-                <span className="text-xs text-muted-foreground">{filteredShipments.length} envios pendentes</span>
-              )}
-            </div>
-
-            {shipmentsError && (
-              <div className="p-3 rounded-lg bg-[hsl(var(--vix-danger)/0.1)] border border-[hsl(var(--vix-danger)/0.2)] text-sm text-[hsl(var(--vix-danger))]">
-                {shipmentsError}
-              </div>
-            )}
-
-            {pendingShipments.length === 0 && !loadingShipments ? (
-              <div className="bg-card border border-border rounded-xl p-12 text-center animate-fade-in">
-                <Truck className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-40" />
-                <h3 className="text-lg font-semibold mb-2">Envios Pendentes</h3>
-                <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                  Clique em <strong>"Buscar Envios Pendentes"</strong> para ver os pedidos com status <code>ready_to_ship</code> de todas as contas ML.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Pedido</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">SKU</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Produto</th>
-                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Qtd</th>
-                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Valor</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Tipo Envio</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Data</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredShipments.map((s, idx) => (
-                        s.items?.map((item: any, iIdx: number) => (
-                          <tr key={`${s.orderId}-${iIdx}`} className="border-b border-border hover:bg-muted/30 transition-colors">
-                            <td className="px-3 py-2.5 text-xs text-muted-foreground">{s.conta}</td>
-                            <td className="px-3 py-2.5 font-mono text-xs text-primary">{s.orderId}</td>
-                            <td className="px-3 py-2.5 font-mono text-xs font-semibold">{item.sku || '—'}</td>
-                            <td className="px-3 py-2.5 text-xs text-foreground max-w-[300px] truncate">{item.title}</td>
-                            <td className="px-3 py-2.5 text-right text-foreground font-medium">{item.quantity}</td>
-                            <td className="px-3 py-2.5 text-right text-foreground">R$ {(item.unitPrice || 0).toFixed(2)}</td>
-                            <td className="px-3 py-2.5">
-                              {s.shipment?.logisticType && (
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  s.shipment.logisticType === 'fulfillment' ? 'bg-[hsl(var(--vix-info)/0.15)] text-[hsl(var(--vix-info))]' :
-                                  s.shipment.logisticType === 'cross_docking' ? 'bg-[hsl(var(--vix-warning)/0.15)] text-[hsl(var(--vix-warning))]' :
-                                  'bg-muted text-muted-foreground'
-                                }`}>{s.shipment.logisticType === 'fulfillment' ? 'Full' : s.shipment.logisticType === 'cross_docking' ? 'Coleta' : s.shipment.logisticType}</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2.5 text-xs text-muted-foreground">{s.dateCreated ? new Date(s.dateCreated).toLocaleDateString('pt-BR') : '—'}</td>
-                          </tr>
-                        ))
-                      ))}
-                      {filteredShipments.length === 0 && !loadingShipments && pendingShipments.length > 0 && (
-                        <tr><td colSpan={8} className="py-8 text-center text-muted-foreground text-sm">Nenhum envio encontrado para esta conta</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
+          <EnviosTab />
         </TabsContent>
 
         {/* ===== ABA 3: TRANSFERÊNCIAS ===== */}

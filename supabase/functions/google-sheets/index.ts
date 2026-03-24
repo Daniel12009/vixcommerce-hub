@@ -115,6 +115,35 @@ Deno.serve(async (req) => {
         throw new Error(`Sheets API info failed [${res.status}]: ${err}`);
       }
       result = await res.json();
+    } else if (action === 'append') {
+      const res = await fetch(
+        `${baseUrl}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ values }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Sheets API append failed [${res.status}]: ${err}`);
+      }
+      result = await res.json();
+    } else if (action === 'update_cell') {
+      // Update a specific cell (for checkboxes)
+      const res = await fetch(
+        `${baseUrl}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ values }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Sheets API update_cell failed [${res.status}]: ${err}`);
+      }
+      result = await res.json();
     } else {
       throw new Error(`Unknown action: ${action}`);
     }
