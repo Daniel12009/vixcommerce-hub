@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { LogIn, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -18,11 +18,16 @@ export function LoginPage() {
     }
     setError('');
     setLoading(true);
+
+    // Small delay for visual feedback (feels like validating)
+    await new Promise(r => setTimeout(r, 800));
+
     const result = await login(username.trim(), password);
     if (!result.success) {
       setError(result.error || 'Erro ao fazer login.');
+      setLoading(false);
     }
-    setLoading(false);
+    // If success, stay loading — splash screen will take over
   };
 
   return (
@@ -51,6 +56,7 @@ export function LoginPage() {
             background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 0 40px rgba(99, 102, 241, 0.4)',
+            animation: 'pulse-glow 2s ease-in-out infinite',
           }}>
             <span style={{ color: '#fff', fontWeight: 800, fontSize: 24 }}>VP</span>
           </div>
@@ -68,6 +74,9 @@ export function LoginPage() {
           backdropFilter: 'blur(20px)',
           border: '1px solid rgba(99, 102, 241, 0.2)',
           borderRadius: 16, padding: 32,
+          opacity: loading ? 0.85 : 1,
+          transition: 'opacity 0.3s',
+          pointerEvents: loading ? 'none' : 'auto',
         }}>
           <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 600, margin: '0 0 24px', textAlign: 'center' }}>
             Entrar no Painel
@@ -78,6 +87,7 @@ export function LoginPage() {
               display: 'flex', alignItems: 'center', gap: 8,
               background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
               borderRadius: 10, padding: '10px 14px', marginBottom: 20,
+              animation: 'shake 0.4s ease-in-out',
             }}>
               <AlertCircle style={{ width: 16, height: 16, color: '#ef4444', flexShrink: 0 }} />
               <span style={{ color: '#fca5a5', fontSize: 13 }}>{error}</span>
@@ -94,11 +104,13 @@ export function LoginPage() {
               onChange={e => setUsername(e.target.value.toUpperCase())}
               placeholder="Usuário"
               autoFocus
+              disabled={loading}
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: 10,
-                background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(99, 102, 241, 0.2)',
+                background: loading ? 'rgba(15, 23, 42, 0.3)' : 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(99, 102, 241, 0.2)',
                 color: '#fff', fontSize: 14, outline: 'none',
-                transition: 'border-color 0.2s',
+                transition: 'border-color 0.2s, background 0.3s',
                 boxSizing: 'border-box',
               }}
               onFocus={e => e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)'}
@@ -116,11 +128,13 @@ export function LoginPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Senha"
+                disabled={loading}
                 style={{
                   width: '100%', padding: '12px 44px 12px 14px', borderRadius: 10,
-                  background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(99, 102, 241, 0.2)',
+                  background: loading ? 'rgba(15, 23, 42, 0.3)' : 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(99, 102, 241, 0.2)',
                   color: '#fff', fontSize: 14, outline: 'none',
-                  transition: 'border-color 0.2s',
+                  transition: 'border-color 0.2s, background 0.3s',
                   boxSizing: 'border-box',
                 }}
                 onFocus={e => e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)'}
@@ -129,6 +143,7 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(p => !p)}
+                disabled={loading}
                 style={{
                   position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                   background: 'none', border: 'none', cursor: 'pointer', padding: 4,
@@ -147,18 +162,30 @@ export function LoginPage() {
             disabled={loading}
             style={{
               width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff', fontSize: 14, fontWeight: 600, cursor: loading ? 'wait' : 'pointer',
+              background: loading
+                ? 'linear-gradient(135deg, #4f46e5, #7c3aed)'
+                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: '#fff', fontSize: 14, fontWeight: 600, cursor: loading ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              opacity: loading ? 0.7 : 1,
-              transition: 'opacity 0.2s, transform 0.1s',
-              boxShadow: '0 4px 20px rgba(99, 102, 241, 0.3)',
+              transition: 'all 0.3s',
+              boxShadow: loading
+                ? '0 4px 30px rgba(99, 102, 241, 0.5)'
+                : '0 4px 20px rgba(99, 102, 241, 0.3)',
             }}
             onMouseDown={e => !loading && ((e.target as HTMLElement).style.transform = 'scale(0.98)')}
             onMouseUp={e => (e.target as HTMLElement).style.transform = 'scale(1)'}
           >
-            <LogIn style={{ width: 18, height: 18 }} />
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? (
+              <>
+                <Loader2 style={{ width: 18, height: 18, animation: 'spin 0.8s linear infinite' }} />
+                Validando...
+              </>
+            ) : (
+              <>
+                <LogIn style={{ width: 18, height: 18 }} />
+                Entrar
+              </>
+            )}
           </button>
         </form>
 
@@ -171,6 +198,14 @@ export function LoginPage() {
         @keyframes pulse-glow {
           0%, 100% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.4); }
           50% { box-shadow: 0 0 60px rgba(99, 102, 241, 0.6); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-6px); }
+          75% { transform: translateX(6px); }
         }
       `}</style>
     </div>
