@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { LoadingScreen } from '@/components/layout/LoadingScreen';
 import { LoginPage } from '@/components/auth/LoginPage';
@@ -18,14 +18,29 @@ function AppContent() {
   const [activeModule, setActiveModule] = useState<ModuleName>('dashboard');
   const { isLoaded } = useSheetsData();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [showSplash, setShowSplash] = useState(false);
+  const wasAuthenticated = useRef(false);
+
+  // Show splash screen briefly after login
+  useEffect(() => {
+    if (isAuthenticated && !wasAuthenticated.current) {
+      wasAuthenticated.current = true;
+      setShowSplash(true);
+      const timer = setTimeout(() => setShowSplash(false), 2500);
+      return () => clearTimeout(timer);
+    }
+    if (!isAuthenticated) {
+      wasAuthenticated.current = false;
+    }
+  }, [isAuthenticated]);
 
   // Show login page if not authenticated
   if (!authLoading && !isAuthenticated) {
     return <LoginPage />;
   }
 
-  // Show loading screen while auth is checking or data is loading
-  if (authLoading || !isLoaded) {
+  // Show loading screen with motivational phrases after login or during auth check
+  if (authLoading || showSplash || !isLoaded) {
     return <LoadingScreen />;
   }
 
