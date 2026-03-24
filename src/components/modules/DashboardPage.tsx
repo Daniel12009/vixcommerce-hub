@@ -53,17 +53,21 @@ const getPlatformLabel = (p: string) => {
     default: return p || 'Outros';
   }
 };
+// Module-level cache — survives component unmount/remount during navigation
+let _cachedOrders: DashOrder[] | null = null;
+let _cachedRefresh: string = '';
+let _refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 export function DashboardPage() {
-  const [orders, setOrders] = useState<DashOrder[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<string>('');
+  const [orders, setOrders] = useState<DashOrder[]>(_cachedOrders || []);
+  const [loading, setLoading] = useState(!_cachedOrders);
+  const [lastRefresh, setLastRefresh] = useState<string>(_cachedRefresh);
   const [error, setError] = useState<string | null>(null);
   const [filterPlataforma, setFilterPlataforma] = useState('all');
   const [filterCanal, setFilterCanal] = useState<CanalFilter>('all');
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
+  const fetchOrders = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     setError(null);
     try {
       const [mlResult, shopeeResult, tinyResult, mktResult] = await Promise.allSettled([
@@ -112,8 +116,12 @@ export function DashboardPage() {
         errors.push(`Marketplace: ${mktResult.reason}`);
       }
 
+      // Update state + module-level cache
       setOrders(allFetched);
-      setLastRefresh(new Date().toLocaleString('pt-BR'));
+      _cachedOrders = allFetched;
+      const refreshTime = new Date().toLocaleString('pt-BR');
+      setLastRefresh(refreshTime);
+      _cachedRefresh = refreshTime;
       if (errors.length > 0) console.warn('Account errors:', errors);
     } catch (err: any) {
       setError(err.message);
@@ -123,9 +131,18 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    // If we have cached data, just do a background refresh
+    if (_cachedOrders && _cachedOrders.length > 0) {
+      fetchOrders(true); // background refresh — no loading spinner
+    } else {
+      fetchOrders(false); // first load — show spinner
+    }
+    // Set up auto-refresh every 5 min (only if not already running)
+    if (_refreshInterval) clearInterval(_refreshInterval);
+    _refreshInterval = setInterval(() => fetchOrders(true), 5 * 60 * 1000);
+    return () => {
+      // Don't clear interval on unmount — let it keep refreshing in background
+    };
   }, [fetchOrders]);
 
   // Filters
@@ -230,7 +247,7 @@ export function DashboardPage() {
       {/* Status + Filters Bar */}
       <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-xl p-4 mb-6">
         <button
-          onClick={fetchOrders}
+          onClick={() => fetchOrders(false)}
           disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
