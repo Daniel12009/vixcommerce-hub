@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Upload, Truck, Loader2, Check, X, Search, Package, CheckCircle2, Clock, Trash2 } from 'lucide-react';
+import { Plus, Upload, Truck, Loader2, Check, X, Search, Package, CheckCircle2, Clock, Trash2, Pencil } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { KpiCard } from '@/components/shared/KpiCard';
 
@@ -34,6 +34,7 @@ export function EnviosTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [editingEnvio, setEditingEnvio] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [filterConta, setFilterConta] = useState('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pendente' | 'preparado' | 'coletado'>('all');
@@ -129,7 +130,30 @@ export function EnviosTab() {
     setEnvios(prev => prev.map(e => e.id === envioId ? { ...e, ...update } : e));
   };
 
-  // Save new envio
+  // Open edit modal
+  const openEdit = (envio: Envio) => {
+    setEditingEnvio(envio.id);
+    setFormEnvio({
+      envio_numero: envio.envio_numero || '',
+      data_inicio: envio.data_inicio || '',
+      data_coleta: envio.data_coleta || '',
+      caixas: envio.caixas || 0,
+      conta: envio.conta || '',
+      local: envio.local || '',
+    });
+    setFormItems(envio.items.length > 0 ? envio.items.map(i => ({ sku: i.sku, quantidade: i.quantidade })) : [{ sku: '', quantidade: 0 }]);
+    setShowModal(true);
+  };
+
+  // Open new modal
+  const openNew = () => {
+    setEditingEnvio(null);
+    setFormEnvio({ envio_numero: '', data_inicio: new Date().toISOString().split('T')[0], data_coleta: '', caixas: 0, conta: '', local: '' });
+    setFormItems([{ sku: '', quantidade: 0 }]);
+    setShowModal(true);
+  };
+
+  // Save (create or update) envio
   const saveEnvio = async () => {
     if (!formEnvio.envio_numero.trim()) return;
     const validItems = formItems.filter(i => i.sku.trim() && i.quantidade > 0);
@@ -137,53 +161,75 @@ export function EnviosTab() {
 
     setSaving(true);
     try {
-      const { data: newEnvio, error: envErr } = await db.from('envios_full').insert({
-        envio_numero: formEnvio.envio_numero.trim(),
-        data_inicio: formEnvio.data_inicio || null,
-        data_coleta: formEnvio.data_coleta || null,
-        caixas: formEnvio.caixas,
-        conta: formEnvio.conta.trim().toUpperCase(),
-        local: formEnvio.local.trim(),
-        preparado: false,
-        coletado: false,
-      }).select().single();
+      if (editingEnvio) {
+        // UPDATE existing envio
+        const { error: updErr } = await db.from('envios_full').update({
+          envio_numero: formEnvio.envio_numero.trim(),
+          data_inicio: formEnvio.data_inicio || null,
+          data_coleta: formEnvio.data_coleta || null,
+          caixas: formEnvio.caixas,
+          conta: formEnvio.conta.trim().toUpperCase(),
+          local: formEnvio.local.trim(),
+        }).eq('id', editingEnvio);
+        if (updErr) throw updErr;
 
-      if (envErr) throw envErr;
+        // Replace items: delete old, insert new
+        await db.from('envios_full_items').delete().eq('envio_id', editingEnvio);
+        const itemInserts = validItems.map(i => ({
+          envio_id: editingEnvio,
+          sku: i.sku.trim().toUpperCase(),
+          quantidade: i.quantidade,
+        }));
+        await db.from('envios_full_items').insert(itemInserts);
+      } else {
+        // CREATE new envio
+        const { data: newEnvio, error: envErr } = await db.from('envios_full').insert({
+          envio_numero: formEnvio.envio_numero.trim(),
+          data_inicio: formEnvio.data_inicio || null,
+          data_coleta: formEnvio.data_coleta || null,
+          caixas: formEnvio.caixas,
+          conta: formEnvio.conta.trim().toUpperCase(),
+          local: formEnvio.local.trim(),
+          preparado: false,
+          coletado: false,
+        }).select().single();
+        if (envErr) throw envErr;
 
-      const itemInserts = validItems.map(i => ({
-        envio_id: newEnvio.id,
-        sku: i.sku.trim().toUpperCase(),
-        quantidade: i.quantidade,
-      }));
-      const { error: itemsErr } = await db.from('envios_full_items').insert(itemInserts);
-      if (itemsErr) throw itemsErr;
+        const itemInserts = validItems.map(i => ({
+          envio_id: newEnvio.id,
+          sku: i.sku.trim().toUpperCase(),
+          quantidade: i.quantidade,
+        }));
+        await db.from('envios_full_items').insert(itemInserts);
 
-      // Sync to sheet (append rows — one per SKU like the original sheet)
-      try {
-        const rows = validItems.map((item, idx) => {
-          if (idx === 0) {
-            return [
-              'FALSE', formEnvio.data_inicio, formEnvio.data_coleta, 'FALSE',
-              formEnvio.envio_numero, item.sku.trim().toUpperCase(), String(item.quantidade),
-              String(formEnvio.caixas), formEnvio.conta.trim().toUpperCase(), formEnvio.local.trim(),
-            ];
-          }
-          return ['', '', '', '', '', item.sku.trim().toUpperCase(), String(item.quantidade), '', '', ''];
-        });
+        // Sync to sheet (append rows — only for new envios)
+        try {
+          const rows = validItems.map((item, idx) => {
+            if (idx === 0) {
+              return [
+                'FALSE', formEnvio.data_inicio, formEnvio.data_coleta, 'FALSE',
+                formEnvio.envio_numero, item.sku.trim().toUpperCase(), String(item.quantidade),
+                String(formEnvio.caixas), formEnvio.conta.trim().toUpperCase(), formEnvio.local.trim(),
+              ];
+            }
+            return ['', '', '', '', '', item.sku.trim().toUpperCase(), String(item.quantidade), '', '', ''];
+          });
 
-        await supabase.functions.invoke('google-sheets', {
-          body: {
-            action: 'append',
-            spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:J`,
-            values: rows,
-          },
-        });
-      } catch (sheetErr) {
-        console.warn('Sheet sync failed (non-critical):', sheetErr);
+          await supabase.functions.invoke('google-sheets', {
+            body: {
+              action: 'append',
+              spreadsheetId: SPREADSHEET_ID,
+              range: `${SHEET_NAME}!A:J`,
+              values: rows,
+            },
+          });
+        } catch (sheetErr) {
+          console.warn('Sheet sync failed (non-critical):', sheetErr);
+        }
       }
 
       setShowModal(false);
+      setEditingEnvio(null);
       setFormEnvio({ envio_numero: '', data_inicio: new Date().toISOString().split('T')[0], data_coleta: '', caixas: 0, conta: '', local: '' });
       setFormItems([{ sku: '', quantidade: 0 }]);
       loadEnvios();
@@ -333,7 +379,7 @@ export function EnviosTab() {
 
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => setShowModal(true)}
+        <button onClick={openNew}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity">
           <Plus className="w-4 h-4" /> Novo Envio
         </button>
@@ -430,7 +476,8 @@ export function EnviosTab() {
                           <td className="px-3 py-2 text-center" rowSpan={envio.items.length}>
                             <input type="checkbox" checked={envio.preparado}
                               onChange={e => toggleField(envio.id, 'preparado', e.target.checked)}
-                              className="w-4 h-4 rounded cursor-pointer accent-[hsl(var(--vix-info))]" title="Preparado" />
+                              disabled={envio.coletado}
+                              className={`w-4 h-4 rounded cursor-pointer accent-[hsl(var(--vix-info))] ${envio.coletado ? 'opacity-40 cursor-not-allowed' : ''}`} title="Preparado" />
                           </td>
                           <td className="px-3 py-2 text-xs text-foreground" rowSpan={envio.items.length}>{formatDateBR(envio.data_inicio)}</td>
                           <td className="px-3 py-2 text-xs text-foreground" rowSpan={envio.items.length}>{formatDateBR(envio.data_coleta)}</td>
@@ -452,9 +499,18 @@ export function EnviosTab() {
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground" rowSpan={envio.items.length}>{envio.local || '—'}</td>
                           <td className="px-3 py-2 text-center" rowSpan={envio.items.length}>
-                            <button onClick={() => deleteEnvio(envio.id)} className="p-1 rounded hover:bg-[hsl(var(--vix-danger)/0.1)] transition-colors" title="Excluir">
-                              <Trash2 className="w-3.5 h-3.5 text-[hsl(var(--vix-danger))]" />
-                            </button>
+                            <div className="flex items-center gap-1 justify-center">
+                              {!envio.coletado && (
+                                <button onClick={() => openEdit(envio)} className="p-1 rounded hover:bg-primary/10 transition-colors" title="Editar">
+                                  <Pencil className="w-3.5 h-3.5 text-primary" />
+                                </button>
+                              )}
+                              {!envio.coletado && (
+                                <button onClick={() => deleteEnvio(envio.id)} className="p-1 rounded hover:bg-[hsl(var(--vix-danger)/0.1)] transition-colors" title="Excluir">
+                                  <Trash2 className="w-3.5 h-3.5 text-[hsl(var(--vix-danger))]" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </>
                       ) : null}
@@ -495,7 +551,7 @@ export function EnviosTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-fade-in">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-lg font-semibold">Novo Envio Full</h3>
+              <h3 className="text-lg font-semibold">{editingEnvio ? 'Editar Envio' : 'Novo Envio Full'}</h3>
               <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-muted transition-colors">
                 <X className="w-5 h-5" />
               </button>
