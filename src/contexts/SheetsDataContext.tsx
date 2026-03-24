@@ -268,16 +268,18 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setDevolucaoItems(items);
   }, []);
   useEffect(() => {
+    const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
     const preloadAll = async () => {
       try {
+        // Race all loads against a 6-second timeout so loading screen never hangs
         const [vendas, perf, full, tiny, ads, devol] = await Promise.allSettled([
-          loadFromCloud<any[]>('vendas_data'),
-          loadFromCloud<any[]>('performance_data'),
-          loadFromCloud<any[]>('estoque_full_data'),
-          loadFromCloud<any[]>('estoque_tiny_data'),
-          loadFromCloud<any[]>('ads_data'),
-          loadFromCloud<any[]>('devolucao_data'),
-        ]);
+          Promise.race([loadFromCloud<any[]>('vendas_data'), timeout(6000)]),
+          Promise.race([loadFromCloud<any[]>('performance_data'), timeout(6000)]),
+          Promise.race([loadFromCloud<any[]>('estoque_full_data'), timeout(6000)]),
+          Promise.race([loadFromCloud<any[]>('estoque_tiny_data'), timeout(6000)]),
+          Promise.race([loadFromCloud<any[]>('ads_data'), timeout(6000)]),
+          Promise.race([loadFromCloud<any[]>('devolucao_data'), timeout(6000)]),
+        ]) as PromiseSettledResult<any[]>[];
 
         if (vendas.status === 'fulfilled' && vendas.value) {
           setVendasFromSheet(vendas.value);
