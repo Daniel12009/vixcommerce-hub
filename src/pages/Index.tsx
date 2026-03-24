@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { LoadingScreen } from '@/components/layout/LoadingScreen';
+import { LoginPage } from '@/components/auth/LoginPage';
 import { DashboardPage } from '@/components/modules/DashboardPage';
 import { EstoquePage } from '@/components/modules/EstoquePage';
 import { FinanceiroPage } from '@/components/modules/FinanceiroPage';
@@ -8,12 +9,25 @@ import { CadastroPage } from '@/components/modules/CadastroPage';
 import { MarketingPage } from '@/components/modules/MarketingPage';
 import { AtualizarDadosPage } from '@/components/modules/AtualizarDadosPage';
 import { DevolucaoPage } from '@/components/modules/DevolucaoPage';
+import { UserManagementPage } from '@/components/auth/UserManagementPage';
 import { SheetsDataProvider, useSheetsData } from '@/contexts/SheetsDataContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import type { ModuleName } from '@/lib/types';
 
 function AppContent() {
   const [activeModule, setActiveModule] = useState<ModuleName>('dashboard');
   const { isLoaded } = useSheetsData();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Show login page if not authenticated
+  if (!authLoading && !isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  // Show loading screen while auth is checking or data is loading
+  if (authLoading || !isLoaded) {
+    return <LoadingScreen />;
+  }
 
   const renderModule = () => {
     switch (activeModule) {
@@ -24,12 +38,9 @@ function AppContent() {
       case 'financeiro': return <FinanceiroPage />;
       case 'cadastro': return <CadastroPage />;
       case 'marketing': return <MarketingPage />;
+      case 'usuarios': return <UserManagementPage onBack={() => setActiveModule('dashboard')} />;
     }
   };
-
-  if (!isLoaded) {
-    return <LoadingScreen />;
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -43,9 +54,11 @@ function AppContent() {
 
 const Index = () => {
   return (
-    <SheetsDataProvider>
-      <AppContent />
-    </SheetsDataProvider>
+    <AuthProvider>
+      <SheetsDataProvider>
+        <AppContent />
+      </SheetsDataProvider>
+    </AuthProvider>
   );
 };
 

@@ -1,5 +1,6 @@
-import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings, RotateCcw } from 'lucide-react';
+import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings, RotateCcw, LogOut } from 'lucide-react';
 import type { ModuleName } from '@/lib/types';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AppSidebarProps {
   activeModule: ModuleName;
@@ -17,6 +18,12 @@ const modules = [
 ];
 
 export function AppSidebar({ activeModule, onModuleChange }: AppSidebarProps) {
+  const { user, logout } = useAuth();
+
+  const initials = user?.nome
+    ? user.nome.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : user?.username?.slice(0, 2) || 'U';
+
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
       {/* Logo */}
@@ -52,17 +59,34 @@ export function AppSidebar({ activeModule, onModuleChange }: AppSidebarProps) {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Footer - User info */}
       <div className="px-3 py-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-            <span className="text-sidebar-accent-foreground text-xs font-semibold">R</span>
+            <span className="text-sidebar-accent-foreground text-xs font-semibold">{initials}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sidebar-primary-foreground text-sm font-medium truncate">Usuário ROOT</p>
-            <p className="text-sidebar-foreground text-xs opacity-60">Setor</p>
+            <p className="text-sidebar-primary-foreground text-sm font-medium truncate">{user?.nome || user?.username || 'Usuário'}</p>
+            <p className="text-sidebar-foreground text-xs opacity-60">{user?.setor || 'Sem setor'}</p>
           </div>
-          <Settings className="w-4 h-4 text-sidebar-foreground opacity-40" />
+          <div className="flex items-center gap-1">
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => onModuleChange('usuarios')}
+                className="p-1 rounded hover:bg-sidebar-accent transition-colors"
+                title="Gerenciar Usuários"
+              >
+                <Settings className="w-4 h-4 text-sidebar-foreground opacity-60 hover:opacity-100 transition-opacity" />
+              </button>
+            )}
+            <button
+              onClick={logout}
+              className="p-1 rounded hover:bg-sidebar-accent transition-colors"
+              title="Sair"
+            >
+              <LogOut className="w-4 h-4 text-sidebar-foreground opacity-40 hover:opacity-100 transition-opacity" />
+            </button>
+          </div>
         </div>
       </div>
     </aside>
