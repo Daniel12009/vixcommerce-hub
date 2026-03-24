@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { RotateCcw, DollarSign, Package, AlertTriangle, CheckCircle2, TrendingDown, Filter, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { RotateCcw, DollarSign, Package, AlertTriangle, CheckCircle2, TrendingDown, Filter, Search, ChevronDown, ChevronUp, CalendarDays } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
@@ -31,6 +31,9 @@ export function DevolucaoPage() {
   const [sortCol, setSortCol] = useState<string>('dataPlanilha');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [periodDays, setPeriodDays] = useState<number | 'custom'>(30);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const items = devolucaoItems || [];
 
@@ -45,6 +48,36 @@ export function DevolucaoPage() {
     if (filterStatus !== 'all') result = result.filter(i => i.statusDevolucao === filterStatus);
     if (filterSetor !== 'all') result = result.filter(i => i.setor === filterSetor);
     if (filterSituacao !== 'all') result = result.filter(i => i.situacaoMercadoria === filterSituacao);
+    // Date filter — parse dd/mm/yyyy
+    const parseDate = (str: string) => {
+      const parts = (str || '').split('/');
+      if (parts.length !== 3) return null;
+      return new Date(+parts[2], +parts[1] - 1, +parts[0]);
+    };
+    if (periodDays !== 'custom') {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - periodDays);
+      cutoff.setHours(0, 0, 0, 0);
+      result = result.filter(i => {
+        const d = parseDate(i.dataPlanilha);
+        return d ? d >= cutoff : true;
+      });
+    } else {
+      if (dateFrom) {
+        const from = new Date(dateFrom + 'T00:00:00');
+        result = result.filter(i => {
+          const d = parseDate(i.dataPlanilha);
+          return d ? d >= from : true;
+        });
+      }
+      if (dateTo) {
+        const to = new Date(dateTo + 'T23:59:59');
+        result = result.filter(i => {
+          const d = parseDate(i.dataPlanilha);
+          return d ? d <= to : true;
+        });
+      }
+    }
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(i =>
@@ -66,7 +99,7 @@ export function DevolucaoPage() {
       return sortDir === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
     });
     return result;
-  }, [items, filterStatus, filterSetor, filterSituacao, search, sortCol, sortDir]);
+  }, [items, filterStatus, filterSetor, filterSituacao, search, sortCol, sortDir, periodDays, dateFrom, dateTo]);
 
   // KPIs
   const totalDevolucoes = filtered.length;
@@ -208,6 +241,49 @@ export function DevolucaoPage() {
           <option value="all">Todas Situações</option>
           {situacaoOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        <div className="flex items-center gap-1.5 ml-2">
+          <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+          {([7, 15, 30] as const).map(d => (
+            <button
+              key={d}
+              onClick={() => setPeriodDays(d)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                periodDays === d
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+          <button
+            onClick={() => setPeriodDays('custom')}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              periodDays === 'custom'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Personalizado
+          </button>
+          {periodDays === 'custom' && (
+            <>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="px-2 py-1 rounded-lg bg-muted text-foreground text-xs border-none outline-none"
+              />
+              <span className="text-xs text-muted-foreground">até</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                className="px-2 py-1 rounded-lg bg-muted text-foreground text-xs border-none outline-none"
+              />
+            </>
+          )}
+        </div>
       </div>
 
       {activeTab === 'resumo' && (

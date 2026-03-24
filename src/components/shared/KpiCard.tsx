@@ -8,9 +8,11 @@ interface KpiCardProps {
   icon: LucideIcon;
   delay?: number;
   extra?: ReactNode;
+  subtitle?: string;
+  trend?: string;
 }
 
-export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra }: KpiCardProps) {
+export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra, subtitle }: KpiCardProps) {
   return (
     <div
       className="bg-card border border-border rounded-xl p-5 vix-card-hover animate-fade-in"
@@ -20,6 +22,9 @@ export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra }: 
         <div>
           <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">{title}</p>
           <p className="text-2xl font-bold text-foreground mt-2 animate-count-up">{value}</p>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+          )}
           {change !== undefined && (
             <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${change >= 0 ? 'text-vix-success' : 'text-vix-danger'}`}>
               {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
