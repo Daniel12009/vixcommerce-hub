@@ -59,19 +59,32 @@ export function EnviosTab() {
       const { data: enviosData, error: enviosErr } = await db
         .from('envios_full')
         .select('*')
-        .order('data_inicio', { ascending: false });
+        .order('data_inicio', { ascending: false })
+        .limit(5000);
 
       if (enviosErr) throw enviosErr;
 
-      const { data: itemsData, error: itemsErr } = await db
-        .from('envios_full_items')
-        .select('*');
+      // Fetch ALL items — paginate to avoid Supabase 1000-row default limit
+      let allItems: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data: page, error: pageErr } = await db
+          .from('envios_full_items')
+          .select('*')
+          .range(from, from + PAGE - 1);
+        if (pageErr) throw pageErr;
+        if (!page || page.length === 0) break;
+        allItems = allItems.concat(page);
+        if (page.length < PAGE) break; // last page
+        from += PAGE;
+      }
 
-      if (itemsErr) throw itemsErr;
+      console.log(`loadEnvios: ${(enviosData || []).length} envios, ${allItems.length} items loaded`);
 
       const enviosWithItems: Envio[] = (enviosData || []).map((e: any) => ({
         ...e,
-        items: (itemsData || []).filter((i: any) => i.envio_id === e.id),
+        items: allItems.filter((i: any) => i.envio_id === e.id),
       }));
 
       setEnvios(enviosWithItems);
