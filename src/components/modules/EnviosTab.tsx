@@ -378,8 +378,10 @@ export function EnviosTab() {
         }
       }
 
-      await loadEnvios();
+      const freshData = await loadEnvios();
       setError('');
+      // Sync organized copy to VIX_BACKUP
+      await syncAllToSheet(freshData);
     } catch (err: any) {
       setError(err.message || 'Erro ao importar planilha');
     } finally {
@@ -392,7 +394,9 @@ export function EnviosTab() {
     if (!confirm('Excluir este envio?')) return;
     await db.from('envios_full_items').delete().eq('envio_id', id);
     await db.from('envios_full').delete().eq('id', id);
-    setEnvios(prev => prev.filter(e => e.id !== id));
+    const updated = envios.filter(e => e.id !== id);
+    setEnvios(updated);
+    syncAllToSheet(updated);
   };
 
   // Parse date helper
