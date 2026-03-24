@@ -92,7 +92,7 @@ export function LoginPage() {
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value.toUpperCase())}
-              placeholder="Ex: ADMIN"
+              placeholder="Usuário"
               autoFocus
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: 10,
@@ -115,7 +115,7 @@ export function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Senha"
                 style={{
                   width: '100%', padding: '12px 44px 12px 14px', borderRadius: 10,
                   background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(99, 102, 241, 0.2)',
