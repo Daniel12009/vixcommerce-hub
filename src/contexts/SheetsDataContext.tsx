@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem } from '@/lib/types';
+import { loadFromCloud } from '@/lib/persistence';
 
 interface SheetsData {
   estoqueItems: StockItem[] | null;
@@ -9,6 +10,7 @@ interface SheetsData {
   vendasItems: VendaItem[] | null;
   performanceItems: PerformanceItem[] | null;
   adsItems: AdsImportItem[] | null;
+  isLoaded: boolean;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setEstoqueFullFromSheet: (rows: Record<string, string>[]) => void;
   setEstoqueTinyFromSheet: (rows: Record<string, string>[]) => void;
@@ -47,6 +49,8 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [financeiroItems, setFinanceiroItems] = useState<FinancialItem[] | null>(null);
   const [vendasItems, setVendasItems] = useState<VendaItem[] | null>(null);
   const [performanceItems, setPerformanceItems] = useState<PerformanceItem[] | null>(null);
+  const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   const setEstoqueFromSheet = useCallback((rows: Record<string, string>[]) => {
     const items: StockItem[] = rows
@@ -201,7 +205,6 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
   const setAdsFromSheet = useCallback((rows: Record<string, string>[]) => {
     const items: AdsImportItem[] = rows
       .filter(r => r.idAnuncio || r.investimento)
@@ -225,6 +228,42 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setAdsItems(items);
   }, []);
 
+  // Pre-load all data from Supabase on mount
+  useEffect(() => {
+    const preloadAll = async () => {
+      try {
+        const [vendas, perf, full, tiny, ads] = await Promise.allSettled([
+          loadFromCloud<any[]>('vendas_data'),
+          loadFromCloud<any[]>('performance_data'),
+          loadFromCloud<any[]>('estoque_full_data'),
+          loadFromCloud<any[]>('estoque_tiny_data'),
+          loadFromCloud<any[]>('ads_data'),
+        ]);
+
+        if (vendas.status === 'fulfilled' && vendas.value) {
+          setVendasFromSheet(vendas.value);
+        }
+        if (perf.status === 'fulfilled' && perf.value) {
+          setPerformanceFromSheet(perf.value);
+        }
+        if (full.status === 'fulfilled' && full.value) {
+          setEstoqueFullFromSheet(full.value);
+        }
+        if (tiny.status === 'fulfilled' && tiny.value) {
+          setEstoqueTinyFromSheet(tiny.value);
+        }
+        if (ads.status === 'fulfilled' && ads.value) {
+          setAdsFromSheet(ads.value);
+        }
+      } catch (err) {
+        console.warn('[Preload] Error loading cached data:', err);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    preloadAll();
+  }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet]);
+
   return (
     <SheetsDataContext.Provider value={{
       estoqueItems,
@@ -234,6 +273,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       vendasItems,
       performanceItems,
       adsItems,
+      isLoaded,
       setEstoqueFromSheet,
       setEstoqueFullFromSheet,
       setEstoqueTinyFromSheet,
@@ -259,3 +299,4 @@ export function useSheetsData() {
   if (!ctx) throw new Error('useSheetsData must be inside SheetsDataProvider');
   return ctx;
 }
+

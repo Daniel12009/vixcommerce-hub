@@ -1,4 +1,4 @@
-import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings } from 'lucide-react';
+import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings, RotateCcw } from 'lucide-react';
 import type { ModuleName } from '@/lib/types';
 
 interface AppSidebarProps {
@@ -10,6 +10,7 @@ const modules = [
   { id: 'dashboard' as ModuleName, label: 'Dashboard', icon: BarChart3 },
   { id: 'atualizar' as ModuleName, label: 'Performance', icon: Activity },
   { id: 'estoque' as ModuleName, label: 'Estoque', icon: Package },
+  { id: 'devolucao' as ModuleName, label: 'Devolução', icon: RotateCcw },
   { id: 'financeiro' as ModuleName, label: 'Financeiro', icon: DollarSign },
   { id: 'cadastro' as ModuleName, label: 'Ficha Técnica', icon: FileText },
   { id: 'marketing' as ModuleName, label: 'Ads / Marketing', icon: Megaphone },
