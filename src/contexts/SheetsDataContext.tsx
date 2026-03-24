@@ -268,7 +268,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setDevolucaoItems(items);
   }, []);
   useEffect(() => {
-    // ━━━ PHASE 0: Instant load from localStorage (synchronous — no loading screen) ━━━
+    // ━━━ PHASE 0: Instant load from localStorage (synchronous) ━━━
     const KEYS_MAP: [string, (d: any) => void][] = [
       ['vendas_data', setVendasFromSheet],
       ['performance_data', setPerformanceFromSheet],
@@ -278,20 +278,26 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       ['devolucao_data', setDevolucaoFromSheet],
     ];
 
+    let hasLocalData = false;
     for (const [key, setter] of KEYS_MAP) {
       try {
         const raw = localStorage.getItem(`vix_${key}`);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) setter(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setter(parsed);
+            hasLocalData = true;
+          }
         }
       } catch {}
     }
 
-    // Immediately mark as loaded — Dashboard appears instantly
-    setIsLoaded(true);
+    // If localStorage had data, skip loading screen immediately
+    if (hasLocalData) {
+      setIsLoaded(true);
+    }
 
-    // ━━━ PHASE 1 (background): Refresh from Supabase cloud cache ━━━
+    // ━━━ PHASE 1: Refresh from Supabase cloud cache ━━━
     const backgroundRefresh = async () => {
       try {
         const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
@@ -311,7 +317,10 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         if (ads.status === 'fulfilled' && ads.value) setAdsFromSheet(ads.value);
         if (devol.status === 'fulfilled' && devol.value) setDevolucaoFromSheet(devol.value);
       } catch (err) {
-        console.warn('[Preload] Supabase background refresh failed:', err);
+        console.warn('[Preload] Supabase refresh failed:', err);
+      } finally {
+        // If localStorage had no data, NOW mark as loaded (Supabase finished)
+        if (!hasLocalData) setIsLoaded(true);
       }
 
       // ━━━ PHASE 2 (background): Fresh import from Google Sheets ━━━
