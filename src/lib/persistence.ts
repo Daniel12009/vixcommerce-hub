@@ -14,8 +14,12 @@ import { supabase } from '@/integrations/supabase/client';
 
 export async function saveToCloud(key: string, data: any): Promise<boolean> {
   try {
-    // Save to localStorage immediately (fast local cache)
-    localStorage.setItem(`vix_${key}`, JSON.stringify(data));
+    // Save to localStorage (fast local cache) — ignore quota errors
+    try {
+      localStorage.setItem(`vix_${key}`, JSON.stringify(data));
+    } catch {
+      // localStorage quota exceeded — no problem, Supabase is the primary store
+    }
 
     // Save to Supabase (cross-browser persistence)
     const { error } = await (supabase as any)
@@ -46,8 +50,8 @@ export async function loadFromCloud<T>(key: string): Promise<T | null> {
       .maybeSingle();
 
     if (!error && data?.data_value) {
-      // Update localStorage cache
-      localStorage.setItem(`vix_${key}`, JSON.stringify(data.data_value));
+      // Update localStorage cache (ignore quota errors)
+      try { localStorage.setItem(`vix_${key}`, JSON.stringify(data.data_value)); } catch {}
       return data.data_value as T;
     }
 
