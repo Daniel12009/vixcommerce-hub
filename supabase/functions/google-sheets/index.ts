@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     const serviceAccountKey = JSON.parse(keyJson);
     const accessToken = await getAccessToken(serviceAccountKey);
 
-    const { action, spreadsheetId, range, values } = await req.json();
+    const { action, spreadsheetId, range, values, sheetTitle } = await req.json();
 
     const baseUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
     const headers = {
@@ -144,6 +144,29 @@ Deno.serve(async (req) => {
         throw new Error(`Sheets API update_cell failed [${res.status}]: ${err}`);
       }
       result = await res.json();
+    } else if (action === 'create_sheet') {
+      // Create a new sheet tab if it doesn't exist
+      const title = sheetTitle || 'VIX_BACKUP';
+      // First check if sheet already exists
+      const infoRes = await fetch(baseUrl, { headers });
+      const infoData = await infoRes.json();
+      const exists = infoData.sheets?.some((s: any) => s.properties?.title === title);
+      if (exists) {
+        result = { status: 'already_exists', title };
+      } else {
+        const res = await fetch(`${baseUrl}:batchUpdate`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            requests: [{ addSheet: { properties: { title } } }],
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`Sheets API create_sheet failed [${res.status}]: ${err}`);
+        }
+        result = await res.json();
+      }
     } else {
       throw new Error(`Unknown action: ${action}`);
     }

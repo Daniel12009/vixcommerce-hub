@@ -7,7 +7,8 @@ import { KpiCard } from '@/components/shared/KpiCard';
 const db = supabase as any;
 
 const SPREADSHEET_ID = '1kvT5gvCKuUZbWFY4T0ZHR1Y4kuIE2P6Ae5m2MfJV7u4';
-const SHEET_NAME = 'Página1';
+const SHEET_IMPORT = 'Página1';  // Tab to READ/import from (team's original)
+const SHEET_SYNC = 'VIX_BACKUP'; // Tab to WRITE to (app mirror, doesn't touch Página1)
 
 interface EnvioItem {
   id?: string;
@@ -127,9 +128,16 @@ export function EnviosTab() {
     return iso;
   }
 
-  // Sync ALL envios to sheet (full rewrite) — requires explicit data to avoid stale closure
+  // Sync ALL envios to sheet (full rewrite to VIX_BACKUP tab)
   const syncAllToSheet = async (freshData: Envio[]) => {
     try {
+      // Ensure the sync tab exists
+      try {
+        await supabase.functions.invoke('google-sheets', {
+          body: { action: 'create_sheet', spreadsheetId: SPREADSHEET_ID, sheetTitle: SHEET_SYNC },
+        });
+      } catch { /* ignore if already exists */ }
+
       const header = ['FEITO', 'DATA DE INICIO', 'DATA DE COLETA', 'COLETADO', 'ENVIO', 'sku', 'UN', 'CAIXAS', 'CONTA', 'LOCAL'];
       const rows: string[][] = [header];
 
@@ -169,7 +177,7 @@ export function EnviosTab() {
         body: {
           action: 'write',
           spreadsheetId: SPREADSHEET_ID,
-          range: `${SHEET_NAME}!A1:J${totalRows}`,
+          range: `${SHEET_SYNC}!A1:J${totalRows}`,
           values: rows,
         },
       });
@@ -289,7 +297,7 @@ export function EnviosTab() {
         body: {
           action: 'read',
           spreadsheetId: SPREADSHEET_ID,
-          range: `${SHEET_NAME}!A:J`,
+          range: `${SHEET_IMPORT}!A:J`,
         },
       });
       if (sheetErr) throw sheetErr;
