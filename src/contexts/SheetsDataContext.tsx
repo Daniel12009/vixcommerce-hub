@@ -268,10 +268,33 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setDevolucaoItems(items);
   }, []);
   useEffect(() => {
-    const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
-    const preloadAll = async () => {
+    // ━━━ PHASE 0: Instant load from localStorage (synchronous — no loading screen) ━━━
+    const KEYS_MAP: [string, (d: any) => void][] = [
+      ['vendas_data', setVendasFromSheet],
+      ['performance_data', setPerformanceFromSheet],
+      ['estoque_full_data', setEstoqueFullFromSheet],
+      ['estoque_tiny_data', setEstoqueTinyFromSheet],
+      ['ads_data', setAdsFromSheet],
+      ['devolucao_data', setDevolucaoFromSheet],
+    ];
+
+    for (const [key, setter] of KEYS_MAP) {
       try {
-        // ━━━ PHASE 1: Load cached data from Supabase (fast, controls loading screen) ━━━
+        const raw = localStorage.getItem(`vix_${key}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) setter(parsed);
+        }
+      } catch {}
+    }
+
+    // Immediately mark as loaded — Dashboard appears instantly
+    setIsLoaded(true);
+
+    // ━━━ PHASE 1 (background): Refresh from Supabase cloud cache ━━━
+    const backgroundRefresh = async () => {
+      try {
+        const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
         const [vendas, perf, full, tiny, ads, devol] = await Promise.allSettled([
           Promise.race([loadFromCloud<any[]>('vendas_data'), timeout(6000)]),
           Promise.race([loadFromCloud<any[]>('performance_data'), timeout(6000)]),
@@ -288,12 +311,10 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         if (ads.status === 'fulfilled' && ads.value) setAdsFromSheet(ads.value);
         if (devol.status === 'fulfilled' && devol.value) setDevolucaoFromSheet(devol.value);
       } catch (err) {
-        console.warn('[Preload] Error loading cached data:', err);
-      } finally {
-        setIsLoaded(true);
+        console.warn('[Preload] Supabase background refresh failed:', err);
       }
 
-      // ━━━ PHASE 2: Fresh import from Google Sheets (background, updates data silently) ━━━
+      // ━━━ PHASE 2 (background): Fresh import from Google Sheets ━━━
       try {
         const { autoImportAllSheets } = await import('@/lib/sheets-store');
         const { saveToCloud, loadFromCloud: loadCloud } = await import('@/lib/persistence');
@@ -321,7 +342,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         console.warn('[AutoImport] Background import failed (cached data still available):', err);
       }
     };
-    preloadAll();
+    backgroundRefresh();
   }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet]);
 
   return (
