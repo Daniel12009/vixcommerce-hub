@@ -211,3 +211,111 @@ export function parseSheetRowsWithFixos(
   }
   return parsed;
 }
+
+// Default devolução config (seeded if not present)
+const DEVOLUCAO_DEFAULT: SheetConfig = {
+  id: 'devolucao-default',
+  url: 'https://docs.google.com/spreadsheets/d/10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ/edit',
+  nome: 'Devoluções',
+  spreadsheetId: '10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ',
+  abaNome: 'TODOS',
+  moduloDestino: 'devolucao',
+  linhaInicial: 1,
+  mapeamento: {
+    dataPlanilha: 'DATA DA PLANILHA',
+    plataforma: 'PLATAFORMA',
+    dataAprovacao: 'data Aprovação',
+    valorReembolso: 'Valor do Reembolso',
+    pedido: 'PEDIDO',
+    anuncio: 'ANÚNCIO',
+    skuProduto: 'SKU PRODUTO',
+    statusDevolucao: 'STATUS DA DEVOLUÇÃO',
+    acaoAposDevolucao: 'AÇÃO APÓS DEVOLUÇÃO (SE NECESSÁRIO)',
+    devolucaoGeradaPor: 'DEVOLUÇÃO GERADA POR (PLATAFORMA OU MELHOR ENVIO)',
+    rastreioCorreios: 'RASTREIO CORREIOS',
+    motivo: 'MOTIVO',
+    detalhesMotivo: 'DETALHES DO MOTIVO',
+    novoMotivo: 'NOVO MOTIVO',
+    detalhe: 'DETALHE',
+    setor: 'SETOR',
+    custoDevolucao: 'CUSTO DEVOLUÇÃO',
+    comissaoNaoDevolvida: 'COMISSÃO NÃO DEVOLVIDA',
+    custo: 'CUSTO',
+    quantidade: 'QTDE',
+    situacaoMercadoria: 'SITUAÇÃO DA MERCADORIA',
+    totalCustoMercadoria: 'TOTAL CUSTO MERCADORIA',
+    formaReembolso: 'FORMA DE REEMBOLSO',
+    dataReembolso: 'DATA REEMBOLSO',
+    depositoDevolucao: 'DEPÓSITO DA DEVOLUÇÃO',
+    notaFiscalDevolucao: 'NOTA FISCAL DEVOLUÇÃO',
+    colaborador: 'COLABORADOR',
+    retornoDevolucao: 'RETORNO DA DEVOLUÇÃO',
+  },
+};
+
+/**
+ * Import a single sheet config from Google Sheets via Supabase edge function.
+ * Returns the parsed rows + moduloDestino, or null on failure.
+ */
+export async function importSingleSheet(config: SheetConfig): Promise<{ parsed: Record<string, string>[]; config: SheetConfig } | null> {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const startRow = config.linhaInicial || 1;
+    const { data, error } = await supabase.functions.invoke('google-sheets', {
+      body: { action: 'read', spreadsheetId: config.spreadsheetId, range: `${config.abaNome}!A${startRow}:BZ` },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    const allRows = data.values || [];
+    if (allRows.length < 2) return null;
+    const headers = allRows[0];
+    const rows = allRows.slice(1);
+    const parsed = parseSheetRowsWithFixos(headers, rows, config.mapeamento, config.valoresFixos);
+    return { parsed, config };
+  } catch (err) {
+    console.warn(`[AutoImport] Failed to import "${config.nome}":`, err);
+    return null;
+  }
+}
+
+/**
+ * Auto-import all configured sheets from Google Sheets.
+ * Loads configs from cloud, seeds default devolução, then imports all.
+ * Returns configs and results for each module.
+ */
+export async function autoImportAllSheets(): Promise<{
+  configs: SheetConfig[];
+  results: { parsed: Record<string, string>[]; config: SheetConfig }[];
+}> {
+  // Load configs
+  let configs = await loadSheetConfigsFromCloud();
+  if (!configs || configs.length === 0) configs = loadSheetConfigs();
+
+  // Seed default devolução config if not present
+  if (!configs.find(c => c.moduloDestino === 'devolucao')) {
+    configs = [...configs, DEVOLUCAO_DEFAULT];
+    saveSheetConfigs(configs);
+    saveSheetConfigsToCloud(configs);
+  }
+
+  // Import all sheets in parallel (with 8s timeout per sheet)
+  const timeout = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms));
+  const importPromises = configs.map(config =>
+    Promise.race([importSingleSheet(config), timeout(8000)])
+  );
+  const settled = await Promise.allSettled(importPromises);
+  const results = settled
+    .filter((r): r is PromiseFulfilledResult<{ parsed: Record<string, string>[]; config: SheetConfig } | null> =>
+      r.status === 'fulfilled' && r.value !== null
+    )
+    .map(r => r.value!);
+
+  // Update last sync timestamps
+  const now = new Date().toLocaleString('pt-BR');
+  const successIds = new Set(results.map(r => r.config.id));
+  const updatedConfigs = configs.map(c => successIds.has(c.id) ? { ...c, ultimaSync: now } : c);
+  saveSheetConfigs(updatedConfigs);
+  saveSheetConfigsToCloud(updatedConfigs);
+
+  return { configs: updatedConfigs, results };
+}

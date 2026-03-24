@@ -271,7 +271,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
     const preloadAll = async () => {
       try {
-        // Race all loads against a 6-second timeout so loading screen never hangs
+        // ━━━ PHASE 1: Load cached data from Supabase (fast, controls loading screen) ━━━
         const [vendas, perf, full, tiny, ads, devol] = await Promise.allSettled([
           Promise.race([loadFromCloud<any[]>('vendas_data'), timeout(6000)]),
           Promise.race([loadFromCloud<any[]>('performance_data'), timeout(6000)]),
@@ -281,28 +281,44 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           Promise.race([loadFromCloud<any[]>('devolucao_data'), timeout(6000)]),
         ]) as PromiseSettledResult<any[]>[];
 
-        if (vendas.status === 'fulfilled' && vendas.value) {
-          setVendasFromSheet(vendas.value);
-        }
-        if (perf.status === 'fulfilled' && perf.value) {
-          setPerformanceFromSheet(perf.value);
-        }
-        if (full.status === 'fulfilled' && full.value) {
-          setEstoqueFullFromSheet(full.value);
-        }
-        if (tiny.status === 'fulfilled' && tiny.value) {
-          setEstoqueTinyFromSheet(tiny.value);
-        }
-        if (ads.status === 'fulfilled' && ads.value) {
-          setAdsFromSheet(ads.value);
-        }
-        if (devol.status === 'fulfilled' && devol.value) {
-          setDevolucaoFromSheet(devol.value);
-        }
+        if (vendas.status === 'fulfilled' && vendas.value) setVendasFromSheet(vendas.value);
+        if (perf.status === 'fulfilled' && perf.value) setPerformanceFromSheet(perf.value);
+        if (full.status === 'fulfilled' && full.value) setEstoqueFullFromSheet(full.value);
+        if (tiny.status === 'fulfilled' && tiny.value) setEstoqueTinyFromSheet(tiny.value);
+        if (ads.status === 'fulfilled' && ads.value) setAdsFromSheet(ads.value);
+        if (devol.status === 'fulfilled' && devol.value) setDevolucaoFromSheet(devol.value);
       } catch (err) {
         console.warn('[Preload] Error loading cached data:', err);
       } finally {
         setIsLoaded(true);
+      }
+
+      // ━━━ PHASE 2: Fresh import from Google Sheets (background, updates data silently) ━━━
+      try {
+        const { autoImportAllSheets } = await import('@/lib/sheets-store');
+        const { saveToCloud, loadFromCloud: loadCloud } = await import('@/lib/persistence');
+        const { results } = await autoImportAllSheets();
+
+        for (const { parsed, config } of results) {
+          if (parsed.length === 0) continue;
+          const mod = config.moduloDestino;
+          if (mod === 'estoque') { setEstoqueFromSheet(parsed); saveToCloud('estoque_data', parsed); }
+          else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
+          else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
+          else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
+          else if (mod === 'vendas') { setVendasFromSheet(parsed); saveToCloud('vendas_data', parsed); }
+          else if (mod === 'performance') {
+            setPerformanceFromSheet(parsed, config.abaNome);
+            const existing = await loadCloud<any[]>('performance_data') || [];
+            const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+            saveToCloud('performance_data', merged);
+          }
+          else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
+          else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
+        }
+        if (results.length > 0) console.log(`[AutoImport] ${results.length} planilhas atualizadas`);
+      } catch (err) {
+        console.warn('[AutoImport] Background import failed (cached data still available):', err);
       }
     };
     preloadAll();
