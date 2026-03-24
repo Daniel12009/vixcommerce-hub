@@ -31,7 +31,7 @@ export function DevolucaoPage() {
   const [sortCol, setSortCol] = useState<string>('dataPlanilha');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [periodDays, setPeriodDays] = useState<number | 'custom'>(30);
+  const [periodDays, setPeriodDays] = useState<number | 'custom' | 'all'>(30);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -48,13 +48,26 @@ export function DevolucaoPage() {
     if (filterStatus !== 'all') result = result.filter(i => i.statusDevolucao === filterStatus);
     if (filterSetor !== 'all') result = result.filter(i => i.setor === filterSetor);
     if (filterSituacao !== 'all') result = result.filter(i => i.situacaoMercadoria === filterSituacao);
-    // Date filter — parse dd/mm/yyyy
-    const parseDate = (str: string) => {
-      const parts = (str || '').split('/');
-      if (parts.length !== 3) return null;
-      return new Date(+parts[2], +parts[1] - 1, +parts[0]);
+    // Date filter — handles: dd/mm/yyyy, yyyy-mm-dd, mm/dd/yyyy, serial numbers
+    const parseDate = (str: string): Date | null => {
+      if (!str) return null;
+      const s = str.trim();
+      // dd/mm/yyyy
+      const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (dmyMatch) return new Date(+dmyMatch[3], +dmyMatch[2] - 1, +dmyMatch[1]);
+      // yyyy-mm-dd
+      const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (isoMatch) return new Date(+isoMatch[1], +isoMatch[2] - 1, +isoMatch[3]);
+      // Serial number (Excel/Sheets)
+      const num = Number(s);
+      if (!isNaN(num) && num > 30000 && num < 60000) {
+        return new Date((num - 25569) * 86400000);
+      }
+      // Try native parse as last resort
+      const native = new Date(s);
+      return isNaN(native.getTime()) ? null : native;
     };
-    if (periodDays !== 'custom') {
+    if (periodDays !== 'custom' && periodDays !== 'all') {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - periodDays);
       cutoff.setHours(0, 0, 0, 0);
@@ -62,7 +75,7 @@ export function DevolucaoPage() {
         const d = parseDate(i.dataPlanilha);
         return d ? d >= cutoff : true;
       });
-    } else {
+    } else if (periodDays === 'custom') {
       if (dateFrom) {
         const from = new Date(dateFrom + 'T00:00:00');
         result = result.filter(i => {
@@ -243,6 +256,16 @@ export function DevolucaoPage() {
         </select>
         <div className="flex items-center gap-1.5 ml-2">
           <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+          <button
+            onClick={() => setPeriodDays('all')}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              periodDays === 'all'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Todos
+          </button>
           {([7, 15, 30] as const).map(d => (
             <button
               key={d}
