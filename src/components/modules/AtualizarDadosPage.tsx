@@ -48,6 +48,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   vendas: 'Vendas / Pedidos',
   performance: 'Performance Anúncios',
   ads: 'Performance ADS',
+  devolucao: 'Devoluções',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
@@ -58,6 +59,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
   performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
   ads: 'bg-[hsl(142,76%,36%,0.1)] text-[hsl(142,76%,36%)]',
+  devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
 };
 
 // Vendas Table Columns state

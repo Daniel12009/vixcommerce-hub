@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem } from '@/lib/types';
+import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem, DevolucaoItem } from '@/lib/types';
 import { loadFromCloud } from '@/lib/persistence';
 
 interface SheetsData {
@@ -10,6 +10,7 @@ interface SheetsData {
   vendasItems: VendaItem[] | null;
   performanceItems: PerformanceItem[] | null;
   adsItems: AdsImportItem[] | null;
+  devolucaoItems: DevolucaoItem[] | null;
   isLoaded: boolean;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setEstoqueFullFromSheet: (rows: Record<string, string>[]) => void;
@@ -18,6 +19,7 @@ interface SheetsData {
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
   setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   setAdsFromSheet: (rows: Record<string, string>[]) => void;
+  setDevolucaoFromSheet: (rows: Record<string, string>[]) => void;
   clearEstoque: () => void;
   clearEstoqueFull: () => void;
   clearEstoqueTiny: () => void;
@@ -25,6 +27,7 @@ interface SheetsData {
   clearVendas: () => void;
   clearPerformance: () => void;
   clearAds: () => void;
+  clearDevolucao: () => void;
 }
 
 const SheetsDataContext = createContext<SheetsData | null>(null);
@@ -50,6 +53,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [vendasItems, setVendasItems] = useState<VendaItem[] | null>(null);
   const [performanceItems, setPerformanceItems] = useState<PerformanceItem[] | null>(null);
   const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
+  const [devolucaoItems, setDevolucaoItems] = useState<DevolucaoItem[] | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   const setEstoqueFromSheet = useCallback((rows: Record<string, string>[]) => {
@@ -228,16 +232,51 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setAdsItems(items);
   }, []);
 
-  // Pre-load all data from Supabase on mount
+  const setDevolucaoFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: DevolucaoItem[] = rows
+      .filter(r => r.pedido || r.skuProduto)
+      .map(r => ({
+        dataPlanilha: r.dataPlanilha || '',
+        plataforma: r.plataforma || '',
+        dataAprovacao: r.dataAprovacao || '',
+        valorReembolso: num(r.valorReembolso),
+        pedido: r.pedido || '',
+        anuncio: r.anuncio || '',
+        skuProduto: r.skuProduto || '',
+        statusDevolucao: r.statusDevolucao || '',
+        acaoAposDevolucao: r.acaoAposDevolucao || '',
+        devolucaoGeradaPor: r.devolucaoGeradaPor || '',
+        rastreioCorreios: r.rastreioCorreios || '',
+        motivo: r.motivo || '',
+        detalhesMotivo: r.detalhesMotivo || '',
+        novoMotivo: r.novoMotivo || '',
+        detalhe: r.detalhe || '',
+        setor: r.setor || '',
+        custoDevolucao: num(r.custoDevolucao),
+        comissaoNaoDevolvida: num(r.comissaoNaoDevolvida),
+        custo: num(r.custo),
+        quantidade: num(r.quantidade) || 1,
+        situacaoMercadoria: r.situacaoMercadoria || '',
+        totalCustoMercadoria: num(r.totalCustoMercadoria),
+        formaReembolso: r.formaReembolso || '',
+        dataReembolso: r.dataReembolso || '',
+        depositoDevolucao: r.depositoDevolucao || '',
+        notaFiscalDevolucao: r.notaFiscalDevolucao || '',
+        colaborador: r.colaborador || '',
+        retornoDevolucao: r.retornoDevolucao || '',
+      }));
+    setDevolucaoItems(items);
+  }, []);
   useEffect(() => {
     const preloadAll = async () => {
       try {
-        const [vendas, perf, full, tiny, ads] = await Promise.allSettled([
+        const [vendas, perf, full, tiny, ads, devol] = await Promise.allSettled([
           loadFromCloud<any[]>('vendas_data'),
           loadFromCloud<any[]>('performance_data'),
           loadFromCloud<any[]>('estoque_full_data'),
           loadFromCloud<any[]>('estoque_tiny_data'),
           loadFromCloud<any[]>('ads_data'),
+          loadFromCloud<any[]>('devolucao_data'),
         ]);
 
         if (vendas.status === 'fulfilled' && vendas.value) {
@@ -255,6 +294,9 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         if (ads.status === 'fulfilled' && ads.value) {
           setAdsFromSheet(ads.value);
         }
+        if (devol.status === 'fulfilled' && devol.value) {
+          setDevolucaoFromSheet(devol.value);
+        }
       } catch (err) {
         console.warn('[Preload] Error loading cached data:', err);
       } finally {
@@ -262,7 +304,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       }
     };
     preloadAll();
-  }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet]);
+  }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet]);
 
   return (
     <SheetsDataContext.Provider value={{
@@ -273,6 +315,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       vendasItems,
       performanceItems,
       adsItems,
+      devolucaoItems,
       isLoaded,
       setEstoqueFromSheet,
       setEstoqueFullFromSheet,
@@ -281,6 +324,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       setVendasFromSheet,
       setPerformanceFromSheet,
       setAdsFromSheet,
+      setDevolucaoFromSheet,
       clearEstoque: () => setEstoqueItems(null),
       clearEstoqueFull: () => setEstoqueFullItems(null),
       clearEstoqueTiny: () => setEstoqueTinyItems(null),
@@ -288,6 +332,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       clearVendas: () => setVendasItems(null),
       clearPerformance: () => setPerformanceItems(null),
       clearAds: () => setAdsItems(null),
+      clearDevolucao: () => setDevolucaoItems(null),
     }}>
       {children}
     </SheetsDataContext.Provider>

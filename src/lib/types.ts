@@ -98,6 +98,37 @@ export interface AdsMetric {
   cpc: number;
 }
 
+export interface DevolucaoItem {
+  dataPlanilha: string;
+  plataforma: string;
+  dataAprovacao: string;
+  valorReembolso: number;
+  pedido: string;
+  anuncio: string;
+  skuProduto: string;
+  statusDevolucao: string;
+  acaoAposDevolucao: string;
+  devolucaoGeradaPor: string;
+  rastreioCorreios: string;
+  motivo: string;
+  detalhesMotivo: string;
+  novoMotivo: string;
+  detalhe: string;
+  setor: string;
+  custoDevolucao: number;
+  comissaoNaoDevolvida: number;
+  custo: number;
+  quantidade: number;
+  situacaoMercadoria: string;
+  totalCustoMercadoria: number;
+  formaReembolso: string;
+  dataReembolso: string;
+  depositoDevolucao: string;
+  notaFiscalDevolucao: string;
+  colaborador: string;
+  retornoDevolucao: string;
+}
+
 export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar' | 'devolucao';
 
 export type MarketplaceId = 'ml1' | 'ml2' | 'ml3' | 'ml4' | 'tiny' | 'shopee' | 'amazon';

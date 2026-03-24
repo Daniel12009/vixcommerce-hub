@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads';
+export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao';
 
 export interface SheetConfig {
   id: string;
@@ -109,6 +109,36 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
   'estoque-tiny': [
     { key: 'sku', label: 'SKU', obrigatorio: true },
     { key: 'quantidade', label: 'Quantidade (UND)', obrigatorio: true },
+  ],
+  devolucao: [
+    { key: 'dataPlanilha', label: 'DATA DA PLANILHA' },
+    { key: 'plataforma', label: 'PLATAFORMA', obrigatorio: true },
+    { key: 'dataAprovacao', label: 'data Aprovação' },
+    { key: 'valorReembolso', label: 'Valor do Reembolso', obrigatorio: true },
+    { key: 'pedido', label: 'PEDIDO', obrigatorio: true },
+    { key: 'anuncio', label: 'ANÚNCIO' },
+    { key: 'skuProduto', label: 'SKU PRODUTO' },
+    { key: 'statusDevolucao', label: 'STATUS DA DEVOLUÇÃO' },
+    { key: 'acaoAposDevolucao', label: 'AÇÃO APÓS DEVOLUÇÃO' },
+    { key: 'devolucaoGeradaPor', label: 'DEVOLUÇÃO GERADA POR' },
+    { key: 'rastreioCorreios', label: 'RASTREIO CORREIOS' },
+    { key: 'motivo', label: 'MOTIVO' },
+    { key: 'detalhesMotivo', label: 'DETALHES DO MOTIVO' },
+    { key: 'novoMotivo', label: 'NOVO MOTIVO' },
+    { key: 'detalhe', label: 'DETALHE' },
+    { key: 'setor', label: 'SETOR' },
+    { key: 'custoDevolucao', label: 'CUSTO DEVOLUÇÃO' },
+    { key: 'comissaoNaoDevolvida', label: 'COMISSÃO NÃO DEVOLVIDA' },
+    { key: 'custo', label: 'CUSTO' },
+    { key: 'quantidade', label: 'QTDE' },
+    { key: 'situacaoMercadoria', label: 'SITUAÇÃO DA MERCADORIA' },
+    { key: 'totalCustoMercadoria', label: 'TOTAL CUSTO MERCADORIA' },
+    { key: 'formaReembolso', label: 'FORMA DE REEMBOLSO' },
+    { key: 'dataReembolso', label: 'DATA REEMBOLSO' },
+    { key: 'depositoDevolucao', label: 'DEPÓSITO DA DEVOLUÇÃO' },
+    { key: 'notaFiscalDevolucao', label: 'NOTA FISCAL DEVOLUÇÃO' },
+    { key: 'colaborador', label: 'COLABORADOR' },
+    { key: 'retornoDevolucao', label: 'RETORNO DA DEVOLUÇÃO' },
   ],
 };
 
