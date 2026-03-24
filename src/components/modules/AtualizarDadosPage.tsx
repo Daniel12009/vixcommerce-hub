@@ -200,9 +200,51 @@ export function AtualizarDadosPage() {
     if (hasLoadedCloud.current) return;
     hasLoadedCloud.current = true;
     loadSheetConfigsFromCloud().then(cloudConfigs => {
-      if (cloudConfigs && cloudConfigs.length > 0) {
-        setSheetConfigs(cloudConfigs);
+      let configs = (cloudConfigs && cloudConfigs.length > 0) ? cloudConfigs : loadSheetConfigs();
+      // Seed default devolução config if not present
+      if (!configs.find(c => c.moduloDestino === 'devolucao')) {
+        const devolDefault: SheetConfig = {
+          id: 'devolucao-default',
+          url: 'https://docs.google.com/spreadsheets/d/10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ/edit',
+          nome: 'Devoluções',
+          spreadsheetId: '10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ',
+          abaNome: 'TODOS',
+          moduloDestino: 'devolucao',
+          linhaInicial: 1,
+          mapeamento: {
+            dataPlanilha: 'DATA DA PLANILHA',
+            plataforma: 'PLATAFORMA',
+            dataAprovacao: 'data Aprovação',
+            valorReembolso: 'Valor do Reembolso',
+            pedido: 'PEDIDO',
+            anuncio: 'ANÚNCIO',
+            skuProduto: 'SKU PRODUTO',
+            statusDevolucao: 'STATUS DA DEVOLUÇÃO',
+            acaoAposDevolucao: 'AÇÃO APÓS DEVOLUÇÃO (SE NECESSÁRIO)',
+            devolucaoGeradaPor: 'DEVOLUÇÃO GERADA POR (PLATAFORMA OU MELHOR ENVIO)',
+            rastreioCorreios: 'RASTREIO CORREIOS',
+            motivo: 'MOTIVO',
+            detalhesMotivo: 'DETALHES DO MOTIVO',
+            novoMotivo: 'NOVO MOTIVO',
+            detalhe: 'DETALHE',
+            setor: 'SETOR',
+            custoDevolucao: 'CUSTO DEVOLUÇÃO',
+            comissaoNaoDevolvida: 'COMISSÃO NÃO DEVOLVIDA',
+            custo: 'CUSTO',
+            quantidade: 'QTDE',
+            situacaoMercadoria: 'SITUAÇÃO DA MERCADORIA',
+            totalCustoMercadoria: 'TOTAL CUSTO MERCADORIA',
+            formaReembolso: 'FORMA DE REEMBOLSO',
+            dataReembolso: 'DATA REEMBOLSO',
+            depositoDevolucao: 'DEPÓSITO DA DEVOLUÇÃO',
+            notaFiscalDevolucao: 'NOTA FISCAL DEVOLUÇÃO',
+            colaborador: 'COLABORADOR',
+            retornoDevolucao: 'RETORNO DA DEVOLUÇÃO',
+          },
+        };
+        configs = [...configs, devolDefault];
       }
+      setSheetConfigs(configs);
     });
     // Also load imported data from cloud
     loadFromCloud('vendas_data').then((data: any) => {
