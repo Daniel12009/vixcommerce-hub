@@ -314,14 +314,18 @@ export function EnviosTab() {
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
-        const feito = String(row[0] || '').toUpperCase() === 'TRUE';
+        if (!row || row.length === 0) continue; // skip empty rows
+
+        const feitoVal = String(row[0] || '').toUpperCase().trim();
+        const feito = feitoVal === 'TRUE' || feitoVal === 'VERDADEIRO';
         const dataInicio = row[1] || '';
         const dataColeta = row[2] || '';
-        const coletado = String(row[3] || '').toUpperCase() === 'TRUE';
+        const coletadoVal = String(row[3] || '').toUpperCase().trim();
+        const coletado = coletadoVal === 'TRUE' || coletadoVal === 'VERDADEIRO';
         const envioNum = String(row[4] || '').trim();
         const sku = String(row[5] || '').trim();
-        const un = parseInt(String(row[6] || '0')) || 0;
-        const caixas = parseInt(String(row[7] || '0')) || 0;
+        const un = parseInt(String(row[6] || '0').replace(/[^\d]/g, '')) || 0;
+        const caixas = parseInt(String(row[7] || '0').replace(/[^\d]/g, '')) || 0;
         const conta = String(row[8] || '').trim();
         const local = String(row[9] || '').trim();
 
@@ -336,7 +340,7 @@ export function EnviosTab() {
             caixas,
             conta: conta.toUpperCase(),
             local,
-            items: [],
+            items: [] as { sku: string; quantidade: number }[],
           };
           envioGroups.push(currentGroup);
         }
@@ -346,37 +350,68 @@ export function EnviosTab() {
         }
       }
 
+      console.log(`Parsed ${envioGroups.length} envios, ${envioGroups.reduce((s, g) => s + g.items.length, 0)} items total`);
+
       // Clear existing data
       await db.from('envios_full_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await db.from('envios_full').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-      // Insert all envios
-      for (const group of envioGroups) {
-        const { data: inserted, error: insErr } = await db.from('envios_full').insert({
-          envio_numero: group.envio_numero,
-          data_inicio: group.data_inicio,
-          data_coleta: group.data_coleta,
-          preparado: group.preparado,
-          coletado: group.coletado,
-          caixas: group.caixas,
-          conta: group.conta,
-          local: group.local,
-        }).select().single();
+      // BATCH insert all envios at once (in chunks of 200 to avoid payload limits)
+      const BATCH_SIZE = 200;
+      const allInsertedEnvios: any[] = [];
 
-        if (insErr) {
-          console.error('Insert envio error:', insErr);
-          continue;
+      for (let i = 0; i < envioGroups.length; i += BATCH_SIZE) {
+        const chunk = envioGroups.slice(i, i + BATCH_SIZE);
+        const envioInserts = chunk.map((g: any) => ({
+          envio_numero: g.envio_numero,
+          data_inicio: g.data_inicio,
+          data_coleta: g.data_coleta,
+          preparado: g.preparado,
+          coletado: g.coletado,
+          caixas: g.caixas,
+          conta: g.conta,
+          local: g.local,
+        }));
+
+        const { data: inserted, error: batchErr } = await db
+          .from('envios_full')
+          .insert(envioInserts)
+          .select();
+
+        if (batchErr) {
+          console.error('Batch envio insert error:', batchErr);
+          throw batchErr;
         }
+        allInsertedEnvios.push(...(inserted || []));
+      }
 
-        if (group.items.length > 0) {
-          const items = group.items.map((item: any) => ({
-            envio_id: inserted.id,
-            sku: item.sku,
-            quantidade: item.quantidade,
-          }));
-          await db.from('envios_full_items').insert(items);
+      console.log(`Inserted ${allInsertedEnvios.length} envios`);
+
+      // Build all items with correct envio_id references
+      const allItems: { envio_id: string; sku: string; quantidade: number }[] = [];
+      allInsertedEnvios.forEach((inserted: any, idx: number) => {
+        const group = envioGroups[idx];
+        if (group && group.items.length > 0) {
+          group.items.forEach((item: any) => {
+            allItems.push({
+              envio_id: inserted.id,
+              sku: item.sku,
+              quantidade: item.quantidade,
+            });
+          });
+        }
+      });
+
+      // BATCH insert all items (in chunks of 500)
+      for (let i = 0; i < allItems.length; i += 500) {
+        const itemChunk = allItems.slice(i, i + 500);
+        const { error: itemErr } = await db.from('envios_full_items').insert(itemChunk);
+        if (itemErr) {
+          console.error('Batch item insert error:', itemErr);
         }
       }
+
+      console.log(`Inserted ${allItems.length} items total`);
 
       const freshData = await loadEnvios();
       setError('');
@@ -399,16 +434,25 @@ export function EnviosTab() {
     syncAllToSheet(updated);
   };
 
-  // Parse date helper
+  // Parse date helper — handles DD/MM/YYYY, DD\MM\YYYY, and various malformed formats
   function parseDate(str: string): string | null {
-    if (!str) return null;
-    // Try DD/MM/YYYY
-    const parts = str.split('/');
-    if (parts.length === 3) {
-      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    if (!str || !str.trim()) return null;
+    const s = str.trim().replace(/\\/g, '/'); // normalize backslashes
+    // Try DD/MM/YYYY (allow missing separators like 13/082025 or 03/092025)
+    const m = s.match(/^(\d{1,2})\/?(\d{1,2})\/?(\d{4})$/);
+    if (m) {
+      return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
     }
-    // Try ISO
-    if (str.includes('-')) return str.split('T')[0];
+    // Try standard DD/MM/YYYY with separators
+    const parts = s.split('/').filter(p => p.length > 0);
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+      return `${year}-${month}-${day}`;
+    }
+    // Try ISO format
+    if (s.includes('-')) return s.split('T')[0];
     return null;
   }
 
