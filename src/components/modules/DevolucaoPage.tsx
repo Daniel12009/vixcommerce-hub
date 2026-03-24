@@ -176,6 +176,27 @@ export function DevolucaoPage() {
     return [...map.values()].sort((a, b) => b.total - a.total);
   }, [filtered]);
 
+  const skuChart = useMemo(() => {
+    const map = new Map<string, { sku: string; total: number; qtd: number; valor: number; motivos: Map<string, number> }>();
+    filtered.forEach(i => {
+      const sku = i.skuProduto || 'Sem SKU';
+      const cur = map.get(sku) || { sku, total: 0, qtd: 0, valor: 0, motivos: new Map() };
+      cur.total += 1;
+      cur.qtd += i.quantidade;
+      cur.valor += i.valorReembolso;
+      const motivo = i.novoMotivo || i.motivo || 'Não informado';
+      cur.motivos.set(motivo, (cur.motivos.get(motivo) || 0) + 1);
+      map.set(sku, cur);
+    });
+    return [...map.values()]
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 20)
+      .map(item => {
+        const topMotivo = [...item.motivos.entries()].sort((a, b) => b[1] - a[1])[0];
+        return { ...item, topMotivo: topMotivo ? topMotivo[0] : '-' };
+      });
+  }, [filtered]);
+
   const handleSort = (col: string) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(col); setSortDir('desc'); }
@@ -441,6 +462,54 @@ export function DevolucaoPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Top SKUs */}
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Top SKUs com mais Devoluções</h3>
+            {skuChart.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="px-3 py-2 text-xs font-semibold text-muted-foreground">#</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-muted-foreground">SKU</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-muted-foreground text-center">Devoluções</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-muted-foreground text-center">Unidades</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-muted-foreground text-right">Reembolso</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-muted-foreground">Principal Motivo</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-muted-foreground w-40"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {skuChart.map((item, idx) => {
+                      const maxTotal = skuChart[0]?.total || 1;
+                      const pct = (item.total / maxTotal) * 100;
+                      return (
+                        <tr key={item.sku} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                          <td className="px-3 py-2 text-xs text-muted-foreground font-medium">{idx + 1}</td>
+                          <td className="px-3 py-2 text-xs text-foreground font-mono font-semibold">{item.sku}</td>
+                          <td className="px-3 py-2 text-xs text-foreground text-center font-bold">{item.total}</td>
+                          <td className="px-3 py-2 text-xs text-foreground text-center">{item.qtd}</td>
+                          <td className="px-3 py-2 text-xs text-foreground text-right font-semibold">{formatBRL(item.valor)}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground max-w-[180px] truncate" title={item.topMotivo}>{item.topMotivo}</td>
+                          <td className="px-3 py-2">
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div
+                                className="h-2 rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, background: `hsl(${Math.max(0, 120 - pct * 1.2)}, 70%, 50%)` }}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm text-center py-10">Sem dados</p>
+            )}
           </div>
         </div>
       )}
