@@ -73,21 +73,21 @@ export function DevolucaoPage() {
       cutoff.setHours(0, 0, 0, 0);
       result = result.filter(i => {
         const d = parseDate(i.dataPlanilha);
-        return d ? d >= cutoff : true;
+        return d ? d >= cutoff : false;
       });
     } else if (periodDays === 'custom') {
       if (dateFrom) {
         const from = new Date(dateFrom + 'T00:00:00');
         result = result.filter(i => {
           const d = parseDate(i.dataPlanilha);
-          return d ? d >= from : true;
+          return d ? d >= from : false;
         });
       }
       if (dateTo) {
         const to = new Date(dateTo + 'T23:59:59');
         result = result.filter(i => {
           const d = parseDate(i.dataPlanilha);
-          return d ? d <= to : true;
+          return d ? d <= to : false;
         });
       }
     }
