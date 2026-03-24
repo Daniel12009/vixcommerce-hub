@@ -52,8 +52,8 @@ export function EnviosTab() {
   const [formItems, setFormItems] = useState<EnvioItem[]>([{ sku: '', quantidade: 0 }]);
   const [saving, setSaving] = useState(false);
 
-  // Load envios from Supabase
-  const loadEnvios = useCallback(async () => {
+  // Load envios from Supabase — returns fresh data
+  const loadEnvios = useCallback(async (): Promise<Envio[]> => {
     try {
       const { data: enviosData, error: enviosErr } = await db
         .from('envios_full')
@@ -75,8 +75,10 @@ export function EnviosTab() {
 
       setEnvios(enviosWithItems);
       setError('');
+      return enviosWithItems;
     } catch (err: any) {
       setError(err.message || 'Erro ao carregar envios');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -117,19 +119,25 @@ export function EnviosTab() {
   const coletados = envios.filter(e => e.coletado).length;
   const totalUnidades = envios.reduce((s, e) => s + e.items.reduce((ss, i) => ss + i.quantidade, 0), 0);
 
-  // Sync ALL envios to sheet (full rewrite) — keeps sheet as backup mirror
-  const syncAllToSheet = async (updatedEnvios?: Envio[]) => {
+  // Format ISO date to DD/MM/YYYY for sheet
+  function toSheetDate(iso: string | null): string {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return iso;
+  }
+
+  // Sync ALL envios to sheet (full rewrite) — requires explicit data to avoid stale closure
+  const syncAllToSheet = async (freshData: Envio[]) => {
     try {
-      const data = updatedEnvios || envios;
-      // Build rows in the same format as the original sheet
       const header = ['FEITO', 'DATA DE INICIO', 'DATA DE COLETA', 'COLETADO', 'ENVIO', 'sku', 'UN', 'CAIXAS', 'CONTA', 'LOCAL'];
       const rows: string[][] = [header];
 
-      for (const envio of data) {
+      for (const envio of freshData) {
         if (envio.items.length === 0) {
           rows.push([
             envio.preparado ? 'TRUE' : 'FALSE',
-            envio.data_inicio || '', envio.data_coleta || '',
+            toSheetDate(envio.data_inicio), toSheetDate(envio.data_coleta),
             envio.coletado ? 'TRUE' : 'FALSE',
             envio.envio_numero || '', '', '0',
             String(envio.caixas || 0), envio.conta || '', envio.local || '',
@@ -139,7 +147,7 @@ export function EnviosTab() {
             if (idx === 0) {
               rows.push([
                 envio.preparado ? 'TRUE' : 'FALSE',
-                envio.data_inicio || '', envio.data_coleta || '',
+                toSheetDate(envio.data_inicio), toSheetDate(envio.data_coleta),
                 envio.coletado ? 'TRUE' : 'FALSE',
                 envio.envio_numero || '', item.sku, String(item.quantidade),
                 String(envio.caixas || 0), envio.conta || '', envio.local || '',
@@ -151,14 +159,21 @@ export function EnviosTab() {
         }
       }
 
+      // Pad with empty rows up to 2000 to clear any old data below
+      const totalRows = Math.max(rows.length, 2000);
+      while (rows.length < totalRows) {
+        rows.push(['', '', '', '', '', '', '', '', '', '']);
+      }
+
       await supabase.functions.invoke('google-sheets', {
         body: {
           action: 'write',
           spreadsheetId: SPREADSHEET_ID,
-          range: `${SHEET_NAME}!A1:J${rows.length}`,
+          range: `${SHEET_NAME}!A1:J${totalRows}`,
           values: rows,
         },
       });
+      console.log('Sheet sync complete:', rows.length, 'rows written');
     } catch (err) {
       console.warn('Sheet sync failed (non-critical):', err);
     }
@@ -256,9 +271,8 @@ export function EnviosTab() {
       setEditingEnvio(null);
       setFormEnvio({ envio_numero: '', data_inicio: new Date().toISOString().split('T')[0], data_coleta: '', caixas: 0, conta: '', local: '' });
       setFormItems([{ sku: '', quantidade: 0 }]);
-      await loadEnvios();
-      // Sync after reload to get fresh data
-      setTimeout(() => syncAllToSheet(), 500);
+      const freshData = await loadEnvios();
+      syncAllToSheet(freshData);
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar envio');
     } finally {
