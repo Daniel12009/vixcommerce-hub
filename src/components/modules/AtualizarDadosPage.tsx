@@ -417,6 +417,9 @@ export function AtualizarDadosPage() {
       } else if (config.moduloDestino === 'ads') {
         sheetsData.setAdsFromSheet(parsed);
         saveToCloud('ads_data', parsed);
+      } else if (config.moduloDestino === 'devolucao') {
+        sheetsData.setDevolucaoFromSheet(parsed);
+        saveToCloud('devolucao_data', parsed);
       }
 
       // Update last sync
@@ -798,6 +801,7 @@ export function AtualizarDadosPage() {
                             <SelectItem value="vendas">🛒 Vendas / Pedidos</SelectItem>
                             <SelectItem value="performance">📊 Performance Anúncios</SelectItem>
                             <SelectItem value="ads">📈 Performance ADS</SelectItem>
+                            <SelectItem value="devolucao">🔄 Devoluções</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
