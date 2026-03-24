@@ -350,51 +350,32 @@ export function EnviosTab() {
         }
       }
 
-      console.log(`Parsed ${envioGroups.length} envios, ${envioGroups.reduce((s, g) => s + g.items.length, 0)} items total`);
+      console.log(`Parsed ${envioGroups.length} envios, ${envioGroups.reduce((s: number, g: any) => s + g.items.length, 0)} items total`);
 
       // Clear existing data
       await db.from('envios_full_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await db.from('envios_full').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-      // BATCH insert all envios at once (in chunks of 200 to avoid payload limits)
-      const BATCH_SIZE = 200;
-      const allInsertedEnvios: any[] = [];
+      // Generate client-side UUIDs so we know the mapping BEFORE insert
+      const envioInserts = envioGroups.map((g: any) => ({
+        id: crypto.randomUUID(), // client-generated ID — guarantees correct mapping
+        envio_numero: g.envio_numero,
+        data_inicio: g.data_inicio,
+        data_coleta: g.data_coleta,
+        preparado: g.preparado,
+        coletado: g.coletado,
+        caixas: g.caixas,
+        conta: g.conta,
+        local: g.local,
+      }));
 
-      for (let i = 0; i < envioGroups.length; i += BATCH_SIZE) {
-        const chunk = envioGroups.slice(i, i + BATCH_SIZE);
-        const envioInserts = chunk.map((g: any) => ({
-          envio_numero: g.envio_numero,
-          data_inicio: g.data_inicio,
-          data_coleta: g.data_coleta,
-          preparado: g.preparado,
-          coletado: g.coletado,
-          caixas: g.caixas,
-          conta: g.conta,
-          local: g.local,
-        }));
-
-        const { data: inserted, error: batchErr } = await db
-          .from('envios_full')
-          .insert(envioInserts)
-          .select();
-
-        if (batchErr) {
-          console.error('Batch envio insert error:', batchErr);
-          throw batchErr;
-        }
-        allInsertedEnvios.push(...(inserted || []));
-      }
-
-      console.log(`Inserted ${allInsertedEnvios.length} envios`);
-
-      // Build all items with correct envio_id references
+      // Build ALL items using pre-generated IDs (before any insert)
       const allItems: { envio_id: string; sku: string; quantidade: number }[] = [];
-      allInsertedEnvios.forEach((inserted: any, idx: number) => {
-        const group = envioGroups[idx];
-        if (group && group.items.length > 0) {
+      envioGroups.forEach((group: any, idx: number) => {
+        if (group.items.length > 0) {
           group.items.forEach((item: any) => {
             allItems.push({
-              envio_id: inserted.id,
+              envio_id: envioInserts[idx].id, // use the pre-generated UUID
               sku: item.sku,
               quantidade: item.quantidade,
             });
@@ -402,7 +383,22 @@ export function EnviosTab() {
         }
       });
 
-      // BATCH insert all items (in chunks of 500)
+      console.log(`Prepared ${envioInserts.length} envios, ${allItems.length} items`);
+
+      // BATCH insert envios (chunks of 200)
+      const BATCH_SIZE = 200;
+      for (let i = 0; i < envioInserts.length; i += BATCH_SIZE) {
+        const chunk = envioInserts.slice(i, i + BATCH_SIZE);
+        const { error: batchErr } = await db.from('envios_full').insert(chunk);
+        if (batchErr) {
+          console.error('Batch envio insert error:', batchErr);
+          throw batchErr;
+        }
+      }
+
+      console.log(`Inserted ${envioInserts.length} envios`);
+
+      // BATCH insert items (chunks of 500)
       for (let i = 0; i < allItems.length; i += 500) {
         const itemChunk = allItems.slice(i, i + 500);
         const { error: itemErr } = await db.from('envios_full_items').insert(itemChunk);
