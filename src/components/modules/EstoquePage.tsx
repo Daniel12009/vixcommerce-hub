@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Package, AlertTriangle, TrendingDown, Truck, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, FileSpreadsheet, Search } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { Package, AlertTriangle, TrendingDown, Truck, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, FileSpreadsheet, Search, RefreshCw, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -24,7 +25,16 @@ interface MergedStockRow {
 type SortField = 'sku' | 'venSemanal' | 'vmd' | 'tinyLocal' | 'fullML' | 'entradaPendente' | 'emTransferencia' | 'sugestaoEnvio' | 'coberturaDias';
 
 export function EstoquePage() {
-  const { estoqueFullItems, estoqueTinyItems, performanceItems } = useSheetsData();
+  const { estoqueFullItems, estoqueTinyItems, performanceItems, refreshModule, refreshingModule } = useSheetsData();
+
+  const handleRefresh = useCallback(async () => {
+    const [r1, r2] = await Promise.all([
+      refreshModule('estoque-full'),
+      refreshModule('estoque-tiny'),
+    ]);
+    toast.success(`Estoque atualizado! ${r1 + r2} registros importados`);
+  }, [refreshModule]);
+  const isRefreshing = refreshingModule === 'estoque-full' || refreshingModule === 'estoque-tiny';
   const [diasCoberturaAlvo, setDiasCoberturaAlvo] = useState<number>(5);
   const [editingCobertura, setEditingCobertura] = useState(false);
   const [tempCobertura, setTempCobertura] = useState('5');
@@ -193,8 +203,12 @@ export function EstoquePage() {
     <div>
       <PageHeader title="Estoque Full & Local" subtitle="Gestão logística com alertas de ruptura e controle de envios" />
 
-      {/* Data source badges */}
+      {/* Data source badges + Refresh */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
+        <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50">
+          {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {isRefreshing ? 'Atualizando...' : 'Atualizar Estoque'}
+        </button>
         {hasFullData && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[hsl(var(--vix-info)/0.1)] border border-[hsl(var(--vix-info)/0.2)] text-xs text-[hsl(var(--vix-info))]">
             <FileSpreadsheet className="w-3.5 h-3.5" /> Full ML: {estoqueFullItems!.length} registros

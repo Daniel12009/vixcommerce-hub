@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem, DevolucaoItem } from '@/lib/types';
-import { loadFromCloud } from '@/lib/persistence';
+import { loadFromCloud, saveToCloud } from '@/lib/persistence';
+import type { ModuloDestino } from '@/lib/sheets-store';
 
 interface SheetsData {
   estoqueItems: StockItem[] | null;
@@ -28,6 +29,8 @@ interface SheetsData {
   clearPerformance: () => void;
   clearAds: () => void;
   clearDevolucao: () => void;
+  refreshModule: (modulo: ModuloDestino) => Promise<number>;
+  refreshingModule: string | null;
 }
 
 const SheetsDataContext = createContext<SheetsData | null>(null);
@@ -55,6 +58,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
   const [devolucaoItems, setDevolucaoItems] = useState<DevolucaoItem[] | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [refreshingModule, setRefreshingModule] = useState<string | null>(null);
 
   const setEstoqueFromSheet = useCallback((rows: Record<string, string>[]) => {
     const items: StockItem[] = rows
@@ -322,34 +326,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         // If localStorage had no data, NOW mark as loaded (Supabase finished)
         if (!hasLocalData) setIsLoaded(true);
       }
-
-      // ━━━ PHASE 2 (background): Fresh import from Google Sheets ━━━
-      try {
-        const { autoImportAllSheets } = await import('@/lib/sheets-store');
-        const { saveToCloud, loadFromCloud: loadCloud } = await import('@/lib/persistence');
-        const { results } = await autoImportAllSheets();
-
-        for (const { parsed, config } of results) {
-          if (parsed.length === 0) continue;
-          const mod = config.moduloDestino;
-          if (mod === 'estoque') { setEstoqueFromSheet(parsed); saveToCloud('estoque_data', parsed); }
-          else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
-          else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
-          else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
-          else if (mod === 'vendas') { setVendasFromSheet(parsed); saveToCloud('vendas_data', parsed); }
-          else if (mod === 'performance') {
-            setPerformanceFromSheet(parsed, config.abaNome);
-            const existing = await loadCloud<any[]>('performance_data') || [];
-            const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
-            saveToCloud('performance_data', merged);
-          }
-          else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
-          else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
-        }
-        if (results.length > 0) console.log(`[AutoImport] ${results.length} planilhas atualizadas`);
-      } catch (err) {
-        console.warn('[AutoImport] Background import failed (cached data still available):', err);
-      }
+      // Phase 2 removed: Google Sheets import now only happens via refreshModule button
     };
     backgroundRefresh();
   }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet]);
@@ -381,6 +358,39 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       clearPerformance: () => setPerformanceItems(null),
       clearAds: () => setAdsItems(null),
       clearDevolucao: () => setDevolucaoItems(null),
+      refreshModule: async (modulo: ModuloDestino) => {
+        setRefreshingModule(modulo);
+        try {
+          const { importModuleSheets } = await import('@/lib/sheets-store');
+          const { results } = await importModuleSheets(modulo);
+          let totalImported = 0;
+          for (const { parsed, config } of results) {
+            if (parsed.length === 0) continue;
+            totalImported += parsed.length;
+            const mod = config.moduloDestino;
+            if (mod === 'estoque') { setEstoqueFromSheet(parsed); saveToCloud('estoque_data', parsed); }
+            else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
+            else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
+            else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
+            else if (mod === 'vendas') { setVendasFromSheet(parsed); saveToCloud('vendas_data', parsed); }
+            else if (mod === 'performance') {
+              setPerformanceFromSheet(parsed, config.abaNome);
+              const existing = await loadFromCloud<any[]>('performance_data') || [];
+              const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+              saveToCloud('performance_data', merged);
+            }
+            else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
+            else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
+          }
+          return totalImported;
+        } catch (err) {
+          console.error(`[RefreshModule] Error refreshing ${modulo}:`, err);
+          return 0;
+        } finally {
+          setRefreshingModule(null);
+        }
+      },
+      refreshingModule,
     }}>
       {children}
     </SheetsDataContext.Provider>

@@ -319,3 +319,43 @@ export async function autoImportAllSheets(): Promise<{
 
   return { configs: updatedConfigs, results };
 }
+
+/**
+ * Import only sheets configured for a specific module.
+ * Used by per-module refresh buttons.
+ */
+export async function importModuleSheets(moduloDestino: ModuloDestino): Promise<{
+  results: { parsed: Record<string, string>[]; config: SheetConfig }[];
+}> {
+  let configs = await loadSheetConfigsFromCloud();
+  if (!configs || configs.length === 0) configs = loadSheetConfigs();
+
+  // Seed default devolução config if not present
+  if (moduloDestino === 'devolucao' && !configs.find(c => c.moduloDestino === 'devolucao')) {
+    configs = [...configs, DEVOLUCAO_DEFAULT];
+    saveSheetConfigs(configs);
+    saveSheetConfigsToCloud(configs);
+  }
+
+  const moduleConfigs = configs.filter(c => c.moduloDestino === moduloDestino);
+  if (moduleConfigs.length === 0) return { results: [] };
+
+  const timeout = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms));
+  const importPromises = moduleConfigs.map(config =>
+    Promise.race([importSingleSheet(config), timeout(10000)])
+  );
+  const settled = await Promise.allSettled(importPromises);
+  const results = settled
+    .filter((r): r is PromiseFulfilledResult<{ parsed: Record<string, string>[]; config: SheetConfig } | null> =>
+      r.status === 'fulfilled' && r.value !== null
+    )
+    .map(r => r.value!);
+
+  // Update last sync timestamps
+  const now = new Date().toLocaleString('pt-BR');
+  const successIds = new Set(results.map(r => r.config.id));
+  const updatedConfigs = configs.map(c => successIds.has(c.id) ? { ...c, ultimaSync: now } : c);
+  saveSheetConfigs(updatedConfigs);
+
+  return { results };
+}

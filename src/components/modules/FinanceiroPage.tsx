@@ -1,13 +1,21 @@
-import { DollarSign, TrendingUp, Percent, FileSpreadsheet } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { DollarSign, TrendingUp, Percent, FileSpreadsheet, RefreshCw, Loader2 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { mockFinancialItems } from '@/lib/mock-data';
 import { formatBRL, formatPercent } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
+import { toast } from 'sonner';
 
 export function FinanceiroPage() {
-  const { financeiroItems } = useSheetsData();
+  const { financeiroItems, refreshModule, refreshingModule } = useSheetsData();
+
+  const handleRefresh = useCallback(async () => {
+    const count = await refreshModule('financeiro');
+    toast.success(`Financeiro atualizado! ${count} registros importados`);
+  }, [refreshModule]);
+  const isRefreshing = refreshingModule === 'financeiro';
   const items = financeiroItems || mockFinancialItems;
   const isFromSheet = !!financeiroItems;
 
@@ -20,9 +28,15 @@ export function FinanceiroPage() {
       <PageHeader title="Financeiro" subtitle="Margem real por SKU (Receita - Impostos - Taxas - Custo - Frete)" />
 
       {isFromSheet && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-[hsl(var(--vix-success)/0.1)] border border-[hsl(var(--vix-success)/0.2)] text-xs text-[hsl(var(--vix-success))]">
-          <FileSpreadsheet className="w-3.5 h-3.5" />
-          Dados importados da planilha Google ({items.length} itens)
+        <div className="flex items-center gap-2 mb-4">
+          <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50">
+            {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {isRefreshing ? 'Atualizando...' : 'Atualizar Financeiro'}
+          </button>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[hsl(var(--vix-success)/0.1)] border border-[hsl(var(--vix-success)/0.2)] text-xs text-[hsl(var(--vix-success))]">
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Dados importados da planilha Google ({items.length} itens)
+          </div>
         </div>
       )}
 

@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
-import { RotateCcw, DollarSign, Package, AlertTriangle, CheckCircle2, TrendingDown, Filter, Search, ChevronDown, ChevronUp, CalendarDays } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { RotateCcw, DollarSign, Package, AlertTriangle, CheckCircle2, TrendingDown, Filter, Search, ChevronDown, ChevronUp, CalendarDays, RefreshCw, Loader2 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { formatBRL } from '@/lib/utils-vix';
+import { toast } from 'sonner';
 
 const COLORS = ['#6366f1', '#ef4444', '#22c55e', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6', '#8b5cf6', '#f97316', '#06b6d4'];
 
@@ -22,7 +23,13 @@ const SITUACAO_COLORS: Record<string, string> = {
 type TabId = 'resumo' | 'devolucoes';
 
 export function DevolucaoPage() {
-  const { devolucaoItems } = useSheetsData();
+  const { devolucaoItems, refreshModule, refreshingModule } = useSheetsData();
+
+  const handleRefresh = useCallback(async () => {
+    const count = await refreshModule('devolucao');
+    toast.success(`Devoluções atualizadas! ${count} registros importados`);
+  }, [refreshModule]);
+  const isRefreshing = refreshingModule === 'devolucao';
   const [activeTab, setActiveTab] = useState<TabId>('resumo');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -218,6 +225,14 @@ export function DevolucaoPage() {
         title="Devolução"
         subtitle={`Controle de devoluções e trocas · ${items.length} registros`}
       />
+
+      {/* Refresh */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50">
+          {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {isRefreshing ? 'Atualizando...' : 'Atualizar Devoluções'}
+        </button>
+      </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-card border border-border rounded-xl p-1 mb-6 w-fit">

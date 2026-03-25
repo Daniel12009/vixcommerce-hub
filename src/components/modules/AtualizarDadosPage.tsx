@@ -269,14 +269,8 @@ export function AtualizarDadosPage() {
     });
   }, []);
 
-  // Auto-import on page load — run import for all configured sheets
-  const hasAutoImported = useRef(false);
-  useEffect(() => {
-    if (hasAutoImported.current) return;
-    if (sheetConfigs.length === 0) return;
-    hasAutoImported.current = true;
-    sheetConfigs.forEach(config => handleImportConfig(config));
-  }, [sheetConfigs]);
+  // Auto-import removed — SheetsDataContext already handles data loading from cache.
+  // User can manually re-import via the "Importar" button per-config or "Importar Tudo".
 
   const handleLoadSheetInfo = async () => {
     const spreadsheetId = extractSpreadsheetId(sheetUrl);
