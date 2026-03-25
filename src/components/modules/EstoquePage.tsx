@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Package, AlertTriangle, TrendingDown, Truck, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, FileSpreadsheet, Search, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,6 +35,17 @@ export function EstoquePage() {
     toast.success(`Estoque atualizado! ${r1 + r2} registros importados`);
   }, [refreshModule]);
   const isRefreshing = refreshingModule === 'estoque-full' || refreshingModule === 'estoque-tiny';
+
+  // Auto-load on first visit if no cached data
+  const hasAutoLoaded = useRef(false);
+  useEffect(() => {
+    if (hasAutoLoaded.current) return;
+    if (!estoqueFullItems && !estoqueTinyItems) {
+      hasAutoLoaded.current = true;
+      handleRefresh();
+    }
+  }, [estoqueFullItems, estoqueTinyItems, handleRefresh]);
+
   const [diasCoberturaAlvo, setDiasCoberturaAlvo] = useState<number>(5);
   const [editingCobertura, setEditingCobertura] = useState(false);
   const [tempCobertura, setTempCobertura] = useState('5');

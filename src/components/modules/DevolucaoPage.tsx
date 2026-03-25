@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { RotateCcw, DollarSign, Package, AlertTriangle, CheckCircle2, TrendingDown, Filter, Search, ChevronDown, ChevronUp, CalendarDays, RefreshCw, Loader2 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -30,6 +30,17 @@ export function DevolucaoPage() {
     toast.success(`Devoluções atualizadas! ${count} registros importados`);
   }, [refreshModule]);
   const isRefreshing = refreshingModule === 'devolucao';
+
+  // Auto-load on first visit if no cached data
+  const hasAutoLoaded = useRef(false);
+  useEffect(() => {
+    if (hasAutoLoaded.current) return;
+    if (!devolucaoItems || devolucaoItems.length === 0) {
+      hasAutoLoaded.current = true;
+      handleRefresh();
+    }
+  }, [devolucaoItems, handleRefresh]);
+
   const [activeTab, setActiveTab] = useState<TabId>('resumo');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');

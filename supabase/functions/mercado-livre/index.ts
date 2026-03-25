@@ -536,6 +536,83 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify(categories), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (action === 'get_ads_data') {
+      // Fetch Product Ads data from ML Advertising API
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) return new Response(JSON.stringify({ campaigns: [], items: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const allCampaigns: any[] = [];
+      const allAdItems: any[] = [];
+
+      // Date range: last 30 days
+      const now = new Date();
+      const dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const dateTo = now.toISOString().split('T')[0];
+
+      for (const account of accounts) {
+        try {
+          let sellerId = account.seller_id;
+          if (!sellerId) {
+            const me = await mlFetch(account, '/users/me');
+            sellerId = me.id;
+          }
+
+          // Helper for ads API calls (needs api-version: 2 header)
+          const adsFetch = async (path: string) => {
+            let token = account.access_token;
+            const doFetch = (t: string) => fetch(`https://api.mercadolibre.com${path}`, {
+              headers: { 'Authorization': `Bearer ${t}`, 'api-version': '2' },
+            });
+            let res = await doFetch(token);
+            if (res.status === 401) {
+              token = await refreshToken(account);
+              res = await doFetch(token);
+            }
+            const text = await res.text();
+            try { return JSON.parse(text); } catch { return null; }
+          };
+
+          // 1. Get campaigns list
+          const campaignsData = await adsFetch(`/advertising/MLB/product_ads/campaigns?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost,ctr,cpc`);
+          if (campaignsData && Array.isArray(campaignsData.results)) {
+            for (const c of campaignsData.results) {
+              allCampaigns.push({
+                id: c.campaign_id || c.id,
+                name: c.name || 'Campanha',
+                status: c.status || 'unknown',
+                budget: c.daily_budget || 0,
+                metrics: c.metrics || {},
+                conta: account.nome,
+                account_id: account.id,
+              });
+            }
+          }
+
+          // 2. Get top ad items with metrics
+          const adsData = await adsFetch(`/advertising/MLB/product_ads/ads?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost,ctr,cpc&limit=50`);
+          if (adsData && Array.isArray(adsData.results)) {
+            for (const ad of adsData.results) {
+              allAdItems.push({
+                item_id: ad.item_id,
+                campaign_id: ad.campaign_id,
+                title: ad.title || '',
+                status: ad.status || 'unknown',
+                metrics: ad.metrics || {},
+                conta: account.nome,
+              });
+            }
+          }
+        } catch (err) {
+          console.error(`Ads data error for ${account.nome}:`, err);
+        }
+      }
+
+      return new Response(JSON.stringify({ campaigns: allCampaigns, items: allAdItems }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     console.error('ML API error:', error);

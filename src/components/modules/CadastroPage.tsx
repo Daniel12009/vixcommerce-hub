@@ -117,6 +117,7 @@ export function CadastroPage() {
 
   const [editMode, setEditMode] = useState(false);
   const [editFields, setEditFields] = useState<Record<string, string>>({});
+  const [editAttributes, setEditAttributes] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
@@ -198,6 +199,10 @@ export function CadastroPage() {
       warranty: detail.warranty || '',
       video_id: detail.video_id || '',
     });
+    // Populate editable attributes
+    const attrMap: Record<string, string> = {};
+    (detail.attributes || []).forEach(a => { if (a.value_name) attrMap[a.id] = a.value_name; });
+    setEditAttributes(attrMap);
     setEditMode(true); setSaveMsg('');
   };
 
@@ -212,6 +217,16 @@ export function CadastroPage() {
       if (Number(editFields.available_quantity) !== detail.available_quantity) { updateFields.available_quantity = Number(editFields.available_quantity); changes.push({ campo: 'available_quantity', anterior: String(detail.available_quantity), novo: editFields.available_quantity }); }
       if (editFields.warranty !== (detail.warranty || '')) { updateFields.warranty = editFields.warranty; changes.push({ campo: 'warranty', anterior: detail.warranty || '', novo: editFields.warranty }); }
       if (editFields.video_id !== (detail.video_id || '')) { updateFields.video_id = editFields.video_id; changes.push({ campo: 'video_id', anterior: detail.video_id || '', novo: editFields.video_id }); }
+      // Check attribute changes
+      const changedAttrs: { id: string; value_name: string }[] = [];
+      for (const [attrId, newVal] of Object.entries(editAttributes)) {
+        const original = (detail.attributes || []).find(a => a.id === attrId);
+        if (original && newVal !== original.value_name) {
+          changedAttrs.push({ id: attrId, value_name: newVal });
+          changes.push({ campo: `attr:${original.name}`, anterior: original.value_name, novo: newVal });
+        }
+      }
+      if (changedAttrs.length > 0) updateFields.attributes = changedAttrs;
       if (Object.keys(updateFields).length > 0) await callML({ action: 'update_item', item_id: detail.id, fields: updateFields, account_id: selectedAccount });
       if (editFields.description !== detail.description_text) {
         await callML({ action: 'update_description', item_id: detail.id, description_text: editFields.description, account_id: selectedAccount });
@@ -578,10 +593,19 @@ export function CadastroPage() {
                 <div>
                   <h4 className="text-[10px] text-muted-foreground font-semibold uppercase mb-2 flex items-center gap-1"><Tag className="w-3 h-3" /> Atributos ({detail.attributes.length})</h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-xs">
-                    {detail.attributes.filter(a => a.value_name).slice(0, 15).map((attr, i) => (
+                    {detail.attributes.filter(a => a.value_name).map((attr, i) => (
                       <div key={i} className="flex items-center gap-1 py-0.5">
-                        <span className="text-muted-foreground">{attr.name}:</span>
-                        <span className="text-foreground font-medium">{attr.value_name}</span>
+                        <span className="text-muted-foreground whitespace-nowrap">{attr.name}:</span>
+                        {editMode ? (
+                          <input
+                            type="text"
+                            value={editAttributes[attr.id] ?? attr.value_name}
+                            onChange={e => setEditAttributes(prev => ({ ...prev, [attr.id]: e.target.value }))}
+                            className="flex-1 min-w-0 px-1.5 py-0.5 bg-muted border border-border rounded text-xs text-foreground"
+                          />
+                        ) : (
+                          <span className="text-foreground font-medium">{attr.value_name}</span>
+                        )}
                       </div>
                     ))}
                   </div>
