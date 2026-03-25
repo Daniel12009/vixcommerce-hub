@@ -364,7 +364,12 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ items, total, offset: off, limit: lim }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      // Post-filter: ML search index can be stale — remove items that don't match requested status
+      const filteredItems = (reqStatus && reqStatus !== 'all')
+        ? items.filter((it: any) => it.status === reqStatus)
+        : items;
+
+      return new Response(JSON.stringify({ items: filteredItems, total, offset: off, limit: lim }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (action === 'search_items_by_sku') {
