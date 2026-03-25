@@ -14,6 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      envios_full: {
+        Row: {
+          caixas: number | null
+          coletado: boolean | null
+          conta: string | null
+          created_at: string | null
+          data_coleta: string | null
+          data_inicio: string | null
+          envio_numero: string | null
+          id: string
+          local: string | null
+          preparado: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          caixas?: number | null
+          coletado?: boolean | null
+          conta?: string | null
+          created_at?: string | null
+          data_coleta?: string | null
+          data_inicio?: string | null
+          envio_numero?: string | null
+          id?: string
+          local?: string | null
+          preparado?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          caixas?: number | null
+          coletado?: boolean | null
+          conta?: string | null
+          created_at?: string | null
+          data_coleta?: string | null
+          data_inicio?: string | null
+          envio_numero?: string | null
+          id?: string
+          local?: string | null
+          preparado?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      envios_full_items: {
+        Row: {
+          envio_id: string
+          id: string
+          quantidade: number | null
+          sku: string
+        }
+        Insert: {
+          envio_id: string
+          id?: string
+          quantidade?: number | null
+          sku: string
+        }
+        Update: {
+          envio_id?: string
+          id?: string
+          quantidade?: number | null
+          sku?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "envios_full_items_envio_id_fkey"
+            columns: ["envio_id"]
+            isOneToOne: false
+            referencedRelation: "envios_full"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estoque_items: {
         Row: {
           conta: string
