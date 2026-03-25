@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, Info, AlertTriangle, Filter, Clock, Star, ShieldCheck } from 'lucide-react';
+import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, Info, AlertTriangle, Filter, Clock, Star, ShieldCheck, Eye } from 'lucide-react';
 import { formatBRL } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -26,6 +26,10 @@ export function StatusAnunciosTab() {
   const [selectedAd, setSelectedAd] = useState<AdItem | null>(null);
   // Seller reputation
   const [sellerReps, setSellerReps] = useState<Record<string, any>>({});
+  // Per-item status
+  const [itemStatusData, setItemStatusData] = useState<any>(null);
+  const [itemStatusLoading, setItemStatusLoading] = useState(false);
+  const [selectedItemAd, setSelectedItemAd] = useState<AdItem | null>(null);
 
   const fetchAds = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -63,6 +67,23 @@ export function StatusAnunciosTab() {
       setCatalogInfo({ catalog: false, message: err.message || 'Erro de conexão' });
     }
     finally { setCatalogLoading(false); }
+  };
+
+  const fetchItemStatus = async (ad: AdItem) => {
+    setSelectedItemAd(ad);
+    setItemStatusLoading(true);
+    setItemStatusData(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('mercado-livre', { body: { action: 'get_item_status', item_id: ad.item_id, account_id: ad.account_id } });
+      if (error) {
+        setItemStatusData({ error: error.message || 'Erro ao buscar dados' });
+      } else {
+        setItemStatusData(data || { error: 'Sem dados' });
+      }
+    } catch (err: any) {
+      setItemStatusData({ error: err.message || 'Erro de conexão' });
+    }
+    finally { setItemStatusLoading(false); }
   };
 
   const contas = useMemo(() => [...new Set(ads.map(a => a.conta).filter(Boolean))].sort(), [ads]);
@@ -390,6 +411,7 @@ export function StatusAnunciosTab() {
                     <th className="text-center py-2.5 px-3 font-medium text-muted-foreground text-xs">Catálogo</th>
                     <th className="text-center py-2.5 px-3 font-medium text-muted-foreground text-xs">Buy Box</th>
                     <th className="text-center py-2.5 px-3 font-medium text-muted-foreground text-xs">Tipo</th>
+                    <th className="text-center py-2.5 px-3 font-medium text-muted-foreground text-xs">Exp. Compra</th>
                     <th className="text-center py-2.5 px-3 font-medium text-muted-foreground text-xs">Status</th>
                     <th className="text-right py-2.5 px-3 font-medium text-muted-foreground text-xs">Preço</th>
                     <th className="text-left py-2.5 px-3 font-medium text-muted-foreground text-xs">Conta</th>
@@ -432,6 +454,11 @@ export function StatusAnunciosTab() {
                         <span className="text-[10px] text-muted-foreground">{ad.listing_type_id === 'gold_pro' ? 'Premium' : ad.listing_type_id === 'gold_special' ? 'Clássico' : ad.listing_type_id || '-'}</span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
+                        <button onClick={() => fetchItemStatus(ad)} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary inline-flex items-center gap-1 hover:bg-primary/20 transition-colors cursor-pointer">
+                          <Eye className="w-3 h-3" /> Ver
+                        </button>
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(ad.status)}`}>{ad.status}</span>
                       </td>
                       <td className="py-2.5 px-3 text-right text-xs">{ad.price ? formatBRL(ad.price) : '-'}</td>
@@ -447,6 +474,131 @@ export function StatusAnunciosTab() {
 
       {/* Catalog Modal via Portal */}
       {CatalogModal}
+
+      {/* Purchase Experience Modal via Portal */}
+      {selectedItemAd && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setSelectedItemAd(null); setItemStatusData(null); }}>
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card z-10">
+              <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm"><Star className="w-4 h-4 text-yellow-400" /> Experiência de Compra</h3>
+              <button onClick={() => { setSelectedItemAd(null); setItemStatusData(null); }} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-5 py-4">
+              <div className="flex items-center gap-3 mb-4">
+                {selectedItemAd.thumbnail && <img src={selectedItemAd.thumbnail} alt="" className="w-12 h-12 rounded object-cover" />}
+                <div>
+                  <p className="text-sm font-medium text-foreground">{selectedItemAd.title}</p>
+                  <p className="text-[10px] text-muted-foreground">{selectedItemAd.item_id} • {selectedItemAd.conta}</p>
+                </div>
+              </div>
+
+              {itemStatusLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  <span className="ml-2 text-sm text-muted-foreground">Buscando experiência de compra...</span>
+                </div>
+              )}
+
+              {itemStatusData && !itemStatusLoading && (
+                <div className="space-y-3">
+                  {itemStatusData.error && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-center">
+                      <AlertTriangle className="w-5 h-5 text-red-400 mx-auto mb-1" />
+                      <p className="text-xs text-foreground">{itemStatusData.error}</p>
+                    </div>
+                  )}
+
+                  {itemStatusData.purchase_experience && (() => {
+                    const pe = itemStatusData.purchase_experience;
+                    const rep = pe.reputation || {};
+                    const scoreColor = rep.color === 'green' ? 'text-emerald-400 border-emerald-400' : rep.color === 'orange' ? 'text-orange-400 border-orange-400' : rep.color === 'red' ? 'text-red-400 border-red-400' : 'text-muted-foreground border-muted';
+                    const scoreBg = rep.color === 'green' ? 'bg-emerald-500/10' : rep.color === 'orange' ? 'bg-orange-500/10' : rep.color === 'red' ? 'bg-red-500/10' : 'bg-muted/50';
+                    return (
+                      <>
+                        {/* Score */}
+                        <div className={`flex items-center gap-4 rounded-xl p-4 ${scoreBg}`}>
+                          <div className={`w-16 h-16 rounded-full border-[3px] flex items-center justify-center ${scoreColor}`}>
+                            <span className={`text-xl font-bold ${scoreColor.split(' ')[0]}`}>{rep.value >= 0 ? rep.value : '-'}</span>
+                          </div>
+                          <div>
+                            <p className={`text-sm font-bold ${scoreColor.split(' ')[0]}`}>{rep.text || (rep.color === 'green' ? 'Boa' : rep.color === 'orange' ? 'Média' : rep.color === 'red' ? 'Ruim' : 'Sem dados')}</p>
+                            {pe.subtitles?.map((s: any) => (
+                              <p key={s.order} className="text-[10px] text-muted-foreground mt-0.5">{s.text?.replace(/\{\d+\}/g, '')}</p>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Freeze */}
+                        {pe.freeze?.text && (
+                          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+                            <p className="text-xs text-blue-400">❄️ {pe.freeze.text.replace(/\{\d+\}/g, '')}</p>
+                          </div>
+                        )}
+
+                        {/* Problems */}
+                        {pe.metrics_details?.problems?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">⚠️ Problemas ({pe.metrics_details.problems.length}):</p>
+                            <div className="space-y-2">
+                              {pe.metrics_details.problems.map((p: any, i: number) => (
+                                <div key={i} className="bg-muted/30 rounded-xl p-3 border-l-2" style={{ borderColor: p.color || '#666' }}>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {p.tag && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400">{p.tag}</span>}
+                                    <span className="text-xs font-medium text-foreground">{p.quantity}</span>
+                                    <span className="text-[10px] text-muted-foreground">({p.claims || 0} recl. / {p.cancellations || 0} canc.)</span>
+                                  </div>
+                                  {p.level_two?.title && <p className="text-[10px] text-foreground">{p.level_two.title.text || p.level_two.title}</p>}
+                                  {p.level_three?.title && <p className="text-[10px] text-foreground ml-2">→ {p.level_three.title.text || p.level_three.title}</p>}
+                                  {p.level_three?.remedy && (
+                                    <div className="mt-1.5 bg-emerald-500/10 rounded-lg p-2">
+                                      <p className="text-[10px] text-emerald-400">💡 {p.level_three.remedy.text || p.level_three.remedy}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Empty state */}
+                        {pe.metrics_details?.empty_state_title && !pe.metrics_details?.problems?.length && (
+                          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center">
+                            <p className="text-xs text-emerald-400">✅ {pe.metrics_details.empty_state_title}</p>
+                          </div>
+                        )}
+
+                        {/* Item info */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-muted/50 rounded-lg p-2 text-center">
+                            <p className="text-[10px] text-muted-foreground">Envio</p>
+                            <p className="text-xs font-semibold text-foreground">{itemStatusData.shipping === 'fulfillment' ? '📦 Full' : itemStatusData.shipping || '-'}</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-2 text-center">
+                            <p className="text-[10px] text-muted-foreground">Tipo</p>
+                            <p className="text-xs font-semibold text-foreground">{itemStatusData.listing_type === 'gold_pro' ? 'Premium' : itemStatusData.listing_type === 'gold_special' ? 'Clássico' : itemStatusData.listing_type || '-'}</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-2 text-center">
+                            <p className="text-[10px] text-muted-foreground">Catálogo</p>
+                            <p className="text-xs font-semibold text-foreground">{itemStatusData.catalog_listing ? '✅ Sim' : 'Não'}</p>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {!itemStatusData.purchase_experience && !itemStatusData.error && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
+                      <AlertTriangle className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
+                      <p className="text-xs text-foreground">Sem dados de experiência de compra para este item.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

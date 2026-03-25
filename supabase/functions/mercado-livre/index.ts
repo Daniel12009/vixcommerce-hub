@@ -688,6 +688,48 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ campaigns: allCampaigns, items: allAdItems, seller_reputations: sellerReputations }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (action === 'get_item_status') {
+      if (!item_id || !account_id) throw new Error('item_id and account_id required');
+      const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Account not found');
+      const account = accounts[0];
+      const token = await refreshToken(account);
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+      // Get purchase experience per item (official endpoint)
+      let purchaseExp = null;
+      try {
+        const peRes = await fetch(`${ML_API}/reputation/items/${item_id}/purchase_experience/integrators?locale=pt_BR`, { headers });
+        console.log(`[ADS] purchase_experience ${item_id}: status=${peRes.status}`);
+        if (peRes.ok) {
+          purchaseExp = await peRes.json();
+        } else {
+          const errText = await peRes.text();
+          console.log(`[ADS] purchase_experience ${item_id}: error=${errText.substring(0,200)}`);
+        }
+      } catch (e) { console.error(`[ADS] purchase_experience error:`, e); }
+
+      // Get basic item info
+      const itemRes = await fetch(`${ML_API}/items/${item_id}`, { headers });
+      const itemData = itemRes.ok ? await itemRes.json() : null;
+
+      console.log(`[ADS] item_status ${item_id}: exp_score=${purchaseExp?.reputation?.value ?? 'null'}, exp_color=${purchaseExp?.reputation?.color ?? 'null'}`);
+      return new Response(JSON.stringify({
+        item_id,
+        title: itemData?.title || '',
+        purchase_experience: purchaseExp,
+        shipping: itemData?.shipping?.logistic_type || '',
+        listing_type: itemData?.listing_type_id || '',
+        condition: itemData?.condition || '',
+        catalog_product_id: itemData?.catalog_product_id || null,
+        catalog_listing: !!itemData?.catalog_product_id,
+        buy_box_winner: itemData?.buy_box_winner || false,
+        status: itemData?.status || '',
+        price: itemData?.price || 0,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     if (action === 'get_catalog_winner') {
       if (!item_id || !account_id) throw new Error('item_id and account_id required');
       const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
