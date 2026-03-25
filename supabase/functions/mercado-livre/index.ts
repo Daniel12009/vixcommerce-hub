@@ -659,25 +659,20 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'update_campaign') {
-      // Update campaign budget and/or roas_target
       if (!reqCampaignId || !account_id) throw new Error('campaign_id and account_id required');
       const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
       const accounts = await accountsRes.json();
       if (!accounts?.length) throw new Error('Account not found');
       const account = accounts[0];
 
+      // Always get fresh token first
+      let token = await refreshToken(account);
+
       // Discover advertiser_id
-      let token = account.access_token;
       const advRes = await fetch('https://api.mercadolibre.com/advertising/advertisers?product_id=PADS', {
         headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
       });
-      if (advRes.status === 401) {
-        token = await refreshToken(account);
-      }
-      const advResRetry = advRes.status === 401 ? await fetch('https://api.mercadolibre.com/advertising/advertisers?product_id=PADS', {
-        headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
-      }) : advRes;
-      const advData = await advResRetry.json();
+      const advData = await advRes.json();
       const mlbAdv = (advData?.advertisers || []).find((a: any) => a.site_id === 'MLB');
       if (!mlbAdv) throw new Error('No MLB advertiser found');
 
@@ -686,18 +681,23 @@ Deno.serve(async (req) => {
       if (reqBudget !== undefined) updateBody.budget = Number(reqBudget);
       if (reqRoasTarget !== undefined) updateBody.roas_target = Number(reqRoasTarget);
 
-      const putRes = await fetch(`https://api.mercadolibre.com/advertising/${mlbAdv.site_id}/product_ads/campaigns/${reqCampaignId}`, {
+      const doPut = (t: string) => fetch(`https://api.mercadolibre.com/advertising/${mlbAdv.site_id}/product_ads/campaigns/${reqCampaignId}`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Api-Version': '2' },
+        headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json', 'Api-Version': '2' },
         body: JSON.stringify(updateBody),
       });
-      const result = await putRes.text();
-      console.log(`[ADS] update_campaign ${reqCampaignId}: status=${putRes.status}`);
-      try {
-        return new Response(result, { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      } catch {
-        return new Response(JSON.stringify({ status: putRes.status, body: result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      let putRes = await doPut(token);
+      if (putRes.status === 401) {
+        token = await refreshToken(account);
+        putRes = await doPut(token);
       }
+      const result = await putRes.text();
+      console.log(`[ADS] update_campaign ${reqCampaignId}: status=${putRes.status} body=${result.slice(0, 200)}`);
+      return new Response(result, {
+        status: putRes.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     throw new Error(`Unknown action: ${action}`);
