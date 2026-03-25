@@ -681,7 +681,7 @@ Deno.serve(async (req) => {
       if (reqBudget !== undefined) updateBody.budget = Number(reqBudget);
       if (reqRoasTarget !== undefined) updateBody.roas_target = Number(reqRoasTarget);
 
-      const doPut = (t: string) => fetch(`https://api.mercadolibre.com/advertising/${mlbAdv.site_id}/product_ads/campaigns/${reqCampaignId}`, {
+      const doPut = (t: string) => fetch(`https://api.mercadolibre.com/advertising/${mlbAdv.site_id}/advertisers/${mlbAdv.advertiser_id}/product_ads/campaigns/${reqCampaignId}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json', 'Api-Version': '2' },
         body: JSON.stringify(updateBody),
