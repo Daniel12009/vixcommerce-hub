@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, account_id, sku, item_id, fields, description_text, new_item, query, offset: reqOffset, limit: reqLimit } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, query, status: reqStatus, offset: reqOffset, limit: reqLimit } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -323,7 +323,9 @@ Deno.serve(async (req) => {
 
       const off = reqOffset || 0;
       const lim = Math.min(reqLimit || 50, 100);
-      const searchData = await mlFetch(account, `/users/${sellerId}/items/search?offset=${off}&limit=${lim}`);
+      let searchUrl = `/users/${sellerId}/items/search?offset=${off}&limit=${lim}`;
+      if (reqStatus && reqStatus !== 'all') searchUrl += `&status=${reqStatus}`;
+      const searchData = await mlFetch(account, searchUrl);
       const itemIds = searchData.results || [];
       const total = searchData.paging?.total || 0;
 

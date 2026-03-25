@@ -155,17 +155,17 @@ export function CadastroPage() {
   }, [accountsLoaded]);
   if (!accountsLoaded) loadAccounts();
 
-  const loadItems = useCallback(async (offset = 0) => {
+  const loadItems = useCallback(async (offset = 0, status?: string) => {
     if (!selectedAccount) return;
     setListLoading(true);
     try {
-      const data = await callML({ action: 'list_seller_items', account_id: selectedAccount, offset, limit: 50 });
+      const data = await callML({ action: 'list_seller_items', account_id: selectedAccount, offset, limit: 50, status: status || statusFilter });
       setItems(data.items || []);
       setTotalItems(data.total || 0);
       setCurrentOffset(offset);
     } catch (err: any) { console.error('Error loading items:', err); }
     setListLoading(false);
-  }, [selectedAccount]);
+  }, [selectedAccount, statusFilter]);
 
   const handleSearch = useCallback(async () => {
     if (!searchSku.trim()) { loadItems(0); return; }
@@ -259,8 +259,7 @@ export function CadastroPage() {
     setUploading(false);
   };
 
-  // Filter items by status
-  const filteredItems = statusFilter === 'all' ? items : items.filter(i => i.status === statusFilter);
+  // No local filter needed - server-side filtering handles it
 
   return (
     <div>
@@ -291,29 +290,19 @@ export function CadastroPage() {
       </div>
 
       {/* Status Filters */}
-      {items.length > 0 && (
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-          {([
-            { val: 'all' as StatusFilter, label: 'Todos', count: items.length },
-            { val: 'active' as StatusFilter, label: 'Ativos', count: items.filter(i => i.status === 'active').length },
-            { val: 'paused' as StatusFilter, label: 'Pausados', count: items.filter(i => i.status === 'paused').length },
-            { val: 'closed' as StatusFilter, label: 'Inativos', count: items.filter(i => i.status === 'closed').length },
-          ]).map(f => (
-            <button key={f.val} onClick={() => setStatusFilter(f.val)} className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${statusFilter === f.val ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
-              {f.label} <span className="ml-1 opacity-60">({f.count})</span>
-            </button>
-          ))}
-          {/* Full / Catalog filters */}
-          <span className="mx-1 text-border">|</span>
-          <button onClick={() => { setStatusFilter('all'); setItems(prev => prev.filter(i => i.logistic_type === 'fulfillment')); }} className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20">
-            Full ({items.filter(i => i.logistic_type === 'fulfillment').length})
+      <div className="flex items-center gap-2 mb-4">
+        <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+        {([
+          { val: 'all' as StatusFilter, label: 'Todos' },
+          { val: 'active' as StatusFilter, label: 'Ativos' },
+          { val: 'paused' as StatusFilter, label: 'Pausados' },
+          { val: 'closed' as StatusFilter, label: 'Inativos' },
+        ]).map(f => (
+          <button key={f.val} onClick={() => { setStatusFilter(f.val); loadItems(0, f.val); }} className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${statusFilter === f.val ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
+            {f.label} {statusFilter === f.val && totalItems > 0 && <span className="ml-1 opacity-60">({totalItems})</span>}
           </button>
-          <button onClick={() => { setStatusFilter('all'); setItems(prev => prev.filter(i => i.catalog_listing)); }} className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 hover:bg-purple-500/20">
-            Catálogo ({items.filter(i => i.catalog_listing).length})
-          </button>
-        </div>
-      )}
+        ))}
+      </div>
 
       {/* Create form */}
       {showCreate && (
