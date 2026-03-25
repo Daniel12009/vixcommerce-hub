@@ -674,9 +674,11 @@ Deno.serve(async (req) => {
       const token = await refreshToken(account);
       const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-      // Get item details
+      // Get item details (includes catalog_product_id, health, shipping)
       const itemRes = await fetch(`${ML_API}/items/${item_id}`, { headers });
       const itemData = itemRes.ok ? await itemRes.json() : null;
+      console.log(`[ADS] item ${item_id}: catalog_product_id=${itemData?.catalog_product_id}, health=${JSON.stringify(itemData?.health)?.substring(0,100)}`);
+
       const catalogProductId = itemData?.catalog_product_id;
       if (!catalogProductId) {
         return new Response(JSON.stringify({ catalog: false, message: 'Item não é de catálogo' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -686,35 +688,72 @@ Deno.serve(async (req) => {
       const catRes = await fetch(`${ML_API}/products/${catalogProductId}`, { headers });
       const catalogData = catRes.ok ? await catRes.json() : {};
 
-      // Get buy box winner
-      let buyBoxData = null;
+      // Get item health
+      let healthData = null;
       try {
-        const bbRes = await fetch(`${ML_API}/items/${item_id}/buy_box_winner`, { headers });
-        if (bbRes.ok) buyBoxData = await bbRes.json();
+        const hRes = await fetch(`${ML_API}/items/${item_id}/health`, { headers });
+        if (hRes.ok) healthData = await hRes.json();
+        console.log(`[ADS] health ${item_id}: status=${hRes.status}`);
       } catch { /* optional */ }
 
-      // Get all items in catalog
+      // Get catalog listings to find real competitors (who sells same product)
       let competitors: any[] = [];
+      let winnerInfo: any = null;
       try {
-        const compRes = await fetch(`${ML_API}/products/${catalogProductId}/items?status=active&limit=10`, { headers });
-        if (compRes.ok) {
-          const compData = await compRes.json();
-          competitors = Array.isArray(compData) ? compData : (compData?.results || []);
+        // Catalog listing page: shows all sellers of this product
+        const catalogPageRes = await fetch(`${ML_API}/products/${catalogProductId}/items?status=active&limit=20`, { headers });
+        console.log(`[ADS] catalog items ${catalogProductId}: status=${catalogPageRes.status}`);
+        if (catalogPageRes.ok) {
+          const cpData = await catalogPageRes.json();
+          const items = Array.isArray(cpData) ? cpData : (cpData?.results || cpData?.items || []);
+          for (const ci of items) {
+            const isMe = ci.id === item_id || ci.item_id === item_id;
+            const entry = {
+              item_id: ci.id || ci.item_id || '',
+              seller_id: ci.seller_id || ci.seller?.id || '',
+              price: ci.price || 0,
+              condition: ci.condition || '',
+              is_me: isMe,
+              buy_box_winner: ci.buy_box_winner || false,
+            };
+            if (!isMe) competitors.push(entry);
+            if (ci.buy_box_winner && !isMe) winnerInfo = entry;
+          }
         }
-      } catch { /* optional */ }
+      } catch (e) { console.error(`[ADS] catalog items error:`, e); }
 
-      console.log(`[ADS] catalog_winner ${item_id}: catalog=${catalogProductId}, competitors=${competitors.length}`);
+      // Fallback: direct buy_box_winner endpoint
+      if (!winnerInfo) {
+        try {
+          const bbRes = await fetch(`${ML_API}/items/${item_id}/catalog_listing`, { headers });
+          console.log(`[ADS] catalog_listing ${item_id}: status=${bbRes.status}`);
+          if (bbRes.ok) {
+            const bbData = await bbRes.json();
+            if (bbData?.buy_box_winner && bbData.buy_box_winner.item_id !== item_id) {
+              winnerInfo = {
+                item_id: bbData.buy_box_winner.item_id || '',
+                seller_id: bbData.buy_box_winner.seller_id || '',
+                price: bbData.buy_box_winner.price || 0,
+              };
+            }
+          }
+        } catch { /* optional */ }
+      }
+
+      console.log(`[ADS] catalog_winner ${item_id}: catalog=${catalogProductId}, competitors=${competitors.length}, winner=${winnerInfo?.item_id || 'none'}`);
       return new Response(JSON.stringify({
         catalog: true,
         catalog_product_id: catalogProductId,
         product_name: catalogData?.name || '',
-        buy_box_winner: buyBoxData,
+        buy_box_winner: winnerInfo,
         competitors,
         item_status: {
-          health: itemData?.health || null,
+          health: healthData || itemData?.health || null,
           shipping: itemData?.shipping?.logistic_type || '',
           listing_type: itemData?.listing_type_id || '',
           condition: itemData?.condition || '',
+          seller_reputation: itemData?.seller_address ? 'available' : null,
+          sale_terms: itemData?.sale_terms || [],
         },
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }

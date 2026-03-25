@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, Info, AlertTriangle, Filter, Clock } from 'lucide-react';
 import { formatBRL } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,7 +19,8 @@ export function StatusAnunciosTab() {
   const [loading, setLoading] = useState(!_cached);
   const [lastRefresh, setLastRefresh] = useState('');
   const [filterConta, setFilterConta] = useState('all');
-  // Catalog
+  const [filterStatus, setFilterStatus] = useState('active');
+  // Catalog modal
   const [catalogInfo, setCatalogInfo] = useState<any>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [selectedAd, setSelectedAd] = useState<AdItem | null>(null);
@@ -61,11 +63,17 @@ export function StatusAnunciosTab() {
   };
 
   const contas = useMemo(() => [...new Set(ads.map(a => a.conta).filter(Boolean))].sort(), [ads]);
-  const filtered = useMemo(() => filterConta === 'all' ? ads : ads.filter(a => a.conta === filterConta), [ads, filterConta]);
+  const filtered = useMemo(() => {
+    let result = ads;
+    if (filterConta !== 'all') result = result.filter(a => a.conta === filterConta);
+    if (filterStatus !== 'all') result = result.filter(a => a.status === filterStatus);
+    return result;
+  }, [ads, filterConta, filterStatus]);
 
   const statusColor = (s: string) => {
     if (s === 'active' || s === 'enabled') return 'text-emerald-400 bg-emerald-400/10';
     if (s === 'paused') return 'text-yellow-400 bg-yellow-400/10';
+    if (s === 'hold') return 'text-orange-400 bg-orange-400/10';
     return 'text-muted-foreground bg-muted';
   };
 
@@ -78,6 +86,153 @@ export function StatusAnunciosTab() {
     active: filtered.filter(a => a.status === 'active').length,
   }), [filtered]);
 
+  // Render health info
+  const renderHealth = (health: any) => {
+    if (!health) return <span className="text-[10px] text-muted-foreground">Sem dados</span>;
+    // Health can be object with `health_level` or string
+    const level = health.health_level || health.level || (typeof health === 'string' ? health : null);
+    const actions = health.health_actions || health.actions || [];
+    return (
+      <div className="space-y-2">
+        {level && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Qualidade:</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              level === 'healthy' || level === 'good' ? 'bg-emerald-500/15 text-emerald-400' :
+              level === 'warning' || level === 'fair' ? 'bg-yellow-500/15 text-yellow-400' :
+              'bg-red-500/15 text-red-400'
+            }`}>{level}</span>
+          </div>
+        )}
+        {actions.length > 0 && (
+          <div>
+            <p className="text-[10px] text-muted-foreground mb-1">Ações necessárias:</p>
+            {actions.map((a: any, i: number) => (
+              <p key={i} className="text-[10px] text-foreground">• {a.label || a.message || JSON.stringify(a)}</p>
+            ))}
+          </div>
+        )}
+        {!level && actions.length === 0 && (
+          <pre className="text-[10px] text-muted-foreground overflow-x-auto max-h-20">{JSON.stringify(health, null, 2)}</pre>
+        )}
+      </div>
+    );
+  };
+
+  /* ━━━ Modal via Portal ━━━ */
+  const CatalogModal = selectedAd ? createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setSelectedAd(null); setCatalogInfo(null); }}>
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto animate-fade-in" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card z-10">
+          <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm"><Info className="w-4 h-4 text-primary" /> Detalhes do Catálogo</h3>
+          <button onClick={() => { setSelectedAd(null); setCatalogInfo(null); }} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="px-5 py-4">
+          <div className="flex items-center gap-3 mb-4">
+            {selectedAd.thumbnail && <img src={selectedAd.thumbnail} alt="" className="w-12 h-12 rounded object-cover" />}
+            <div>
+              <p className="text-sm font-medium text-foreground">{selectedAd.title}</p>
+              <p className="text-[10px] text-muted-foreground">{selectedAd.item_id} • {selectedAd.conta}</p>
+            </div>
+          </div>
+
+          {catalogLoading && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="ml-2 text-sm text-muted-foreground">Buscando dados do catálogo...</span>
+            </div>
+          )}
+
+          {catalogInfo && !catalogLoading && (
+            <div className="space-y-3">
+              {!catalogInfo.catalog && (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
+                  <AlertTriangle className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
+                  <p className="text-xs text-foreground">{catalogInfo.message || 'Este item não é de catálogo.'}</p>
+                </div>
+              )}
+
+              {catalogInfo.catalog && (
+                <>
+                  <div className="bg-muted/50 rounded-xl p-3">
+                    <p className="text-xs text-muted-foreground">Produto Catálogo</p>
+                    <p className="text-sm font-medium text-foreground">{catalogInfo.product_name}</p>
+                    <p className="text-[10px] text-muted-foreground">ID: {catalogInfo.catalog_product_id}</p>
+                  </div>
+
+                  {/* Item Status */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-muted/50 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">Envio</p>
+                      <p className="text-xs font-semibold text-foreground">{catalogInfo.item_status?.shipping === 'fulfillment' ? '📦 Full' : catalogInfo.item_status?.shipping || '-'}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">Tipo</p>
+                      <p className="text-xs font-semibold text-foreground">{catalogInfo.item_status?.listing_type === 'gold_pro' ? 'Premium' : catalogInfo.item_status?.listing_type === 'gold_special' ? 'Clássico' : catalogInfo.item_status?.listing_type || '-'}</p>
+                    </div>
+                  </div>
+
+                  {/* Health / Qualidade */}
+                  <div className="bg-muted/50 rounded-xl p-3">
+                    <p className="text-xs text-muted-foreground font-medium mb-1">📊 Qualidade do Anúncio</p>
+                    {renderHealth(catalogInfo.item_status?.health)}
+                  </div>
+
+                  {/* Buy Box Winner */}
+                  {catalogInfo.buy_box_winner ? (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                      <p className="text-xs font-semibold text-red-400 mb-2">⚠️ Vendedor ganhando o Buy Box:</p>
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-xs text-muted-foreground">Item:</span>
+                          <span className="text-xs font-medium text-foreground">{catalogInfo.buy_box_winner.item_id || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-xs text-muted-foreground">Seller ID:</span>
+                          <span className="text-xs font-medium text-foreground">{catalogInfo.buy_box_winner.seller_id || 'N/A'}</span>
+                        </div>
+                        {catalogInfo.buy_box_winner.price > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-xs text-muted-foreground">Preço:</span>
+                            <span className="text-xs font-medium text-foreground">{formatBRL(catalogInfo.buy_box_winner.price)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center">
+                      <p className="text-xs font-semibold text-emerald-400">🏆 Nenhum competidor ganhando o Buy Box foi encontrado</p>
+                    </div>
+                  )}
+
+                  {/* Competitors */}
+                  {catalogInfo.competitors?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">🏪 Competidores no catálogo ({catalogInfo.competitors.length}):</p>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {catalogInfo.competitors.map((c: any, i: number) => (
+                          <div key={i} className={`flex justify-between items-center text-xs px-3 py-2 rounded-lg ${c.buy_box_winner ? 'bg-red-500/10 border border-red-500/30' : 'bg-muted/30'}`}>
+                            <div>
+                              <span className="text-foreground font-medium">{c.item_id || `Item ${i+1}`}</span>
+                              {c.seller_id && <span className="text-[10px] text-muted-foreground ml-2">Seller: {c.seller_id}</span>}
+                              {c.buy_box_winner && <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400">GANHANDO</span>}
+                            </div>
+                            {c.price > 0 && <span className="text-muted-foreground font-medium">{formatBRL(c.price)}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Controls */}
@@ -86,6 +241,19 @@ export function StatusAnunciosTab() {
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           {loading ? 'Carregando...' : 'Atualizar'}
         </button>
+        {/* Status filter */}
+        <div className="flex items-center gap-1 bg-muted/50 p-0.5 rounded-lg">
+          {[
+            { key: 'active', label: 'Ativos' },
+            { key: 'paused', label: 'Pausados' },
+            { key: 'all', label: 'Todos' },
+          ].map(f => (
+            <button key={f.key} onClick={() => setFilterStatus(f.key)}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${filterStatus === f.key ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >{f.label}</button>
+          ))}
+        </div>
+        {/* Conta filter */}
         {contas.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -105,10 +273,10 @@ export function StatusAnunciosTab() {
         </div>
       )}
 
-      {!loading && ads.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 bg-card border border-border rounded-xl">
           <Package className="w-12 h-12 text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">Nenhum anúncio encontrado.</p>
+          <p className="text-sm text-muted-foreground">Nenhum anúncio encontrado com os filtros selecionados.</p>
         </div>
       )}
 
@@ -145,7 +313,7 @@ export function StatusAnunciosTab() {
           {/* Table */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
-              <h3 className="text-foreground font-semibold flex items-center gap-2 text-sm"><Package className="w-4 h-4 text-primary" /> Status dos Anúncios</h3>
+              <h3 className="text-foreground font-semibold flex items-center gap-2 text-sm"><Package className="w-4 h-4 text-primary" /> Status dos Anúncios ({filtered.length})</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -211,89 +379,8 @@ export function StatusAnunciosTab() {
         </>
       )}
 
-      {/* Catalog Detail Modal */}
-      {selectedAd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setSelectedAd(null); setCatalogInfo(null); }}>
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg mx-4 animate-fade-in" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm"><Info className="w-4 h-4 text-primary" /> Detalhes do Catálogo</h3>
-              <button onClick={() => { setSelectedAd(null); setCatalogInfo(null); }} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="px-5 py-4">
-              <div className="flex items-center gap-3 mb-4">
-                {selectedAd.thumbnail && <img src={selectedAd.thumbnail} alt="" className="w-12 h-12 rounded object-cover" />}
-                <div>
-                  <p className="text-sm font-medium text-foreground">{selectedAd.title}</p>
-                  <p className="text-[10px] text-muted-foreground">{selectedAd.item_id} • {selectedAd.conta}</p>
-                </div>
-              </div>
-
-              {catalogLoading && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                  <span className="ml-2 text-sm text-muted-foreground">Buscando dados do catálogo...</span>
-                </div>
-              )}
-
-              {catalogInfo && !catalogLoading && (
-                <div className="space-y-3">
-                  {!catalogInfo.catalog && (
-                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
-                      <AlertTriangle className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
-                      <p className="text-xs text-foreground">Este item não é de catálogo.</p>
-                    </div>
-                  )}
-
-                  {catalogInfo.catalog && (
-                    <>
-                      <div className="bg-muted/50 rounded-xl p-3">
-                        <p className="text-xs text-muted-foreground">Produto Catálogo</p>
-                        <p className="text-sm font-medium text-foreground">{catalogInfo.product_name}</p>
-                        <p className="text-[10px] text-muted-foreground">ID: {catalogInfo.catalog_product_id}</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-muted/50 rounded-lg p-2 text-center">
-                          <p className="text-[10px] text-muted-foreground">Envio</p>
-                          <p className="text-xs font-semibold text-foreground">{catalogInfo.item_status?.shipping === 'fulfillment' ? '📦 Full' : catalogInfo.item_status?.shipping || '-'}</p>
-                        </div>
-                        <div className="bg-muted/50 rounded-lg p-2 text-center">
-                          <p className="text-[10px] text-muted-foreground">Tipo</p>
-                          <p className="text-xs font-semibold text-foreground">{catalogInfo.item_status?.listing_type === 'gold_pro' ? 'Premium' : catalogInfo.item_status?.listing_type || '-'}</p>
-                        </div>
-                      </div>
-
-                      {catalogInfo.buy_box_winner && (
-                        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
-                          <p className="text-xs font-semibold text-red-400 mb-1">⚠️ Vendedor ganhando o Buy Box:</p>
-                          <p className="text-sm text-foreground">
-                            Item: {catalogInfo.buy_box_winner?.winner_item_id || catalogInfo.buy_box_winner?.item_id || 'N/A'}
-                          </p>
-                          {catalogInfo.buy_box_winner?.price && <p className="text-xs text-muted-foreground">Preço: {formatBRL(catalogInfo.buy_box_winner.price)}</p>}
-                        </div>
-                      )}
-
-                      {catalogInfo.competitors?.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-2">Competidores no catálogo ({catalogInfo.competitors.length}):</p>
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {catalogInfo.competitors.map((c: any, i: number) => (
-                              <div key={i} className="flex justify-between items-center text-xs bg-muted/30 px-3 py-1.5 rounded-lg">
-                                <span className="text-foreground">{c.id || c.item_id || `Item ${i+1}`}</span>
-                                {c.price && <span className="text-muted-foreground">{formatBRL(c.price)}</span>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Catalog Modal via Portal */}
+      {CatalogModal}
     </div>
   );
 }
