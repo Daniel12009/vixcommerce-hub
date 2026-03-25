@@ -572,37 +572,76 @@ Deno.serve(async (req) => {
               res = await doFetch(token);
             }
             const text = await res.text();
-            try { return JSON.parse(text); } catch { return null; }
+            console.log(`[ADS] ${account.nome} ${path.split('?')[0]} -> status=${res.status} len=${text.length}`);
+            try { return { data: JSON.parse(text), status: res.status }; } catch { return { data: null, status: res.status }; }
           };
 
-          // 1. Get campaigns list
-          const campaignsData = await adsFetch(`/advertising/MLB/product_ads/campaigns?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost,ctr,cpc`);
-          if (campaignsData && Array.isArray(campaignsData.results)) {
-            for (const c of campaignsData.results) {
-              allCampaigns.push({
-                id: c.campaign_id || c.id,
-                name: c.name || 'Campanha',
-                status: c.status || 'unknown',
-                budget: c.daily_budget || 0,
-                metrics: c.metrics || {},
-                conta: account.nome,
-                account_id: account.id,
-              });
+          // Try multiple endpoint formats for campaigns
+          const campaignPaths = [
+            `/advertising/product_ads/campaigns?user_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost`,
+            `/advertising/product_ads/campaigns?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost`,
+            `/advertising/MLB/product_ads/campaigns?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost`,
+          ];
+
+          let foundCampaigns = false;
+          for (const path of campaignPaths) {
+            const { data: campaignsData, status } = await adsFetch(path);
+            if (status >= 400) continue;
+
+            // Handle both array and { results: [] } formats
+            const campaignsList = Array.isArray(campaignsData) ? campaignsData
+              : Array.isArray(campaignsData?.results) ? campaignsData.results
+              : [];
+
+            if (campaignsList.length > 0) {
+              for (const c of campaignsList) {
+                allCampaigns.push({
+                  id: c.campaign_id || c.id,
+                  name: c.name || c.campaign_name || 'Campanha',
+                  status: c.status || 'unknown',
+                  budget: c.daily_budget || c.budget || 0,
+                  metrics: c.metrics || { clicks: c.clicks || 0, prints: c.prints || c.impressions || 0, cost: c.cost || 0 },
+                  conta: account.nome,
+                  account_id: account.id,
+                });
+              }
+              foundCampaigns = true;
+              console.log(`[ADS] ${account.nome}: found ${campaignsList.length} campaigns via ${path.split('?')[0]}`);
+              break;
             }
           }
 
-          // 2. Get top ad items with metrics
-          const adsData = await adsFetch(`/advertising/MLB/product_ads/ads?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost,ctr,cpc&limit=50`);
-          if (adsData && Array.isArray(adsData.results)) {
-            for (const ad of adsData.results) {
-              allAdItems.push({
-                item_id: ad.item_id,
-                campaign_id: ad.campaign_id,
-                title: ad.title || '',
-                status: ad.status || 'unknown',
-                metrics: ad.metrics || {},
-                conta: account.nome,
-              });
+          if (!foundCampaigns) {
+            console.log(`[ADS] ${account.nome}: no campaigns found on any endpoint`);
+          }
+
+          // Try to get ad items
+          const adPaths = [
+            `/advertising/product_ads/ads?user_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost&limit=50`,
+            `/advertising/product_ads/ads?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost&limit=50`,
+          ];
+
+          for (const path of adPaths) {
+            const { data: adsData, status } = await adsFetch(path);
+            if (status >= 400) continue;
+
+            const adsList = Array.isArray(adsData) ? adsData
+              : Array.isArray(adsData?.results) ? adsData.results
+              : [];
+
+            if (adsList.length > 0) {
+              for (const ad of adsList) {
+                allAdItems.push({
+                  item_id: ad.item_id || ad.id,
+                  campaign_id: ad.campaign_id || '',
+                  title: ad.title || '',
+                  status: ad.status || 'unknown',
+                  metrics: ad.metrics || { clicks: ad.clicks || 0, prints: ad.prints || ad.impressions || 0, cost: ad.cost || 0 },
+                  conta: account.nome,
+                });
+              }
+              console.log(`[ADS] ${account.nome}: found ${adsList.length} ad items`);
+              break;
             }
           }
         } catch (err) {
