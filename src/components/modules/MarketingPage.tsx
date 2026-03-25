@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Megaphone, TrendingUp, DollarSign, RefreshCw, Loader2, BarChart3, Target, Eye, MousePointerClick, Clock } from 'lucide-react';
+import { Megaphone, TrendingUp, DollarSign, RefreshCw, Loader2, BarChart3, Target, Eye, MousePointerClick, Clock, Filter } from 'lucide-react';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatPercent } from '@/lib/utils-vix';
@@ -27,6 +27,7 @@ export function MarketingPage() {
   const [loading, setLoading] = useState(!_cachedAds);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState('');
+  const [filterConta, setFilterConta] = useState('all');
 
   const fetchAds = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -53,29 +54,34 @@ export function MarketingPage() {
     if (_cachedAds) { fetchAds(false); } else { fetchAds(true); }
   }, [fetchAds]);
 
+  // ━━━ Filter by Account ━━━
+  const contas = useMemo(() => [...new Set(campaigns.map(c => c.conta).filter(Boolean))].sort(), [campaigns]);
+  const filteredCampaigns = useMemo(() => filterConta === 'all' ? campaigns : campaigns.filter(c => c.conta === filterConta), [campaigns, filterConta]);
+  const filteredAds = useMemo(() => filterConta === 'all' ? adItems : adItems.filter(a => a.conta === filterConta), [adItems, filterConta]);
+
   // ━━━ Computed Metrics ━━━
-  const totalInvestimento = useMemo(() => campaigns.reduce((s, c) => s + (c.metrics?.cost || 0), 0), [campaigns]);
-  const totalCliques = useMemo(() => campaigns.reduce((s, c) => s + (c.metrics?.clicks || 0), 0), [campaigns]);
-  const totalImpressoes = useMemo(() => campaigns.reduce((s, c) => s + (c.metrics?.prints || 0), 0), [campaigns]);
+  const totalInvestimento = useMemo(() => filteredCampaigns.reduce((s, c) => s + (c.metrics?.cost || 0), 0), [filteredCampaigns]);
+  const totalCliques = useMemo(() => filteredCampaigns.reduce((s, c) => s + (c.metrics?.clicks || 0), 0), [filteredCampaigns]);
+  const totalImpressoes = useMemo(() => filteredCampaigns.reduce((s, c) => s + (c.metrics?.prints || 0), 0), [filteredCampaigns]);
   const ctrMedio = totalImpressoes > 0 ? (totalCliques / totalImpressoes) * 100 : 0;
   const cpcMedio = totalCliques > 0 ? totalInvestimento / totalCliques : 0;
 
   // Chart: Investment per campaign
   const campChart = useMemo(() =>
-    campaigns.map(c => ({
+    filteredCampaigns.map(c => ({
       name: c.name.length > 20 ? c.name.slice(0, 20) + '...' : c.name,
       investimento: Number((c.metrics?.cost || 0).toFixed(2)),
       cliques: c.metrics?.clicks || 0,
       impressoes: c.metrics?.prints || 0,
     })).sort((a, b) => b.investimento - a.investimento).slice(0, 15),
-  [campaigns]);
+  [filteredCampaigns]);
 
   // Chart: Top ad items by clicks
   const topAds = useMemo(() =>
-    [...adItems]
+    [...filteredAds]
       .sort((a, b) => (b.metrics?.clicks || 0) - (a.metrics?.clicks || 0))
       .slice(0, 20),
-  [adItems]);
+  [filteredAds]);
 
   const statusColor = (s: string) => {
     if (s === 'active' || s === 'enabled') return 'text-emerald-400 bg-emerald-400/10';
@@ -93,8 +99,21 @@ export function MarketingPage() {
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           {loading ? 'Carregando...' : 'Atualizar ADS'}
         </button>
+
+        <div className="h-5 w-px bg-border" />
+
+        {contas.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+            <select value={filterConta} onChange={e => setFilterConta(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+              <option value="all">Todas as Contas ({campaigns.length} camp.)</option>
+              {contas.map(c => <option key={c} value={c}>{c} ({campaigns.filter(cp => cp.conta === c).length} camp.)</option>)}
+            </select>
+          </div>
+        )}
+
         {lastRefresh && (
-          <span className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> {lastRefresh}</span>
+          <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto"><Clock className="w-3 h-3" /> {lastRefresh}</span>
         )}
         {error && <span className="text-xs text-[hsl(var(--vix-danger))]">⚠️ {error}</span>}
       </div>
@@ -123,9 +142,8 @@ export function MarketingPage() {
         </div>
       )}
 
-      {campaigns.length > 0 && (
-        <>
-          {/* Campaigns Chart */}
+      {filteredCampaigns.length > 0 && (
+        <>          {/* Campaigns Chart */}
           {campChart.length > 0 && (
             <div className="bg-card border border-border rounded-xl p-6 mb-6 animate-fade-in">
               <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
@@ -149,7 +167,7 @@ export function MarketingPage() {
           <div className="bg-card border border-border rounded-xl overflow-hidden mb-6 animate-fade-in">
             <div className="px-4 py-3 border-b border-border">
               <h3 className="text-foreground font-semibold flex items-center gap-2">
-                <Megaphone className="w-4 h-4 text-amber-500" /> Campanhas ({campaigns.length})
+                <Megaphone className="w-4 h-4 text-amber-500" /> Campanhas ({filteredCampaigns.length})
               </h3>
             </div>
             <div className="overflow-x-auto">
@@ -167,7 +185,7 @@ export function MarketingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {campaigns.map(c => (
+                  {filteredCampaigns.map(c => (
                     <tr key={`${c.id}-${c.conta}`} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
                       <td className="py-2.5 px-3 font-medium text-foreground max-w-[200px] truncate" title={c.name}>{c.name}</td>
                       <td className="py-2.5 px-3 text-xs text-muted-foreground">{c.conta}</td>
