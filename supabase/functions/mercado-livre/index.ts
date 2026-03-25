@@ -662,7 +662,30 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ campaigns: allCampaigns, items: allAdItems }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      // Fetch seller reputation per account
+      const sellerReputations: Record<string, any> = {};
+      for (const account of accounts) {
+        try {
+          const token = account.access_token;
+          const userRes = await fetch(`${ML_API}/users/${account.seller_id}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            sellerReputations[account.nome] = {
+              seller_reputation: userData.seller_reputation || null,
+              nickname: userData.nickname || '',
+              power_seller_status: userData.seller_reputation?.power_seller_status || null,
+              level_id: userData.seller_reputation?.level_id || null,
+              experience: userData.seller_reputation?.metrics || null,
+              transactions: userData.seller_reputation?.transactions || null,
+            };
+            console.log(`[ADS] ${account.nome} reputation: level=${userData.seller_reputation?.level_id}, power=${userData.seller_reputation?.power_seller_status}`);
+          }
+        } catch { /* optional */ }
+      }
+
+      return new Response(JSON.stringify({ campaigns: allCampaigns, items: allAdItems, seller_reputations: sellerReputations }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (action === 'get_catalog_winner') {

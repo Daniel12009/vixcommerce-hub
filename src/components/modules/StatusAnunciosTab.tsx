@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, Info, AlertTriangle, Filter, Clock } from 'lucide-react';
+import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, Info, AlertTriangle, Filter, Clock, Star, ShieldCheck } from 'lucide-react';
 import { formatBRL } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -24,6 +24,8 @@ export function StatusAnunciosTab() {
   const [catalogInfo, setCatalogInfo] = useState<any>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [selectedAd, setSelectedAd] = useState<AdItem | null>(null);
+  // Seller reputation
+  const [sellerReps, setSellerReps] = useState<Record<string, any>>({});
 
   const fetchAds = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -36,6 +38,7 @@ export function StatusAnunciosTab() {
       const items = data?.items || [];
       setAds(items);
       _cached = items;
+      if (data?.seller_reputations) setSellerReps(data.seller_reputations);
       setLastRefresh(new Date().toLocaleString('pt-BR'));
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
     finally { setLoading(false); }
@@ -309,6 +312,69 @@ export function StatusAnunciosTab() {
               <p className="text-[10px] text-muted-foreground">❌ Perdendo</p>
             </div>
           </div>
+
+          {/* Experiência de Compra per account */}
+          {Object.keys(sellerReps).length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-foreground font-semibold flex items-center gap-2 text-sm"><Star className="w-4 h-4 text-yellow-400" /> Experiência de Compra</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {Object.entries(sellerReps).map(([conta, rep]: [string, any]) => {
+                  const metrics = rep.experience || {};
+                  const claimsRate = metrics.claims?.rate ?? null;
+                  const cancelRate = metrics.cancellations?.rate ?? null;
+                  const delayedRate = metrics.delayed_handling_time?.rate ?? null;
+                  const rateColor = (r: number | null) => {
+                    if (r === null) return 'text-muted-foreground';
+                    if (r <= 0.02) return 'text-emerald-400';
+                    if (r <= 0.05) return 'text-yellow-400';
+                    return 'text-red-400';
+                  };
+                  const rateBg = (r: number | null) => {
+                    if (r === null) return 'bg-muted';
+                    if (r <= 0.02) return 'bg-emerald-500/10';
+                    if (r <= 0.05) return 'bg-yellow-500/10';
+                    return 'bg-red-500/10';
+                  };
+                  const levelLabel = (level: string | null) => {
+                    if (!level) return '';
+                    const map: Record<string, string> = { '5_green': '🟢 Verde', '4_light_green': '🟡 Amarelo', '3_yellow': '🟠 Laranja', '2_orange': '🔴 Vermelho', '1_red': '🔴 Vermelho' };
+                    return map[level] || level;
+                  };
+                  return (
+                    <div key={conta} className="bg-card border border-border rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-semibold text-foreground">{conta}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {rep.power_seller_status && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/15 text-yellow-400">{rep.power_seller_status === 'platinum' ? '💎 Platinum' : rep.power_seller_status === 'gold' ? '🥇 Gold' : rep.power_seller_status}</span>}
+                          {rep.level_id && <span className="text-[10px] text-muted-foreground">{levelLabel(rep.level_id)}</span>}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className={`rounded-lg p-2 text-center ${rateBg(claimsRate)}`}>
+                          <p className="text-[10px] text-muted-foreground">Reclamações</p>
+                          <p className={`text-sm font-bold ${rateColor(claimsRate)}`}>{claimsRate !== null ? `${(claimsRate * 100).toFixed(1)}%` : '-'}</p>
+                        </div>
+                        <div className={`rounded-lg p-2 text-center ${rateBg(cancelRate)}`}>
+                          <p className="text-[10px] text-muted-foreground">Cancelamentos</p>
+                          <p className={`text-sm font-bold ${rateColor(cancelRate)}`}>{cancelRate !== null ? `${(cancelRate * 100).toFixed(1)}%` : '-'}</p>
+                        </div>
+                        <div className={`rounded-lg p-2 text-center ${rateBg(delayedRate)}`}>
+                          <p className="text-[10px] text-muted-foreground">Atrasos</p>
+                          <p className={`text-sm font-bold ${rateColor(delayedRate)}`}>{delayedRate !== null ? `${(delayedRate * 100).toFixed(1)}%` : '-'}</p>
+                        </div>
+                      </div>
+                      {rep.transactions?.completed != null && (
+                        <p className="text-[10px] text-muted-foreground mt-2 text-right">{rep.transactions.completed} vendas concluídas</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Table */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
