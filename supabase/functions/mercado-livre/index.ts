@@ -91,13 +91,37 @@ async function mlFetch(account: any, path: string): Promise<any> {
   return res.json();
 }
 
+// Make authenticated ML API write call (PUT/POST with body)
+async function mlFetchWrite(account: any, path: string, method: 'PUT' | 'POST', body: any): Promise<any> {
+  let token = account.access_token;
+  if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+    token = await refreshToken(account);
+  }
+
+  const doFetch = (t: string) => fetch(`${ML_API}${path}`, {
+    method,
+    headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  let res = await doFetch(token);
+  if (res.status === 401) {
+    token = await refreshToken(account);
+    res = await doFetch(token);
+  }
+
+  const text = await res.text();
+  if (!res.ok) throw new Error(`ML API error [${res.status}]: ${text}`);
+  try { return JSON.parse(text); } catch { return {}; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { action, account_id } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, offset: reqOffset, limit: reqLimit } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -278,6 +302,171 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ shipments: allShipments }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ━━━ FICHA TÉCNICA: Listing management actions ━━━
+
+    if (action === 'list_seller_items') {
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) return new Response(JSON.stringify({ items: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const account = accounts[0];
+      let sellerId = account.seller_id;
+      if (!sellerId) {
+        const me = await mlFetch(account, '/users/me');
+        sellerId = me.id;
+        await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, { method: 'PATCH', body: JSON.stringify({ seller_id: String(sellerId) }) });
+      }
+
+      const off = reqOffset || 0;
+      const lim = Math.min(reqLimit || 50, 100);
+      const searchData = await mlFetch(account, `/users/${sellerId}/items/search?offset=${off}&limit=${lim}`);
+      const itemIds = searchData.results || [];
+      const total = searchData.paging?.total || 0;
+
+      // Fetch basic info for all items in parallel (batches of 20)
+      const items: any[] = [];
+      for (let i = 0; i < itemIds.length; i += 20) {
+        const batch = itemIds.slice(i, i + 20);
+        const ids = batch.join(',');
+        if (!ids) continue;
+        const batchData = await mlFetch(account, `/items?ids=${ids}&attributes=id,title,price,thumbnail,available_quantity,status,seller_custom_field,variations`);
+        for (const item of batchData) {
+          if (item.code === 200 && item.body) {
+            const b = item.body;
+            const skus = (b.variations || []).map((v: any) => {
+              const skuAttr = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
+              return skuAttr?.value_name || '';
+            }).filter(Boolean);
+            items.push({
+              id: b.id,
+              title: b.title,
+              price: b.price,
+              thumbnail: b.thumbnail,
+              available_quantity: b.available_quantity,
+              status: b.status,
+              seller_sku: b.seller_custom_field || skus[0] || '',
+              skus,
+              conta: account.nome,
+            });
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ items, total, offset: off, limit: lim }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'search_items_by_sku') {
+      if (!sku) throw new Error('SKU is required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) return new Response(JSON.stringify({ items: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const allItems: any[] = [];
+      for (const account of accounts) {
+        try {
+          let sellerId = account.seller_id;
+          if (!sellerId) {
+            const me = await mlFetch(account, '/users/me');
+            sellerId = me.id;
+            await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, { method: 'PATCH', body: JSON.stringify({ seller_id: String(sellerId) }) });
+          }
+
+          // Search by seller_sku
+          const searchData = await mlFetch(account, `/users/${sellerId}/items/search?seller_sku=${encodeURIComponent(sku)}&limit=20`);
+          const itemIds = searchData.results || [];
+
+          for (const itemId of itemIds) {
+            try {
+              const item = await mlFetch(account, `/items/${itemId}?attributes=id,title,price,thumbnail,available_quantity,status,seller_custom_field,variations`);
+              const skus = (item.variations || []).map((v: any) => {
+                const skuAttr = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
+                return skuAttr?.value_name || '';
+              }).filter(Boolean);
+              allItems.push({
+                id: item.id,
+                title: item.title,
+                price: item.price,
+                thumbnail: item.thumbnail,
+                available_quantity: item.available_quantity,
+                status: item.status,
+                seller_sku: item.seller_custom_field || skus[0] || '',
+                skus,
+                conta: account.nome,
+                account_id: account.id,
+              });
+            } catch {}
+          }
+        } catch (err) {
+          console.error(`SKU search error for ${account.nome}:`, err);
+        }
+      }
+
+      return new Response(JSON.stringify({ items: allItems }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'get_item_detail') {
+      if (!item_id) throw new Error('item_id is required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+
+      const account = accounts[0];
+      const [item, descData] = await Promise.all([
+        mlFetch(account, `/items/${item_id}`),
+        mlFetch(account, `/items/${item_id}/description`).catch(() => ({ plain_text: '' })),
+      ]);
+
+      return new Response(JSON.stringify({
+        ...item,
+        description_text: descData.plain_text || descData.text || '',
+        conta: account.nome,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'update_item') {
+      if (!item_id || !fields) throw new Error('item_id and fields are required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+
+      const account = accounts[0];
+      const result = await mlFetchWrite(account, `/items/${item_id}`, 'PUT', fields);
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'update_description') {
+      if (!item_id || !description_text) throw new Error('item_id and description_text required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+
+      const account = accounts[0];
+      const result = await mlFetchWrite(account, `/items/${item_id}/description`, 'PUT', { plain_text: description_text });
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'create_item') {
+      if (!new_item) throw new Error('new_item data is required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+
+      const account = accounts[0];
+      const result = await mlFetchWrite(account, '/items', 'POST', new_item);
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     throw new Error(`Unknown action: ${action}`);
