@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, account_id, sku, item_id, fields, description_text, new_item, offset: reqOffset, limit: reqLimit } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, query, offset: reqOffset, limit: reqLimit } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -333,7 +333,7 @@ Deno.serve(async (req) => {
         const batch = itemIds.slice(i, i + 20);
         const ids = batch.join(',');
         if (!ids) continue;
-        const batchData = await mlFetch(account, `/items?ids=${ids}&attributes=id,title,price,thumbnail,available_quantity,status,seller_custom_field,variations`);
+        const batchData = await mlFetch(account, `/items?ids=${ids}&attributes=id,title,price,thumbnail,available_quantity,status,seller_custom_field,variations,catalog_listing,listing_type_id,shipping`);
         for (const item of batchData) {
           if (item.code === 200 && item.body) {
             const b = item.body;
@@ -351,6 +351,9 @@ Deno.serve(async (req) => {
               seller_sku: b.seller_custom_field || skus[0] || '',
               skus,
               conta: account.nome,
+              catalog_listing: b.catalog_listing || false,
+              listing_type_id: b.listing_type_id || '',
+              logistic_type: b.shipping?.logistic_type || '',
             });
           }
         }
@@ -419,14 +422,26 @@ Deno.serve(async (req) => {
       if (!accounts?.length) throw new Error('No ML account found');
 
       const account = accounts[0];
-      const [item, descData] = await Promise.all([
+      const [item, descData, promotions] = await Promise.all([
         mlFetch(account, `/items/${item_id}`),
         mlFetch(account, `/items/${item_id}/description`).catch(() => ({ plain_text: '' })),
+        mlFetch(account, `/items/${item_id}/promotions`).catch(() => []),
       ]);
+
+      // Extract health/quality info from tags
+      const tags = item.tags || [];
+      const health = {
+        good_quality_thumbnail: tags.includes('good_quality_thumbnail'),
+        good_quality_picture: tags.includes('good_quality_picture'),
+        dragged_bids_and_visits: tags.includes('dragged_bids_and_visits'),
+        catalog_listing: item.catalog_listing || false,
+      };
 
       return new Response(JSON.stringify({
         ...item,
         description_text: descData.plain_text || descData.text || '',
+        promotions: Array.isArray(promotions) ? promotions : [],
+        health,
         conta: account.nome,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -467,6 +482,48 @@ Deno.serve(async (req) => {
       const account = accounts[0];
       const result = await mlFetchWrite(account, '/items', 'POST', new_item);
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'upload_picture') {
+      if (!item_id) throw new Error('item_id is required');
+      const { picture_url } = await Promise.resolve({ picture_url: (fields as any)?.picture_url });
+      if (!picture_url) throw new Error('picture_url is required in fields');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+
+      const account = accounts[0];
+      // First get current pictures
+      const item = await mlFetch(account, `/items/${item_id}?attributes=pictures`);
+      const existingPics = (item.pictures || []).map((p: any) => ({ id: p.id }));
+      // Add new picture by URL
+      existingPics.push({ source: picture_url });
+      const result = await mlFetchWrite(account, `/items/${item_id}`, 'PUT', { pictures: existingPics });
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'search_categories') {
+      if (!query) throw new Error('query is required');
+      const res = await fetch(`${ML_API}/sites/MLB/categories/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'predict_category') {
+      if (!query) throw new Error('query (title) is required');
+      const res = await fetch(`${ML_API}/sites/MLB/domain_discovery/search?q=${encodeURIComponent(query)}&limit=5`);
+      const data = await res.json();
+      // Return simplified results
+      const categories = Array.isArray(data) ? data.map((d: any) => ({
+        domain_id: d.domain_id,
+        domain_name: d.domain_name,
+        category_id: d.category_id,
+        category_name: d.category_name,
+        attributes: (d.attributes || []).slice(0, 5),
+      })) : [];
+      return new Response(JSON.stringify(categories), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     throw new Error(`Unknown action: ${action}`);
