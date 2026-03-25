@@ -64,6 +64,7 @@ export function MarketingPage() {
   const [editBudget, setEditBudget] = useState('');
   const [editRoas, setEditRoas] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
 
   /* ━━━ Fetch ━━━ */
   const fetchAds = useCallback(async (showSpinner = true) => {
@@ -87,17 +88,21 @@ export function MarketingPage() {
   /* ━━━ Save campaign ━━━ */
   const handleSaveCampaign = async () => {
     if (!editCamp) return;
+    if (!confirmSave) { setConfirmSave(true); return; }
     setSaving(true);
     try {
       const body: any = { action: 'update_campaign', campaign_id: editCamp.id, account_id: editCamp.account_id };
       if (editBudget) body.budget = parseFloat(editBudget);
       if (editRoas) body.roas_target = parseFloat(editRoas);
-      const { error: fnError } = await supabase.functions.invoke('mercado-livre', { body });
-      if (fnError) throw new Error(fnError.message);
-      toast.success('Campanha atualizada!');
-      setEditCamp(null);
+      const { data, error: fnError } = await supabase.functions.invoke('mercado-livre', { body });
+      if (fnError) {
+        const msg = typeof data === 'object' && data?.error ? data.error : fnError.message;
+        throw new Error(msg);
+      }
+      toast.success('✅ Campanha atualizada com sucesso!');
+      setEditCamp(null); setConfirmSave(false);
       fetchAds(false);
-    } catch (err: any) { toast.error(`Erro: ${err.message}`); } finally { setSaving(false); }
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); setConfirmSave(false); } finally { setSaving(false); }
   };
 
   /* ━━━ Filter ━━━ */
@@ -418,44 +423,70 @@ export function MarketingPage() {
 
       {/* Edit Campaign Modal */}
       {editCamp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEditCamp(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setEditCamp(null); setConfirmSave(false); }}>
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h3 className="font-semibold text-foreground flex items-center gap-2"><Edit3 className="w-4 h-4 text-primary" /> Editar Campanha</h3>
-              <button onClick={() => setEditCamp(null)} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+              <button onClick={() => { setEditCamp(null); setConfirmSave(false); }} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
             </div>
-            <div className="px-5 py-4 space-y-4">
-              <div>
-                <p className="text-sm text-foreground font-medium mb-1">{editCamp.name}</p>
-                <div className="flex gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${prodColor[editCamp.product_type || 'PADS']}`}>{editCamp.product_type || 'PADS'}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(editCamp.status)}`}>{editCamp.status}</span>
+
+            {/* Confirmation overlay */}
+            {confirmSave ? (
+              <div className="px-5 py-5 space-y-4">
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
+                  <p className="text-yellow-400 font-semibold text-sm mb-2">⚠️ Confirmar Alteração</p>
+                  <p className="text-xs text-foreground mb-3">Tem certeza que deseja alterar a campanha <strong>{editCamp.name}</strong>?</p>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    {editBudget && editBudget !== String(editCamp.budget) && (
+                      <p>Orçamento: <span className="text-foreground">{formatBRL(editCamp.budget)}/dia</span> → <span className="text-primary font-semibold">{formatBRL(Number(editBudget))}/dia</span></p>
+                    )}
+                    {editRoas && editRoas !== String(editCamp.roas_target) && (
+                      <p>ROAS Objetivo: <span className="text-foreground">{(editCamp.roas_target || 0).toFixed(1)}x</span> → <span className="text-primary font-semibold">{Number(editRoas).toFixed(1)}x</span></p>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">{editCamp.conta} • ID: {editCamp.id}</p>
+                <div className="flex justify-center gap-3">
+                  <button onClick={() => setConfirmSave(false)} className="px-5 py-2.5 rounded-lg border border-border text-xs font-medium hover:bg-muted">Voltar</button>
+                  <button onClick={handleSaveCampaign} disabled={saving} className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50">
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    {saving ? 'Salvando...' : 'Confirmar Alteração'}
+                  </button>
+                </div>
               </div>
-              {/* Current metrics preview */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-muted/50 rounded-lg p-2 text-center"><p className="text-xs text-muted-foreground">Invest.</p><p className="text-sm font-bold text-[hsl(var(--vix-danger))]">{formatBRL(editCamp.metrics?.cost || 0)}</p></div>
-                <div className="bg-muted/50 rounded-lg p-2 text-center"><p className="text-xs text-muted-foreground">Receita</p><p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(editCamp.metrics?.total_amount || 0)}</p></div>
-                <div className="bg-muted/50 rounded-lg p-2 text-center"><p className="text-xs text-muted-foreground">ROAS</p><p className="text-sm font-bold">{(editCamp.metrics?.roas || 0).toFixed(2)}x</p></div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground block mb-1">Orçamento diário (R$)</label>
-                <input type="number" step="1" min="1" value={editBudget} onChange={e => setEditBudget(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground" placeholder="Ex: 50" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground block mb-1">ROAS Objetivo (1x a 35x)</label>
-                <input type="number" step="0.1" min="1" max="35" value={editRoas} onChange={e => setEditRoas(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground" placeholder="Ex: 3.0" />
-                <p className="text-[10px] text-muted-foreground mt-1">ROAS baixo → mais vendas. ROAS alto → mais rentabilidade.</p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <button onClick={() => setEditCamp(null)} className="px-4 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted">Cancelar</button>
-              <button onClick={handleSaveCampaign} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50">
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                {saving ? 'Salvando...' : 'Salvar'}
-              </button>
-            </div>
+            ) : (
+              <>
+                <div className="px-5 py-4 space-y-4">
+                  <div>
+                    <p className="text-sm text-foreground font-medium mb-1">{editCamp.name}</p>
+                    <div className="flex gap-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${prodColor[editCamp.product_type || 'PADS']}`}>{editCamp.product_type || 'PADS'}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(editCamp.status)}`}>{editCamp.status}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">{editCamp.conta} • ID: {editCamp.id}</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-muted/50 rounded-lg p-2 text-center"><p className="text-xs text-muted-foreground">Invest.</p><p className="text-sm font-bold text-[hsl(var(--vix-danger))]">{formatBRL(editCamp.metrics?.cost || 0)}</p></div>
+                    <div className="bg-muted/50 rounded-lg p-2 text-center"><p className="text-xs text-muted-foreground">Receita</p><p className="text-sm font-bold text-[hsl(var(--vix-success))]">{formatBRL(editCamp.metrics?.total_amount || 0)}</p></div>
+                    <div className="bg-muted/50 rounded-lg p-2 text-center"><p className="text-xs text-muted-foreground">ROAS</p><p className="text-sm font-bold">{(editCamp.metrics?.roas || 0).toFixed(2)}x</p></div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Orçamento diário (R$)</label>
+                    <input type="number" step="1" min="1" value={editBudget} onChange={e => setEditBudget(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground" placeholder="Ex: 50" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">ROAS Objetivo (1x a 35x)</label>
+                    <input type="number" step="0.1" min="1" max="35" value={editRoas} onChange={e => setEditRoas(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground" placeholder="Ex: 3.0" />
+                    <p className="text-[10px] text-muted-foreground mt-1">ROAS baixo → mais vendas. ROAS alto → mais rentabilidade.</p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
+                  <button onClick={() => { setEditCamp(null); setConfirmSave(false); }} className="px-4 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted">Cancelar</button>
+                  <button onClick={handleSaveCampaign} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90">
+                    <Save className="w-3.5 h-3.5" /> Salvar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
