@@ -8,13 +8,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface MLCampaign {
-  id: string; name: string; status: string; budget: number;
-  metrics: { clicks?: number; prints?: number; cost?: number; ctr?: number; cpc?: number };
+  id: string; name: string; status: string; budget: number; strategy?: string; roas_target?: number;
+  metrics: { clicks?: number; prints?: number; cost?: number; ctr?: number; cpc?: number; roas?: number; total_amount?: number; direct_amount?: number; indirect_amount?: number; units_quantity?: number };
   conta: string; account_id: string;
 }
 interface MLAdItem {
-  item_id: string; campaign_id: string; title: string; status: string;
-  metrics: { clicks?: number; prints?: number; cost?: number; ctr?: number; cpc?: number };
+  item_id: string; campaign_id: string; title: string; status: string; price?: number; thumbnail?: string; permalink?: string;
+  metrics: { clicks?: number; prints?: number; cost?: number; ctr?: number; cpc?: number; roas?: number; total_amount?: number; units_quantity?: number };
   conta: string;
 }
 
@@ -63,8 +63,10 @@ export function MarketingPage() {
   const totalInvestimento = useMemo(() => filteredCampaigns.reduce((s, c) => s + (c.metrics?.cost || 0), 0), [filteredCampaigns]);
   const totalCliques = useMemo(() => filteredCampaigns.reduce((s, c) => s + (c.metrics?.clicks || 0), 0), [filteredCampaigns]);
   const totalImpressoes = useMemo(() => filteredCampaigns.reduce((s, c) => s + (c.metrics?.prints || 0), 0), [filteredCampaigns]);
+  const totalReceita = useMemo(() => filteredCampaigns.reduce((s, c) => s + (c.metrics?.total_amount || 0), 0), [filteredCampaigns]);
   const ctrMedio = totalImpressoes > 0 ? (totalCliques / totalImpressoes) * 100 : 0;
   const cpcMedio = totalCliques > 0 ? totalInvestimento / totalCliques : 0;
+  const roasGeral = totalInvestimento > 0 ? totalReceita / totalInvestimento : 0;
 
   // Chart: Investment per campaign
   const campChart = useMemo(() =>
@@ -119,12 +121,14 @@ export function MarketingPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
         <KpiCard title="Investimento" value={formatBRL(totalInvestimento)} icon={DollarSign} delay={0} />
-        <KpiCard title="Cliques" value={String(totalCliques)} icon={MousePointerClick} delay={50} />
-        <KpiCard title="Impressões" value={String(totalImpressoes)} icon={Eye} delay={100} />
-        <KpiCard title="CTR Médio" value={formatPercent(ctrMedio)} icon={Target} delay={150} />
-        <KpiCard title="CPC Médio" value={formatBRL(cpcMedio)} icon={BarChart3} delay={200} />
+        <KpiCard title="Receita Ads" value={formatBRL(totalReceita)} icon={TrendingUp} delay={50} />
+        <KpiCard title="ROAS" value={roasGeral.toFixed(2) + 'x'} icon={Target} delay={100} />
+        <KpiCard title="Cliques" value={String(totalCliques)} icon={MousePointerClick} delay={150} />
+        <KpiCard title="Impressões" value={String(totalImpressoes)} icon={Eye} delay={200} />
+        <KpiCard title="CTR" value={formatPercent(ctrMedio)} icon={Target} delay={250} />
+        <KpiCard title="CPC Médio" value={formatBRL(cpcMedio)} icon={BarChart3} delay={300} />
       </div>
 
       {loading && campaigns.length === 0 && (
@@ -177,10 +181,11 @@ export function MarketingPage() {
                     <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Campanha</th>
                     <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Conta</th>
                     <th className="text-center py-2.5 px-3 font-medium text-muted-foreground">Status</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Orçamento</th>
                     <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Investimento</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Receita</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">ROAS</th>
                     <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Cliques</th>
-                    <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Impressões</th>
-                    <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">CTR</th>
                     <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">CPC</th>
                   </tr>
                 </thead>
@@ -192,10 +197,11 @@ export function MarketingPage() {
                       <td className="py-2.5 px-3 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(c.status)}`}>{c.status}</span>
                       </td>
+                      <td className="py-2.5 px-3 text-right text-muted-foreground">{formatBRL(c.budget || 0)}/dia</td>
                       <td className="py-2.5 px-3 text-right text-[hsl(var(--vix-danger))] font-medium">{formatBRL(c.metrics?.cost || 0)}</td>
+                      <td className="py-2.5 px-3 text-right text-[hsl(var(--vix-success))] font-medium">{formatBRL(c.metrics?.total_amount || 0)}</td>
+                      <td className={`py-2.5 px-3 text-right font-semibold ${(c.metrics?.roas || 0) >= 3 ? 'text-[hsl(var(--vix-success))]' : (c.metrics?.roas || 0) >= 1 ? 'text-yellow-400' : 'text-[hsl(var(--vix-danger))]'}`}>{(c.metrics?.roas || 0).toFixed(2)}x</td>
                       <td className="py-2.5 px-3 text-right">{c.metrics?.clicks || 0}</td>
-                      <td className="py-2.5 px-3 text-right text-muted-foreground">{c.metrics?.prints || 0}</td>
-                      <td className="py-2.5 px-3 text-right">{formatPercent((c.metrics?.ctr || 0) * 100)}</td>
                       <td className="py-2.5 px-3 text-right">{formatBRL(c.metrics?.cpc || 0)}</td>
                     </tr>
                   ))}
@@ -216,27 +222,37 @@ export function MarketingPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
-                      <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">ID Anúncio</th>
+                      <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Anúncio</th>
                       <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Conta</th>
                       <th className="text-center py-2.5 px-3 font-medium text-muted-foreground">Status</th>
+                      <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Preço</th>
                       <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Cliques</th>
-                      <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Impressões</th>
                       <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Custo</th>
-                      <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">CPC</th>
+                      <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">Receita</th>
+                      <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">ROAS</th>
                     </tr>
                   </thead>
                   <tbody>
                     {topAds.map((ad, i) => (
                       <tr key={`${ad.item_id}-${i}`} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
-                        <td className="py-2.5 px-3 font-mono text-xs text-primary">{ad.item_id}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            {ad.thumbnail && <img src={ad.thumbnail} alt="" className="w-8 h-8 rounded object-cover" />}
+                            <div className="min-w-0">
+                              {ad.permalink ? <a href={ad.permalink} target="_blank" rel="noopener" className="text-primary text-xs hover:underline truncate block max-w-[180px]" title={ad.title}>{ad.title || ad.item_id}</a> : <span className="text-xs text-foreground truncate block max-w-[180px]">{ad.title || ad.item_id}</span>}
+                              <span className="text-[10px] text-muted-foreground">{ad.item_id}</span>
+                            </div>
+                          </div>
+                        </td>
                         <td className="py-2.5 px-3 text-xs text-muted-foreground">{ad.conta}</td>
                         <td className="py-2.5 px-3 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(ad.status)}`}>{ad.status}</span>
                         </td>
+                        <td className="py-2.5 px-3 text-right">{ad.price ? formatBRL(ad.price) : '-'}</td>
                         <td className="py-2.5 px-3 text-right font-medium">{ad.metrics?.clicks || 0}</td>
-                        <td className="py-2.5 px-3 text-right text-muted-foreground">{ad.metrics?.prints || 0}</td>
                         <td className="py-2.5 px-3 text-right text-[hsl(var(--vix-danger))]">{formatBRL(ad.metrics?.cost || 0)}</td>
-                        <td className="py-2.5 px-3 text-right">{formatBRL(ad.metrics?.cpc || 0)}</td>
+                        <td className="py-2.5 px-3 text-right text-[hsl(var(--vix-success))]">{formatBRL(ad.metrics?.total_amount || 0)}</td>
+                        <td className={`py-2.5 px-3 text-right font-semibold ${(ad.metrics?.roas || 0) >= 3 ? 'text-[hsl(var(--vix-success))]' : (ad.metrics?.roas || 0) >= 1 ? 'text-yellow-400' : 'text-[hsl(var(--vix-danger))]'}`}>{(ad.metrics?.roas || 0).toFixed(2)}x</td>
                       </tr>
                     ))}
                   </tbody>

@@ -537,7 +537,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'get_ads_data') {
-      // Fetch Product Ads data from ML Advertising API
+      // ML Product Ads API — Official 2026 docs
+      // Step 1: Discover advertiser_id via /advertising/advertisers?product_id=PADS
+      // Step 2: Fetch campaigns via /advertising/{site}/advertisers/{adv_id}/product_ads/campaigns/search
+      // Step 3: Fetch ads via /advertising/{site}/advertisers/{adv_id}/product_ads/ads/search
+
       const accountsRes = account_id
         ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
         : await supabaseFetch('/ml_accounts?ativo=eq.true');
@@ -547,24 +551,17 @@ Deno.serve(async (req) => {
       const allCampaigns: any[] = [];
       const allAdItems: any[] = [];
 
-      // Date range: last 30 days
       const now = new Date();
       const dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const dateTo = now.toISOString().split('T')[0];
 
       for (const account of accounts) {
         try {
-          let sellerId = account.seller_id;
-          if (!sellerId) {
-            const me = await mlFetch(account, '/users/me');
-            sellerId = me.id;
-          }
-
-          // Helper for ads API calls (needs api-version: 2 header)
-          const adsFetch = async (path: string) => {
+          // Generic authenticated fetch for ads endpoints
+          const adsFetchRaw = async (url: string, apiVersion: string) => {
             let token = account.access_token;
-            const doFetch = (t: string) => fetch(`https://api.mercadolibre.com${path}`, {
-              headers: { 'Authorization': `Bearer ${t}`, 'api-version': '2' },
+            const doFetch = (t: string) => fetch(url, {
+              headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json', 'Api-Version': apiVersion },
             });
             let res = await doFetch(token);
             if (res.status === 401) {
@@ -572,80 +569,79 @@ Deno.serve(async (req) => {
               res = await doFetch(token);
             }
             const text = await res.text();
-            console.log(`[ADS] ${account.nome} ${path.split('?')[0]} -> status=${res.status} len=${text.length}`);
+            console.log(`[ADS] ${account.nome} ${url.split('?')[0].replace('https://api.mercadolibre.com','')} -> status=${res.status}`);
             try { return { data: JSON.parse(text), status: res.status }; } catch { return { data: null, status: res.status }; }
           };
 
-          // Try multiple endpoint formats for campaigns
-          const campaignPaths = [
-            `/advertising/product_ads/campaigns?user_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost`,
-            `/advertising/product_ads/campaigns?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost`,
-            `/advertising/MLB/product_ads/campaigns?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost`,
-          ];
+          // ━━━ Step 1: Discover advertiser_id ━━━
+          const { data: advData, status: advStatus } = await adsFetchRaw(
+            `https://api.mercadolibre.com/advertising/advertisers?product_id=PADS`, '1'
+          );
 
-          let foundCampaigns = false;
-          for (const path of campaignPaths) {
-            const { data: campaignsData, status } = await adsFetch(path);
-            if (status >= 400) continue;
+          if (advStatus === 404 || !advData?.advertisers?.length) {
+            console.log(`[ADS] ${account.nome}: Product Ads not enabled (404 or no advertisers)`);
+            continue;
+          }
 
-            // Handle both array and { results: [] } formats
-            const campaignsList = Array.isArray(campaignsData) ? campaignsData
-              : Array.isArray(campaignsData?.results) ? campaignsData.results
-              : [];
+          // Filter for MLB advertisers (Brazil)
+          const mlbAdvertisers = advData.advertisers.filter((a: any) => a.site_id === 'MLB');
+          if (mlbAdvertisers.length === 0) {
+            console.log(`[ADS] ${account.nome}: no MLB advertisers found`);
+            continue;
+          }
 
-            if (campaignsList.length > 0) {
-              for (const c of campaignsList) {
+          for (const adv of mlbAdvertisers) {
+            const advertiserId = adv.advertiser_id;
+            const siteId = adv.site_id; // MLB
+
+            // ━━━ Step 2: Fetch campaigns with metrics ━━━
+            const metricsFields = 'clicks,prints,ctr,cost,cpc,roas,total_amount,direct_amount,indirect_amount,units_quantity,direct_units_quantity,indirect_units_quantity';
+            const { data: campData, status: campStatus } = await adsFetchRaw(
+              `https://api.mercadolibre.com/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search?limit=50&offset=0&date_from=${dateFrom}&date_to=${dateTo}&metrics=${metricsFields}&metrics_summary=true`, '2'
+            );
+
+            if (campStatus < 400 && campData?.results) {
+              for (const c of campData.results) {
                 allCampaigns.push({
-                  id: c.campaign_id || c.id,
-                  name: c.name || c.campaign_name || 'Campanha',
+                  id: c.id,
+                  name: c.name || 'Campanha',
                   status: c.status || 'unknown',
-                  budget: c.daily_budget || c.budget || 0,
-                  metrics: c.metrics || { clicks: c.clicks || 0, prints: c.prints || c.impressions || 0, cost: c.cost || 0 },
+                  budget: c.budget || 0,
+                  strategy: c.strategy || '',
+                  roas_target: c.roas_target || 0,
+                  metrics: c.metrics || {},
                   conta: account.nome,
                   account_id: account.id,
+                  advertiser_id: advertiserId,
                 });
               }
-              foundCampaigns = true;
-              console.log(`[ADS] ${account.nome}: found ${campaignsList.length} campaigns via ${path.split('?')[0]}`);
-              break;
+              console.log(`[ADS] ${account.nome}: ${campData.results.length} campaigns (total: ${campData.paging?.total || '?'})`);
             }
-          }
 
-          if (!foundCampaigns) {
-            console.log(`[ADS] ${account.nome}: no campaigns found on any endpoint`);
-          }
+            // ━━━ Step 3: Fetch ad items with metrics ━━━
+            const { data: adsData, status: adsStatus } = await adsFetchRaw(
+              `https://api.mercadolibre.com/advertising/${siteId}/advertisers/${advertiserId}/product_ads/ads/search?limit=50&offset=0&date_from=${dateFrom}&date_to=${dateTo}&metrics=${metricsFields}&sort_by=cost&sort=desc`, '2'
+            );
 
-          // Try to get ad items
-          const adPaths = [
-            `/advertising/product_ads/ads?user_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost&limit=50`,
-            `/advertising/product_ads/ads?advertiser_id=${sellerId}&date_from=${dateFrom}&date_to=${dateTo}&metrics=clicks,prints,cost&limit=50`,
-          ];
-
-          for (const path of adPaths) {
-            const { data: adsData, status } = await adsFetch(path);
-            if (status >= 400) continue;
-
-            const adsList = Array.isArray(adsData) ? adsData
-              : Array.isArray(adsData?.results) ? adsData.results
-              : [];
-
-            if (adsList.length > 0) {
-              for (const ad of adsList) {
+            if (adsStatus < 400 && adsData?.results) {
+              for (const ad of adsData.results) {
                 allAdItems.push({
-                  item_id: ad.item_id || ad.id,
-                  campaign_id: ad.campaign_id || '',
+                  item_id: ad.item_id,
+                  campaign_id: ad.campaign_id,
                   title: ad.title || '',
+                  price: ad.price || 0,
                   status: ad.status || 'unknown',
-                  metrics: ad.metrics || { clicks: ad.clicks || 0, prints: ad.prints || ad.impressions || 0, cost: ad.cost || 0 },
+                  thumbnail: ad.thumbnail || '',
+                  permalink: ad.permalink || '',
+                  metrics: ad.metrics || {},
                   conta: account.nome,
                 });
               }
-              console.log(`[ADS] ${account.nome}: found ${adsList.length} ad items`);
-              break;
+              console.log(`[ADS] ${account.nome}: ${adsData.results.length} ad items (total: ${adsData.paging?.total || '?'})`);
             }
           }
         } catch (err) {
-          console.error(`Ads data error for ${account.nome}:`, err);
+          console.error(`[ADS] Error for ${account.nome}:`, err);
         }
       }
 
