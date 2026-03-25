@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Megaphone, TrendingUp, DollarSign, RefreshCw, Loader2, BarChart3, Target, Eye, MousePointerClick, Clock, Filter, Edit3, X, Save, Calendar, ShoppingCart, LayoutDashboard, Settings2, ChevronRight } from 'lucide-react';
+import { Megaphone, TrendingUp, DollarSign, RefreshCw, Loader2, BarChart3, Target, Eye, MousePointerClick, Clock, Filter, Edit3, X, Save, Calendar, ShoppingCart, LayoutDashboard, Settings2, ChevronRight, Package, Award, AlertTriangle, CheckCircle, XCircle, Truck, Info } from 'lucide-react';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatPercent } from '@/lib/utils-vix';
@@ -15,8 +15,9 @@ interface MLCampaign {
 }
 interface MLAdItem {
   item_id: string; campaign_id: string; title: string; status: string; price?: number; thumbnail?: string; permalink?: string;
+  buy_box_winner?: boolean; catalog_listing?: boolean; logistic_type?: string; listing_type_id?: string; condition?: string; domain_id?: string;
   metrics: { clicks?: number; prints?: number; cost?: number; ctr?: number; cpc?: number; roas?: number; total_amount?: number; units_quantity?: number };
-  conta: string;
+  conta: string; account_id?: string;
 }
 
 /* ━━━━━━━━━━━━━━━ Date helpers ━━━━━━━━━━━━━━━ */
@@ -45,7 +46,7 @@ const PIE_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b
 
 let _cachedAds: { campaigns: MLCampaign[]; items: MLAdItem[] } | null = null;
 
-type TabKey = 'dashboard' | 'gerenciar';
+type TabKey = 'dashboard' | 'gerenciar' | 'status';
 
 /* ━━━━━━━━━━━━━━━ Component ━━━━━━━━━━━━━━━ */
 export function MarketingPage() {
@@ -65,6 +66,10 @@ export function MarketingPage() {
   const [editRoas, setEditRoas] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmSave, setConfirmSave] = useState(false);
+  // Catalog winner
+  const [catalogInfo, setCatalogInfo] = useState<any>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [selectedAdForCatalog, setSelectedAdForCatalog] = useState<MLAdItem | null>(null);
 
   /* ━━━ Fetch ━━━ */
   const fetchAds = useCallback(async (showSpinner = true) => {
@@ -103,6 +108,18 @@ export function MarketingPage() {
       setEditCamp(null); setConfirmSave(false);
       fetchAds(false);
     } catch (err: any) { toast.error(`Erro: ${err.message}`); setConfirmSave(false); } finally { setSaving(false); }
+  };
+
+  /* ━━━ Catalog winner lookup ━━━ */
+  const fetchCatalogWinner = async (ad: MLAdItem) => {
+    setSelectedAdForCatalog(ad);
+    setCatalogLoading(true);
+    setCatalogInfo(null);
+    try {
+      const { data } = await supabase.functions.invoke('mercado-livre', { body: { action: 'get_catalog_winner', item_id: ad.item_id, account_id: ad.account_id } });
+      setCatalogInfo(data);
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+    finally { setCatalogLoading(false); }
   };
 
   /* ━━━ Filter ━━━ */
@@ -187,6 +204,7 @@ export function MarketingPage() {
         {([
           { key: 'dashboard' as TabKey, label: 'Dashboard', icon: LayoutDashboard },
           { key: 'gerenciar' as TabKey, label: 'Gerenciar Campanhas', icon: Settings2 },
+          { key: 'status' as TabKey, label: 'Status Anúncios', icon: Package },
         ]).map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all ${tab === t.key ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-card'}`}>
             <t.icon className="w-3.5 h-3.5" /> {t.label}
@@ -487,6 +505,89 @@ export function MarketingPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {/* Catalog Winner Modal */}
+      {selectedAdForCatalog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setSelectedAdForCatalog(null); setCatalogInfo(null); }}>
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg mx-4 animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm"><Info className="w-4 h-4 text-primary" /> Detalhes do Catálogo</h3>
+              <button onClick={() => { setSelectedAdForCatalog(null); setCatalogInfo(null); }} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-5 py-4">
+              <div className="flex items-center gap-3 mb-4">
+                {selectedAdForCatalog.thumbnail && <img src={selectedAdForCatalog.thumbnail} alt="" className="w-12 h-12 rounded object-cover" />}
+                <div>
+                  <p className="text-sm font-medium text-foreground">{selectedAdForCatalog.title}</p>
+                  <p className="text-[10px] text-muted-foreground">{selectedAdForCatalog.item_id} • {selectedAdForCatalog.conta}</p>
+                </div>
+              </div>
+
+              {catalogLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  <span className="ml-2 text-sm text-muted-foreground">Buscando dados do catálogo...</span>
+                </div>
+              )}
+
+              {catalogInfo && !catalogLoading && (
+                <div className="space-y-3">
+                  {!catalogInfo.catalog && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
+                      <AlertTriangle className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
+                      <p className="text-xs text-foreground">Este item não é de catálogo.</p>
+                    </div>
+                  )}
+
+                  {catalogInfo.catalog && (
+                    <>
+                      <div className="bg-muted/50 rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground">Produto Catálogo</p>
+                        <p className="text-sm font-medium text-foreground">{catalogInfo.product_name}</p>
+                        <p className="text-[10px] text-muted-foreground">ID: {catalogInfo.catalog_product_id}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-muted/50 rounded-lg p-2 text-center">
+                          <p className="text-[10px] text-muted-foreground">Envio</p>
+                          <p className="text-xs font-semibold text-foreground">{catalogInfo.item_status?.shipping === 'fulfillment' ? '📦 Full' : catalogInfo.item_status?.shipping || '-'}</p>
+                        </div>
+                        <div className="bg-muted/50 rounded-lg p-2 text-center">
+                          <p className="text-[10px] text-muted-foreground">Tipo</p>
+                          <p className="text-xs font-semibold text-foreground">{catalogInfo.item_status?.listing_type === 'gold_pro' ? 'Premium' : catalogInfo.item_status?.listing_type || '-'}</p>
+                        </div>
+                      </div>
+
+                      {catalogInfo.buy_box_winner && (
+                        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                          <p className="text-xs font-semibold text-red-400 mb-1">⚠️ Vendedor ganhando o Buy Box:</p>
+                          <p className="text-sm text-foreground">
+                            Seller ID: {catalogInfo.buy_box_winner?.winner_item_id || catalogInfo.buy_box_winner?.item_id || 'N/A'}
+                          </p>
+                          {catalogInfo.buy_box_winner?.price && <p className="text-xs text-muted-foreground">Preço: {formatBRL(catalogInfo.buy_box_winner.price)}</p>}
+                        </div>
+                      )}
+
+                      {catalogInfo.competitors?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Competidores no catálogo ({catalogInfo.competitors.length}):</p>
+                          <div className="space-y-1 max-h-40 overflow-y-auto">
+                            {catalogInfo.competitors.map((c: any, i: number) => (
+                              <div key={i} className="flex justify-between items-center text-xs bg-muted/30 px-3 py-1.5 rounded-lg">
+                                <span className="text-foreground">{c.id || c.item_id || `Item ${i+1}`}</span>
+                                {c.price && <span className="text-muted-foreground">{formatBRL(c.price)}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

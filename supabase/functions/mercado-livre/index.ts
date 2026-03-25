@@ -643,8 +643,15 @@ Deno.serve(async (req) => {
                   status: ad.status || 'unknown',
                   thumbnail: ad.thumbnail || '',
                   permalink: ad.permalink || '',
+                  buy_box_winner: ad.buy_box_winner || false,
+                  catalog_listing: ad.catalog_listing || false,
+                  logistic_type: ad.logistic_type || '',
+                  listing_type_id: ad.listing_type_id || '',
+                  condition: ad.condition || '',
+                  domain_id: ad.domain_id || '',
                   metrics: ad.metrics || {},
                   conta: account.nome,
+                  account_id: account.id,
                 });
               }
               console.log(`[ADS] ${account.nome}: ${adsData.results.length} ad items (total: ${adsData.paging?.total || '?'})`);
@@ -656,6 +663,60 @@ Deno.serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ campaigns: allCampaigns, items: allAdItems }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'get_catalog_winner') {
+      if (!item_id || !account_id) throw new Error('item_id and account_id required');
+      const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Account not found');
+      const account = accounts[0];
+      const token = await refreshToken(account);
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+      // Get item details
+      const itemRes = await fetch(`${ML_API}/items/${item_id}`, { headers });
+      const itemData = itemRes.ok ? await itemRes.json() : null;
+      const catalogProductId = itemData?.catalog_product_id;
+      if (!catalogProductId) {
+        return new Response(JSON.stringify({ catalog: false, message: 'Item não é de catálogo' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Get catalog product info
+      const catRes = await fetch(`${ML_API}/products/${catalogProductId}`, { headers });
+      const catalogData = catRes.ok ? await catRes.json() : {};
+
+      // Get buy box winner
+      let buyBoxData = null;
+      try {
+        const bbRes = await fetch(`${ML_API}/items/${item_id}/buy_box_winner`, { headers });
+        if (bbRes.ok) buyBoxData = await bbRes.json();
+      } catch { /* optional */ }
+
+      // Get all items in catalog
+      let competitors: any[] = [];
+      try {
+        const compRes = await fetch(`${ML_API}/products/${catalogProductId}/items?status=active&limit=10`, { headers });
+        if (compRes.ok) {
+          const compData = await compRes.json();
+          competitors = Array.isArray(compData) ? compData : (compData?.results || []);
+        }
+      } catch { /* optional */ }
+
+      console.log(`[ADS] catalog_winner ${item_id}: catalog=${catalogProductId}, competitors=${competitors.length}`);
+      return new Response(JSON.stringify({
+        catalog: true,
+        catalog_product_id: catalogProductId,
+        product_name: catalogData?.name || '',
+        buy_box_winner: buyBoxData,
+        competitors,
+        item_status: {
+          health: itemData?.health || null,
+          shipping: itemData?.shipping?.logistic_type || '',
+          listing_type: itemData?.listing_type_id || '',
+          condition: itemData?.condition || '',
+        },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (action === 'update_campaign') {
