@@ -46,9 +46,17 @@ export function StatusAnunciosTab() {
     setCatalogLoading(true);
     setCatalogInfo(null);
     try {
-      const { data } = await supabase.functions.invoke('mercado-livre', { body: { action: 'get_catalog_winner', item_id: ad.item_id, account_id: ad.account_id } });
-      setCatalogInfo(data);
-    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+      const { data, error } = await supabase.functions.invoke('mercado-livre', { body: { action: 'get_catalog_winner', item_id: ad.item_id, account_id: ad.account_id } });
+      if (error) {
+        console.error('[Catalog]', error);
+        setCatalogInfo({ catalog: false, message: error.message || 'Erro ao buscar dados. Verifique se a Edge Function foi atualizada.' });
+      } else {
+        setCatalogInfo(data || { catalog: false, message: 'Sem dados retornados' });
+      }
+    } catch (err: any) {
+      console.error('[Catalog]', err);
+      setCatalogInfo({ catalog: false, message: err.message || 'Erro de conexão' });
+    }
     finally { setCatalogLoading(false); }
   };
 
