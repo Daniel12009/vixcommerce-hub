@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { GraficosTab } from './GraficosTab';
 import { PerformanceAdsTab } from './PerformanceAdsTab';
+import { StatusAnunciosTab } from './StatusAnunciosTab';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -696,6 +697,7 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="graficos">Gráficos</TabsTrigger>
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
           <TabsTrigger value="ads">Performance Anúncios</TabsTrigger>
+          <TabsTrigger value="status-anuncios">Status Anúncios</TabsTrigger>
           <TabsTrigger value="perf-ads">Performance ADS</TabsTrigger>
           <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
         </TabsList>
@@ -1760,6 +1762,11 @@ export function AtualizarDadosPage() {
         {/* Tab: Performance ADS */}
         <TabsContent value="perf-ads">
           <PerformanceAdsTab />
+        </TabsContent>
+
+        {/* Tab: Status Anúncios */}
+        <TabsContent value="status-anuncios">
+          <StatusAnunciosTab />
         </TabsContent>
       </Tabs>
     </div>
