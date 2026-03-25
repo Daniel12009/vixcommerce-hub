@@ -384,12 +384,12 @@ export function CadastroPage() {
         {/* Items list */}
         <div className="bg-card border border-border rounded-xl p-4 animate-fade-in max-h-[calc(100vh-260px)] overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-foreground font-semibold text-sm">Anúncios {totalItems > 0 && <span className="text-muted-foreground font-normal">({filteredItems.length})</span>}</h3>
+            <h3 className="text-foreground font-semibold text-sm">Anúncios {totalItems > 0 && <span className="text-muted-foreground font-normal">({items.length})</span>}</h3>
           </div>
           {listLoading && items.length === 0 && <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Carregando...</div>}
           {!listLoading && items.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">Selecione uma conta e clique em "Carregar Anúncios"</div>}
           <div className="space-y-1">
-            {filteredItems.map(item => (
+            {items.map(item => (
               <button key={item.id} onClick={() => loadDetail(item.id)} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-3 ${detail?.id === item.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground'}`}>
                 {item.thumbnail && <img src={item.thumbnail} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
