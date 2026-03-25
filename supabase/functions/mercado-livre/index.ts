@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, account_id, sku, item_id, fields, description_text, new_item, query, status: reqStatus, offset: reqOffset, limit: reqLimit } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, query, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -552,8 +552,11 @@ Deno.serve(async (req) => {
       const allAdItems: any[] = [];
 
       const now = new Date();
-      const dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const dateTo = now.toISOString().split('T')[0];
+      const dateFrom = reqDateFrom || new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const dateTo = reqDateTo || now.toISOString().split('T')[0];
+
+      // Fetch all product types: PADS, BADS, DISPLAY
+      const productTypes = ['PADS', 'BADS', 'DISPLAY'];
 
       for (const account of accounts) {
         try {
@@ -573,26 +576,32 @@ Deno.serve(async (req) => {
             try { return { data: JSON.parse(text), status: res.status }; } catch { return { data: null, status: res.status }; }
           };
 
-          // ━━━ Step 1: Discover advertiser_id ━━━
-          const { data: advData, status: advStatus } = await adsFetchRaw(
-            `https://api.mercadolibre.com/advertising/advertisers?product_id=PADS`, '1'
-          );
+          // ━━━ Step 1: Discover advertiser_id for ALL product types ━━━
+          const allAdvertisers: { advertiser_id: number; site_id: string; product: string }[] = [];
+          for (const product of productTypes) {
+            try {
+              const { data: advData, status: advStatus } = await adsFetchRaw(
+                `https://api.mercadolibre.com/advertising/advertisers?product_id=${product}`, '1'
+              );
+              if (advStatus === 404 || !advData?.advertisers?.length) {
+                console.log(`[ADS] ${account.nome}: ${product} not enabled`);
+                continue;
+              }
+              for (const a of advData.advertisers) {
+                if (a.site_id === 'MLB') allAdvertisers.push({ ...a, product });
+              }
+            } catch { console.log(`[ADS] ${account.nome}: ${product} check failed`); }
+          }
 
-          if (advStatus === 404 || !advData?.advertisers?.length) {
-            console.log(`[ADS] ${account.nome}: Product Ads not enabled (404 or no advertisers)`);
+          if (allAdvertisers.length === 0) {
+            console.log(`[ADS] ${account.nome}: no MLB advertisers found for any product`);
             continue;
           }
 
-          // Filter for MLB advertisers (Brazil)
-          const mlbAdvertisers = advData.advertisers.filter((a: any) => a.site_id === 'MLB');
-          if (mlbAdvertisers.length === 0) {
-            console.log(`[ADS] ${account.nome}: no MLB advertisers found`);
-            continue;
-          }
-
-          for (const adv of mlbAdvertisers) {
+          for (const adv of allAdvertisers) {
             const advertiserId = adv.advertiser_id;
-            const siteId = adv.site_id; // MLB
+            const siteId = adv.site_id;
+            const productType = adv.product;
 
             // ━━━ Step 2: Fetch campaigns with metrics ━━━
             const metricsFields = 'clicks,prints,ctr,cost,cpc,roas,total_amount,direct_amount,indirect_amount,units_quantity,direct_units_quantity,indirect_units_quantity';
@@ -609,6 +618,7 @@ Deno.serve(async (req) => {
                   budget: c.budget || 0,
                   strategy: c.strategy || '',
                   roas_target: c.roas_target || 0,
+                  product_type: productType,
                   metrics: c.metrics || {},
                   conta: account.nome,
                   account_id: account.id,
@@ -646,6 +656,48 @@ Deno.serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ campaigns: allCampaigns, items: allAdItems }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'update_campaign') {
+      // Update campaign budget and/or roas_target
+      if (!reqCampaignId || !account_id) throw new Error('campaign_id and account_id required');
+      const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Account not found');
+      const account = accounts[0];
+
+      // Discover advertiser_id
+      let token = account.access_token;
+      const advRes = await fetch('https://api.mercadolibre.com/advertising/advertisers?product_id=PADS', {
+        headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
+      });
+      if (advRes.status === 401) {
+        token = await refreshToken(account);
+      }
+      const advResRetry = advRes.status === 401 ? await fetch('https://api.mercadolibre.com/advertising/advertisers?product_id=PADS', {
+        headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
+      }) : advRes;
+      const advData = await advResRetry.json();
+      const mlbAdv = (advData?.advertisers || []).find((a: any) => a.site_id === 'MLB');
+      if (!mlbAdv) throw new Error('No MLB advertiser found');
+
+      // Build update body
+      const updateBody: any = {};
+      if (reqBudget !== undefined) updateBody.budget = Number(reqBudget);
+      if (reqRoasTarget !== undefined) updateBody.roas_target = Number(reqRoasTarget);
+
+      const putRes = await fetch(`https://api.mercadolibre.com/advertising/${mlbAdv.site_id}/product_ads/campaigns/${reqCampaignId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Api-Version': '2' },
+        body: JSON.stringify(updateBody),
+      });
+      const result = await putRes.text();
+      console.log(`[ADS] update_campaign ${reqCampaignId}: status=${putRes.status}`);
+      try {
+        return new Response(result, { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch {
+        return new Response(JSON.stringify({ status: putRes.status, body: result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     throw new Error(`Unknown action: ${action}`);
