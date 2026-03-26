@@ -8,8 +8,8 @@ const corsHeaders = {
 const ROOT_FOLDER_ID = '1Y9vkMEzm4xJmYQ6VDLA5OtrFY3LG9mCP';
 
 async function getGoogleAccessToken(): Promise<string> {
-  const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON');
-  if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not set');
+  const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY');
+  if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY not set');
   const sa = JSON.parse(serviceAccountJson);
   const header = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).replace(/=/g, '');
   const now = Math.floor(Date.now() / 1000);
