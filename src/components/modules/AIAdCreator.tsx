@@ -52,25 +52,23 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
   const [editPrice, setEditPrice] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
 
-  // Drive Photos
+  // Drive Photos + Dimensions
   const [drivePhotos, setDrivePhotos] = useState<string[]>([]);
   const [driveFolder, setDriveFolder] = useState('');
+  const [driveDimensions, setDriveDimensions] = useState<any>(null);
   const [driveLoading, setDriveLoading] = useState(false);
   const [driveError, setDriveError] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
 
   if (!open) return null;
 
-  // Busca dados do produto no contexto
   function getProductContext() {
     const venda = vendasItems?.find(v => v.sku === sku || v.skuProduto === sku);
     const financeiro = financeiroItems?.find(f => f.skuPrincipal === sku);
     const ads = adsItems?.filter(a => a.idAnuncio?.includes(sku) || a.titulo?.toLowerCase().includes(productName.toLowerCase()));
     const perf = performanceItems?.find(p => p.sku === sku);
     const estoque = estoqueItems?.find(e => e.skuPrincipal === sku);
-
     const avgRoas = ads && ads.length > 0 ? (ads.reduce((s, a) => s + (a.roas || 0), 0) / ads.length).toFixed(2) : null;
-
     return {
       price_sell: venda?.precoUnitario || financeiro?.receita || null,
       price_cost: financeiro?.custo || null,
@@ -82,23 +80,32 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
     };
   }
 
-  async function searchDrivePhotos() {
-    if (!sku.trim()) { setDriveError('Informe o SKU para buscar as fotos.'); return; }
+  async function searchDriveData() {
+    if (!sku.trim()) { setDriveError('Informe o SKU para buscar fotos e medidas.'); return; }
     setDriveLoading(true);
     setDriveError('');
     setDrivePhotos([]);
     setSelectedPhotos([]);
+    setDriveDimensions(null);
     try {
       const { data, error } = await supabase.functions.invoke('drive-photos', {
-        body: { sku, account_name: accountName },
+        body: { sku, account_name: accountName, fetch_dimensions: true },
       });
       if (error) throw new Error(error.message);
-      if (!data.found) { setDriveError(data.message || 'Nenhuma foto encontrada.'); return; }
-      setDrivePhotos(data.urls || []);
-      setDriveFolder(data.folder_name || '');
-      setSelectedPhotos((data.urls || []).slice(0, 6));
+      // Fotos
+      if (data.photos?.found) {
+        setDrivePhotos(data.photos.urls || []);
+        setDriveFolder(data.photos.folder_name || '');
+        setSelectedPhotos((data.photos.urls || []).slice(0, 6));
+      } else {
+        setDriveError(data.photos?.message || 'Nenhuma foto encontrada.');
+      }
+      // Dimensões
+      if (data.dimensions?.found) {
+        setDriveDimensions(data.dimensions);
+      }
     } catch (err: any) {
-      setDriveError(err.message || 'Erro ao buscar fotos no Drive.');
+      setDriveError(err.message || 'Erro ao buscar dados no Drive.');
     } finally {
       setDriveLoading(false);
     }
@@ -112,23 +119,22 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
 
   async function handleGenerate() {
     if (!productName.trim()) { setError('Informe o nome do produto.'); return; }
+    if (!accountId) { setError('Selecione uma conta ML antes de gerar.'); return; }
     setError('');
     setGenerating(true);
     setDraft(null);
-    setCurrentStep('market_research');
 
     const ctx = getProductContext();
 
-    // Simula progresso visual dos agentes
+    // Progresso visual — avança a cada 4s enquanto aguarda a API
+    const stepKeys = ['market_research', 'strategy', 'seo', 'copy', 'compliance'];
     let stepIdx = 0;
+    setCurrentStep(stepKeys[0]);
+
     const stepTimer = setInterval(() => {
-      stepIdx++;
-      if (stepIdx < AGENT_STEPS.length) {
-        setCurrentStep(AGENT_STEPS[stepIdx].key);
-      } else {
-        clearInterval(stepTimer);
-      }
-    }, 3500);
+      stepIdx = Math.min(stepIdx + 1, stepKeys.length - 1);
+      setCurrentStep(stepKeys[stepIdx]);
+    }, 4000);
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('ai-ad-creator', {
@@ -145,38 +151,36 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           conversao: ctx.conversao,
           conta: accountName,
           photo_urls: selectedPhotos,
+          dimensions: driveDimensions,
         },
       });
 
       clearInterval(stepTimer);
+      setCurrentStep(null);
 
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
+      if (data?.overall_status === 'error') throw new Error(data.error || 'Erro ao gerar');
 
       setDraft(data);
-      setCurrentStep(null);
-
-      // Preenche campos editáveis
       setEditTitle(data.copy?.title?.value || '');
-      setEditTitleSeo(data.copy?.title_seo?.value || '');
+      setEditTitleSeo(data.copy?.title_seo?.value || data.seo?.title_optimized?.value || '');
       setEditDescription(data.copy?.description?.value || '');
       setEditPrice(String(data.strategy?.price_suggestion || ''));
       setEditCategoryId(data.compliance?.category_id_hint || '');
 
-      // Log
+      // Changelog
       if (user) {
         try {
-          await (supabase as any)
-            .from('listing_changelog')
-            .insert({
-              item_id: `ai-draft-${sku || productName}`,
-              marketplace: 'ml',
-              account_name: accountName,
-              campo: 'ai_draft_criado',
-              valor_anterior: '',
-              valor_novo: data?.copy?.title?.value || productName,
-              usuario: user.username,
-            });
+          await (supabase as any).from('listing_changelog').insert({
+            item_id: `ai-draft-${sku || productName}`,
+            marketplace: 'ml',
+            account_name: accountName,
+            campo: 'ai_draft_criado',
+            valor_anterior: '',
+            valor_novo: data?.copy?.title?.value || productName,
+            usuario: user.username,
+          });
         } catch (logErr) {
           console.warn('Changelog insert failed:', logErr);
         }
@@ -206,13 +210,6 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
     onClose();
   }
 
-  function StatusDot({ status }: { status: string }) {
-    if (status === 'pending') return <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />;
-    if (status === 'generating') return <Loader2 className="w-3 h-3 text-yellow-400 animate-spin" />;
-    if (status === 'done') return <CheckCircle className="w-3 h-3 text-emerald-400" />;
-    return <XCircle className="w-3 h-3 text-red-400" />;
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex">
       {/* Overlay */}
@@ -232,15 +229,21 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           </button>
         </div>
 
-        {/* Indicador de conta */}
-        <div className={`flex items-center gap-3 px-4 py-2.5 border-b ${accountName ? 'bg-yellow-400/5 border-yellow-400/20' : 'bg-red-400/5 border-red-400/20'}`}>
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${accountName ? 'bg-yellow-400/15' : 'bg-red-400/15'}`}>
+        {/* Conta selecionada */}
+        <div className={`flex items-center gap-3 px-4 py-2.5 border-b ${
+          accountName
+            ? 'bg-yellow-400/5 border-yellow-400/20'
+            : 'bg-red-400/5 border-red-400/20'
+        }`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+            accountName ? 'bg-yellow-400/15' : 'bg-red-400/15'
+          }`}>
             <DollarSign className={`w-3 h-3 ${accountName ? 'text-yellow-500' : 'text-red-400'}`} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] text-muted-foreground leading-none mb-0.5">Publicando na conta</p>
             <p className={`text-xs font-medium truncate ${accountName ? 'text-foreground' : 'text-red-400'}`}>
-              {accountName || 'Nenhuma conta selecionada — volte e selecione uma conta ML'}
+              {accountName || 'Selecione uma conta ML antes de continuar'}
             </p>
           </div>
           {accountName
@@ -288,28 +291,28 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                 />
               </div>
 
-              {/* Fotos do Drive */}
+              {/* Busca automática: fotos + medidas */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-semibold uppercase text-muted-foreground">
-                    Fotos do produto
+                    Fotos e medidas
                   </label>
                   {driveFolder && (
                     <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" /> {driveFolder}
+                      <CheckCircle className="w-3 h-3" />{driveFolder}
                     </span>
                   )}
                 </div>
 
                 <button
                   type="button"
-                  onClick={searchDrivePhotos}
+                  onClick={searchDriveData}
                   disabled={driveLoading || !sku.trim()}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors w-full justify-center"
                 >
                   {driveLoading
                     ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando no Drive...</>
-                    : <><FolderOpen className="w-3.5 h-3.5" /> Buscar fotos automaticamente (Drive)</>
+                    : <><FolderOpen className="w-3.5 h-3.5" /> Buscar fotos e medidas (Drive)</>
                   }
                 </button>
 
@@ -319,6 +322,16 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                   </p>
                 )}
 
+                {/* Medidas encontradas */}
+                {driveDimensions?.found && (
+                  <div className="px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-emerald-400">
+                    <span className="font-medium">Medidas carregadas: </span>
+                    {driveDimensions.largura_produto}×{driveDimensions.altura_produto}×{driveDimensions.profundidade_produto}cm
+                    · {driveDimensions.peso_embalagem}kg emb.
+                  </div>
+                )}
+
+                {/* Grid de fotos */}
                 {drivePhotos.length > 0 && (
                   <>
                     <p className="text-[10px] text-muted-foreground">
@@ -330,9 +343,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                           key={i}
                           onClick={() => togglePhoto(url)}
                           className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all aspect-square ${
-                            selectedPhotos.includes(url)
-                              ? 'border-purple-500 opacity-100'
-                              : 'border-border opacity-40'
+                            selectedPhotos.includes(url) ? 'border-purple-500' : 'border-border opacity-40'
                           }`}
                         >
                           <img
@@ -353,14 +364,14 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                       ))}
                     </div>
                     <p className="text-[10px] text-muted-foreground text-right">
-                      {selectedPhotos.length} de {Math.min(drivePhotos.length, 6)} selecionada(s)
+                      {selectedPhotos.length}/{Math.min(drivePhotos.length, 6)} selecionada(s)
                     </p>
                   </>
                 )}
 
                 {!drivePhotos.length && !driveLoading && (
                   <p className="text-[10px] text-muted-foreground">
-                    Busca automaticamente na pasta com o nome do SKU em: Drive → Design → IMAGENS - IA
+                    Busca na pasta com o nome do SKU em: Drive → Design → IMAGENS - IA · e medidas na planilha SKU-DIMENSÕES
                   </p>
                 )}
               </div>
@@ -388,17 +399,38 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           {generating && (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">Os agentes estão trabalhando em sequência...</p>
-              {AGENT_STEPS.map((step) => {
-                const stepIndex = AGENT_STEPS.indexOf(step);
-                const currentIndex = AGENT_STEPS.findIndex(s => s.key === currentStep);
+              {AGENT_STEPS.map((step, idx) => {
+                const stepKeys = AGENT_STEPS.map(s => s.key);
+                const currentIdx = stepKeys.indexOf(currentStep || '');
                 const isActive = currentStep === step.key;
-                const isDone = currentIndex > stepIndex;
+                const isDone = currentIdx > idx;
                 return (
-                  <div key={step.key} className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${isActive ? 'border-purple-500/50 bg-purple-500/5' : 'border-border bg-muted/30'}`}>
-                    <StatusDot status={isActive ? 'generating' : isDone ? 'done' : 'pending'} />
+                  <div
+                    key={step.key}
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-500 ${
+                      isActive
+                        ? 'border-purple-500/50 bg-purple-500/5'
+                        : isDone
+                        ? 'border-emerald-500/30 bg-emerald-500/5'
+                        : 'border-border bg-muted/20'
+                    }`}
+                  >
+                    {isDone ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    ) : isActive ? (
+                      <Loader2 className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
+                    ) : (
+                      <div className="w-4 h-4 rounded-full border border-border flex-shrink-0" />
+                    )}
                     <div>
-                      <p className={`text-sm font-medium ${isActive ? 'text-purple-300' : 'text-foreground'}`}>{step.label}</p>
-                      {isActive && <p className="text-xs text-muted-foreground">{step.description}</p>}
+                      <p className={`text-sm font-medium transition-colors ${
+                        isActive ? 'text-purple-300' : isDone ? 'text-emerald-400' : 'text-muted-foreground'
+                      }`}>
+                        {step.label}
+                      </p>
+                      {isActive && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
+                      )}
                     </div>
                   </div>
                 );
@@ -496,6 +528,16 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                   )}
                 </div>
               </div>
+
+              {/* Dimensões */}
+              {draft.dimensions?.found && (
+                <div className="px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-blue-400">
+                  <span className="font-medium">📐 Dimensões: </span>
+                  {draft.dimensions.largura_produto}×{draft.dimensions.altura_produto}×{draft.dimensions.profundidade_produto}cm
+                  · Emb: {draft.dimensions.largura_embalagem}×{draft.dimensions.altura_embalagem}×{draft.dimensions.profundidade_embalagem}cm
+                  · {draft.dimensions.peso_embalagem}kg
+                </div>
+              )}
 
               {/* Descrição */}
               <div>

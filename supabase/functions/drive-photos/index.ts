@@ -6,20 +6,22 @@ const corsHeaders = {
 };
 
 const ROOT_FOLDER_ID = '1Y9vkMEzm4xJmYQ6VDLA5OtrFY3LG9mCP';
+const DIMENSIONS_SHEET_ID = '1EKf-WMVTWSQZCsQRP6ZYzLenUU5FEWo-IIAa87nnItM';
 
 async function getGoogleAccessToken(): Promise<string> {
   const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY');
   if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY not set');
   const sa = JSON.parse(serviceAccountJson);
-  const header = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).replace(/=/g, '');
+  const header = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   const now = Math.floor(Date.now() / 1000);
   const payload = btoa(JSON.stringify({
     iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly',
     aud: 'https://oauth2.googleapis.com/token',
     exp: now + 3600,
     iat: now,
-  })).replace(/=/g, '');
+  })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   const pemKey = sa.private_key
     .replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
@@ -51,6 +53,38 @@ async function getGoogleAccessToken(): Promise<string> {
   return tokenData.access_token;
 }
 
+async function getDimensions(token: string, sku: string): Promise<any | null> {
+  const prodRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${DIMENSIONS_SHEET_ID}/values/PRODUTO!A:I`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const prodData = await prodRes.json();
+  const prodRows: string[][] = prodData.values || [];
+  const prodMatch = prodRows.slice(2).find(r => r[0]?.trim().toUpperCase() === sku.toUpperCase());
+
+  const embRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${DIMENSIONS_SHEET_ID}/values/EMBALAGEM!A:F`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const embData = await embRes.json();
+  const embRows: string[][] = embData.values || [];
+  const embMatch = embRows.slice(1).find(r => r[0]?.trim().toUpperCase() === sku.toUpperCase());
+
+  if (!prodMatch && !embMatch) return null;
+
+  return {
+    largura_produto: prodMatch?.[1] ? parseFloat(prodMatch[1]) : null,
+    altura_produto: prodMatch?.[2] ? parseFloat(prodMatch[2]) : null,
+    profundidade_produto: prodMatch?.[3] ? parseFloat(prodMatch[3]) : null,
+    altura_queda_agua: prodMatch?.[4] ? parseFloat(prodMatch[4]) : null,
+    peso_produto: prodMatch?.[5] ? parseFloat(prodMatch[5]) : null,
+    largura_embalagem: embMatch?.[1] ? parseFloat(embMatch[1]) : null,
+    altura_embalagem: embMatch?.[2] ? parseFloat(embMatch[2]) : null,
+    profundidade_embalagem: embMatch?.[3] ? parseFloat(embMatch[3]) : null,
+    peso_embalagem: embMatch?.[4] ? parseFloat(embMatch[4]) : null,
+  };
+}
+
 async function listFolders(token: string, parentId: string): Promise<{ id: string; name: string }[]> {
   const q = encodeURIComponent(`'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const res = await fetch(
@@ -61,7 +95,7 @@ async function listFolders(token: string, parentId: string): Promise<{ id: strin
   return data.files || [];
 }
 
-async function listImages(token: string, folderId: string): Promise<{ url: string; name: string }[]> {
+async function listImages(token: string, folderId: string): Promise<string[]> {
   const q = encodeURIComponent(`'${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/webp') and trashed=false`);
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=10`,
@@ -70,8 +104,8 @@ async function listImages(token: string, folderId: string): Promise<{ url: strin
   const data = await res.json();
   const files = data.files || [];
 
-  // Download each image and convert to base64 data URI
-  const results: { url: string; name: string }[] = [];
+  // Download each image and return as base64 data URI (avoids CORS)
+  const results: string[] = [];
   for (const f of files.slice(0, 10)) {
     try {
       const imgRes = await fetch(
@@ -85,10 +119,8 @@ async function listImages(token: string, folderId: string): Promise<{ url: strin
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       const b64 = btoa(binary);
       const mime = f.mimeType || 'image/jpeg';
-      results.push({ url: `data:${mime};base64,${b64}`, name: f.name });
-    } catch {
-      // skip failed downloads
-    }
+      results.push(`data:${mime};base64,${b64}`);
+    } catch { /* skip */ }
   }
   return results;
 }
@@ -100,12 +132,8 @@ function scoreFolder(folderName: string, sku: string, accountName: string): numb
   let score = 0;
   if (norm === normSku) score += 10;
   else if (norm.startsWith(normSku)) score += 7;
-  // Account keywords match
   const accountWords = accountName.toLowerCase().split(/[\s_\-]+/).filter(w => w.length > 1);
-  for (const w of accountWords) {
-    if (norm.includes(w)) score += 5;
-  }
-  // Version suffix: higher number = more recent = better score
+  for (const w of accountWords) { if (norm.includes(w)) score += 5; }
   const vNum = norm.match(/\((\d+)\)\s*$/) || norm.match(/\s(\d+)\s*$/);
   if (vNum) score += parseInt(vNum[1]);
   return score;
@@ -114,33 +142,42 @@ function scoreFolder(folderName: string, sku: string, accountName: string): numb
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { sku, account_name } = await req.json();
+    const { sku, account_name, fetch_dimensions } = await req.json();
     if (!sku) throw new Error('sku is required');
+
     const token = await getGoogleAccessToken();
+    const result: any = { sku };
+
+    // Fotos
     const folders = await listFolders(token, ROOT_FOLDER_ID);
     const scored = folders
       .map(f => ({ ...f, score: scoreFolder(f.name, sku, account_name || '') }))
       .filter(f => f.score >= 0)
       .sort((a, b) => b.score - a.score);
-    if (scored.length === 0) {
-      return new Response(JSON.stringify({
-        found: false, urls: [], folder_name: null,
-        message: `Nenhuma pasta encontrada para o SKU "${sku}"`,
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    if (scored.length > 0) {
+      const best = scored[0];
+      const urls = await listImages(token, best.id);
+      result.photos = { found: true, urls, folder_name: best.name, total: urls.length };
+    } else {
+      result.photos = { found: false, urls: [], folder_name: null, message: `Pasta não encontrada para SKU "${sku}"` };
     }
-    const best = scored[0];
-    const images = await listImages(token, best.id);
-    return new Response(JSON.stringify({
-      found: true,
-      urls: images.map(i => i.url),
-      folder_name: best.name,
-      total_images: images.length,
-      message: `${images.length} foto(s) encontrada(s) na pasta "${best.name}"`,
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    // Dimensões (opcional)
+    if (fetch_dimensions !== false) {
+      const dims = await getDimensions(token, sku);
+      result.dimensions = dims
+        ? { found: true, ...dims }
+        : { found: false, message: `SKU "${sku}" não encontrado na planilha de dimensões` };
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('drive-photos error:', message);
-    return new Response(JSON.stringify({ error: message, found: false, urls: [] }), {
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

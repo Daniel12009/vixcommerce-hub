@@ -48,9 +48,16 @@ Deno.serve(async (req) => {
     const {
       sku, product_name, product_description,
       price_cost, price_sell, margin, vmd, stock, roas, conversao, conta,
+      photo_urls, dimensions,
     } = await req.json();
 
     if (!sku || !product_name) throw new Error('sku e product_name são obrigatórios');
+
+    const dimensionsText = dimensions?.found ? `
+Dimensões do produto: ${dimensions.largura_produto || '?'}cm (L) x ${dimensions.altura_produto || '?'}cm (A) x ${dimensions.profundidade_produto || '?'}cm (P)
+Peso do produto: ${dimensions.peso_produto || '?'} kg
+Dimensões da embalagem: ${dimensions.largura_embalagem || '?'}cm (L) x ${dimensions.altura_embalagem || '?'}cm (A) x ${dimensions.profundidade_embalagem || '?'}cm (P)
+Peso da embalagem: ${dimensions.peso_embalagem || '?'} kg` : 'Dimensões: não informadas';
 
     const productContext = `
 Produto: ${product_name}
@@ -65,9 +72,10 @@ ROAS: ${roas || 'não informado'}
 Conversão: ${conversao || 'não informada'}%
 Conta: ${conta || 'não informada'}
 Marketplace: Mercado Livre Brasil (MLB)
+${dimensionsText}
     `.trim();
 
-    // ━━━ BATCH 1: Research + SEO em paralelo (independentes) ━━━
+    // ━━━ BATCH 1: Research + SEO em paralelo ━━━
     const [researchResult, seoResult] = await Promise.all([
       callClaude(
         `Você é especialista em pesquisa de mercado para Mercado Livre Brasil. Retorne APENAS JSON válido (sem markdown):
@@ -109,7 +117,8 @@ Limite: 1 posicionamento, preço em R$, 3-4 diferenciais.`,
         `Você é copywriter especialista em Mercado Livre Brasil. Retorne APENAS JSON válido:
 {"title":string,"title_seo":string,"description":string,"highlights":[string]}
 REGRAS: título max 60 chars, title_seo max 60 chars com keywords, descrição 200-500 palavras, exatamente 5 highlights com emoji.
-Proibido: CAIXA ALTA excessiva, caracteres especiais no título, preços no título.`,
+Proibido: CAIXA ALTA excessiva, caracteres especiais no título, preços no título.
+Se dimensões estiverem disponíveis, mencione-as na descrição.`,
         `Produto:\n${productContext}
 Posicionamento: ${strategy.positioning}
 Diferenciais: ${strategy.key_differentials?.join(', ') || ''}
@@ -119,7 +128,8 @@ Keywords: ${seo.primary_keywords?.join(', ') || ''}, ${seo.secondary_keywords?.j
       callClaude(
         `Você valida anúncios do Mercado Livre Brasil. Retorne APENAS JSON válido:
 {"approved":boolean,"issues":[string],"category_suggestion":string,"category_id_hint":string,"warranty_suggestion":string}
-Validar: título ≤60 chars, sem proibições, sugerir categoria MLB e garantia.`,
+Validar: título ≤60 chars, sem proibições, sugerir categoria MLB e garantia.
+Se dimensões estiverem disponíveis, validar compatibilidade com a categoria.`,
         `Produto: ${product_name}\nSKU: ${sku}\nContexto:\n${productContext}`,
         400
       ),
@@ -168,6 +178,7 @@ Validar: título ≤60 chars, sem proibições, sugerir categoria MLB e garantia
         warranty_suggestion: compliance.warranty_suggestion || '12 meses',
         compliance_notes: compliance.compliance_notes || '',
       },
+      dimensions: dimensions || null,
       overall_status: 'done',
       created_at: new Date().toISOString(),
     };
