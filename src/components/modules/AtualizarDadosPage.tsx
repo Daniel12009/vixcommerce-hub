@@ -360,7 +360,7 @@ export function AtualizarDadosPage() {
             <KpiCard title="Total Pedidos" value={ped.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
             <KpiCard title="Margem %" value={`${margemPct.toFixed(1)}%`} icon={TrendingUp} delay={100} />
             <KpiCard title="Contas Conectadas" value={`${connectedCount}/${accounts.length}`} icon={Wifi} delay={150} />
-            <KpiCard title="Planilhas Configuradas" value={String(sheetConfigs.length)} icon={FileSpreadsheet} delay={200} />
+            <KpiCard title="Planilhas Configuradas" value={String(loadSheetConfigs().length)} icon={FileSpreadsheet} delay={200} />
           </div>
         );
       })()}
