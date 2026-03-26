@@ -8,7 +8,7 @@ const corsHeaders = {
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
-async function callClaude(systemPrompt: string, userContent: string): Promise<string> {
+async function callClaude(systemPrompt: string, userContent: string, maxTokens = 1000): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set in Supabase secrets');
 
@@ -21,7 +21,7 @@ async function callClaude(systemPrompt: string, userContent: string): Promise<st
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 1500,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userContent }],
     }),
@@ -37,7 +37,6 @@ async function callClaude(systemPrompt: string, userContent: string): Promise<st
 }
 
 function parseJSON(text: string): any {
-  // Remove markdown fences se presentes
   const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(clean);
 }
@@ -47,17 +46,8 @@ Deno.serve(async (req) => {
 
   try {
     const {
-      sku,
-      product_name,
-      product_description,
-      price_cost,
-      price_sell,
-      margin,
-      vmd,         // vendas média diária
-      stock,       // estoque atual
-      roas,        // ROAS atual das campanhas
-      conversao,   // taxa de conversão atual
-      conta,       // nome da conta ML
+      sku, product_name, product_description,
+      price_cost, price_sell, margin, vmd, stock, roas, conversao, conta,
     } = await req.json();
 
     if (!sku || !product_name) throw new Error('sku e product_name são obrigatórios');
@@ -69,105 +59,74 @@ Descrição base: ${product_description || 'não informada'}
 Preço de custo: R$ ${price_cost || 'não informado'}
 Preço de venda atual: R$ ${price_sell || 'não informado'}
 Margem real: ${margin || 'não informada'}%
-VMD (vendas médias diárias): ${vmd || 'não informado'} unidades
+VMD: ${vmd || 'não informado'} unidades/dia
 Estoque atual: ${stock || 'não informado'} unidades
-ROAS atual das campanhas: ${roas || 'não informado'}
-Taxa de conversão: ${conversao || 'não informada'}%
+ROAS: ${roas || 'não informado'}
+Conversão: ${conversao || 'não informada'}%
 Conta: ${conta || 'não informada'}
 Marketplace: Mercado Livre Brasil (MLB)
     `.trim();
 
-    // ━━━ AGENTE 1: PESQUISA DE MERCADO ━━━
-    const researchResult = await callClaude(
-      `Você é um especialista em pesquisa de mercado para Mercado Livre Brasil.
-Analise o produto e retorne APENAS um JSON válido (sem markdown) com a estrutura:
-{
-  "top_competitors": [{"title": string, "price": number}], // 3 concorrentes hipotéticos realistas
-  "price_range": {"min": number, "max": number, "avg": number},
-  "category_trends": [string] // 3 tendências da categoria
-}`,
-      `Produto para pesquisar:\n${productContext}`
-    );
+    // ━━━ BATCH 1: Research + SEO em paralelo (independentes) ━━━
+    const [researchResult, seoResult] = await Promise.all([
+      callClaude(
+        `Você é especialista em pesquisa de mercado para Mercado Livre Brasil. Retorne APENAS JSON válido (sem markdown):
+{"top_competitors":[{"title":string,"price":number}],"price_range":{"min":number,"max":number,"avg":number},"category_trends":[string]}
+Limite: 3 concorrentes, 3 tendências.`,
+        `Produto:\n${productContext}`,
+        600
+      ),
+      callClaude(
+        `Você é especialista em SEO para Mercado Livre Brasil. Retorne APENAS JSON válido:
+{"primary_keywords":[string],"secondary_keywords":[string]}
+Regras: 5 termos principais + 5 long-tail. Use termos de busca real de compradores.`,
+        `Produto:\n${productContext}`,
+        400
+      ),
+    ]);
 
     let market_research: any = {};
     try { market_research = parseJSON(researchResult); } catch { market_research = { top_competitors: [], price_range: { min: 0, max: 0, avg: 0 }, category_trends: [] }; }
 
-    // ━━━ AGENTE 2: ESTRATÉGIA ━━━
+    let seo: any = {};
+    try { seo = parseJSON(seoResult); } catch { seo = { primary_keywords: [], secondary_keywords: [] }; }
+
+    // ━━━ BATCH 2: Strategy (usa research) ━━━
     const strategyResult = await callClaude(
-      `Você é um estrategista de e-commerce especializado em Mercado Livre Brasil.
-Com base nos dados do produto e pesquisa de mercado, retorne APENAS um JSON válido:
-{
-  "positioning": string, // ex: "melhor preço da categoria" ou "produto premium com melhor custo-benefício"
-  "price_suggestion": number, // preço sugerido em reais
-  "key_differentials": [string] // 3-5 diferenciais principais para destacar no anúncio
-}`,
-      `Dados do produto:\n${productContext}\n\nPesquisa de mercado:\n${JSON.stringify(market_research)}`
+      `Você é estrategista de e-commerce para Mercado Livre Brasil. Retorne APENAS JSON válido:
+{"positioning":string,"price_suggestion":number,"key_differentials":[string]}
+Limite: 1 posicionamento, preço em R$, 3-4 diferenciais.`,
+      `Produto:\n${productContext}\nPesquisa:\n${JSON.stringify(market_research)}`,
+      400
     );
 
     let strategy: any = {};
     try { strategy = parseJSON(strategyResult); } catch { strategy = { positioning: '', price_suggestion: price_sell || 0, key_differentials: [] }; }
 
-    // ━━━ AGENTE 3: SEO — keywords ━━━
-    const seoResult = await callClaude(
-      `Você é especialista em SEO para Mercado Livre Brasil.
-Gere palavras-chave de alta conversão para o produto.
-Retorne APENAS um JSON válido:
-{
-  "primary_keywords": [string], // 5 termos principais de alta busca
-  "secondary_keywords": [string] // 8 termos long-tail
-}
-Regras: use termos que compradores reais buscam, inclua variações com e sem acento, sem marcas concorrentes.`,
-      `Produto:\n${productContext}\nDiferenciais: ${strategy.key_differentials?.join(', ') || ''}`
-    );
-
-    let seo: any = {};
-    try { seo = parseJSON(seoResult); } catch { seo = { primary_keywords: [], secondary_keywords: [] }; }
-
-    // ━━━ AGENTE 4: COPYWRITER ━━━
-    const copyResult = await callClaude(
-      `Você é copywriter especialista em Mercado Livre Brasil, com foco em conversão.
-Crie o anúncio completo e retorne APENAS um JSON válido:
-{
-  "title": string, // MÁXIMO 60 caracteres. Formato: [Keyword principal] + [Diferencial] + [Especificação]. Use maiúsculas estrategicamente.
-  "title_seo": string, // versão do título com keywords do SEO integradas naturalmente, também max 60 chars
-  "description": string, // descrição completa em português, 300-800 palavras, persuasiva, destaque benefícios, use parágrafos
-  "highlights": [string] // exatamente 5 bullet points de benefícios, cada um iniciando com emoji relevante
-}
-Regras críticas:
-- Título NUNCA pode ter mais de 60 caracteres (conta os espaços)
-- Proibido: palavras em CAIXA ALTA excessiva, caracteres especiais (!, *, #), preços no título
-- Descrição: começar com o benefício principal, não com o nome do produto
-- Bullets: cada um deve comunicar um benefício real e específico`,
-      `Produto:\n${productContext}
+    // ━━━ BATCH 3: Copywriter + Compliance em paralelo ━━━
+    const [copyResult, complianceResult] = await Promise.all([
+      callClaude(
+        `Você é copywriter especialista em Mercado Livre Brasil. Retorne APENAS JSON válido:
+{"title":string,"title_seo":string,"description":string,"highlights":[string]}
+REGRAS: título max 60 chars, title_seo max 60 chars com keywords, descrição 200-500 palavras, exatamente 5 highlights com emoji.
+Proibido: CAIXA ALTA excessiva, caracteres especiais no título, preços no título.`,
+        `Produto:\n${productContext}
 Posicionamento: ${strategy.positioning}
 Diferenciais: ${strategy.key_differentials?.join(', ') || ''}
-Keywords primárias: ${seo.primary_keywords?.join(', ') || ''}
-Keywords secundárias: ${seo.secondary_keywords?.join(', ') || ''}`
-    );
+Keywords: ${seo.primary_keywords?.join(', ') || ''}, ${seo.secondary_keywords?.join(', ') || ''}`,
+        1200
+      ),
+      callClaude(
+        `Você valida anúncios do Mercado Livre Brasil. Retorne APENAS JSON válido:
+{"approved":boolean,"issues":[string],"category_suggestion":string,"category_id_hint":string,"warranty_suggestion":string}
+Validar: título ≤60 chars, sem proibições, sugerir categoria MLB e garantia.`,
+        `Produto: ${product_name}\nSKU: ${sku}\nContexto:\n${productContext}`,
+        400
+      ),
+    ]);
 
     let copy: any = {};
     try { copy = parseJSON(copyResult); } catch { copy = { title: product_name.slice(0, 60), title_seo: product_name.slice(0, 60), description: '', highlights: [] }; }
-
-    // ━━━ AGENTE 5: COMPLIANCE ━━━
-    const complianceResult = await callClaude(
-      `Você é especialista em políticas do Mercado Livre Brasil.
-Valide o anúncio e sugira a categoria correta.
-Retorne APENAS um JSON válido:
-{
-  "approved": boolean,
-  "issues": [string], // lista de problemas encontrados (vazia se aprovado)
-  "category_suggestion": string, // nome da categoria ML sugerida
-  "category_id_hint": string, // ID aproximado da categoria MLB (ex: MLB1648)
-  "warranty_suggestion": string, // garantia sugerida ex: "12 meses"
-  "compliance_notes": string // observações gerais
-}
-Validar: título ≤60 chars, sem proibições, descrição sem contato externo, categoria compatível.`,
-      `Anúncio gerado:
-Título: ${copy.title}
-Título SEO: ${copy.title_seo}
-Descrição (início): ${(copy.description || '').slice(0, 300)}
-Produto: ${productContext}`
-    );
 
     let compliance: any = {};
     try { compliance = parseJSON(complianceResult); } catch { compliance = { approved: true, issues: [], category_suggestion: '', category_id_hint: '', warranty_suggestion: '12 meses' }; }
@@ -176,21 +135,18 @@ Produto: ${productContext}`
     const adDraft = {
       sku,
       marketplace: 'ml',
-
       market_research: {
         status: 'done',
         top_competitors: market_research.top_competitors || [],
         price_range: market_research.price_range || { min: 0, max: 0, avg: 0 },
         category_trends: market_research.category_trends || [],
       },
-
       strategy: {
         status: 'done',
         positioning: strategy.positioning || '',
         price_suggestion: strategy.price_suggestion || price_sell || 0,
         key_differentials: strategy.key_differentials || [],
       },
-
       copy: {
         status: 'done',
         title: { value: copy.title || '', status: 'done', aiGenerated: true },
@@ -198,13 +154,11 @@ Produto: ${productContext}`
         description: { value: copy.description || '', status: 'done', aiGenerated: true },
         highlights: { value: copy.highlights || [], status: 'done', aiGenerated: true },
       },
-
       seo: {
         status: 'done',
         primary_keywords: seo.primary_keywords || [],
         secondary_keywords: seo.secondary_keywords || [],
       },
-
       compliance: {
         status: 'done',
         approved: compliance.approved ?? true,
@@ -214,7 +168,6 @@ Produto: ${productContext}`
         warranty_suggestion: compliance.warranty_suggestion || '12 meses',
         compliance_notes: compliance.compliance_notes || '',
       },
-
       overall_status: 'done',
       created_at: new Date().toISOString(),
     };
