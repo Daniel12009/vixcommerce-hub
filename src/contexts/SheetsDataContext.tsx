@@ -326,7 +326,29 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         // If localStorage had no data, NOW mark as loaded (Supabase finished)
         if (!hasLocalData) setIsLoaded(true);
       }
-      // Phase 2 removed: Google Sheets import now only happens via refreshModule button
+
+      // ━━━ PHASE 2: Auto-import fresh data from Google Sheets (background) ━━━
+      try {
+        const { autoImportAllSheets } = await import('@/lib/sheets-store');
+        const { results } = await autoImportAllSheets();
+        console.log(`[AutoImport] Imported ${results.length} sheets`);
+        for (const { parsed, config } of results) {
+          if (!parsed || parsed.length === 0) continue;
+          const mod = config.moduloDestino;
+          if (mod === 'vendas') { setVendasFromSheet(parsed); saveToCloud('vendas_data', parsed); }
+          else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
+          else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
+          else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
+          else if (mod === 'performance') {
+            setPerformanceFromSheet(parsed, config.abaNome);
+            saveToCloud('performance_data', parsed);
+          }
+          else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
+          else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
+        }
+      } catch (err) {
+        console.warn('[AutoImport] Background sheets import failed:', err);
+      }
     };
     backgroundRefresh();
   }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet]);
