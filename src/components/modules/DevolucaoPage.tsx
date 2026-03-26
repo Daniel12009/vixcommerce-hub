@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { RotateCcw, DollarSign, Package, AlertTriangle, CheckCircle2, TrendingDown, Filter, Search, ChevronDown, ChevronUp, CalendarDays, RefreshCw, Loader2 } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line, Area } from 'recharts';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -213,6 +213,27 @@ export function DevolucaoPage() {
         const topMotivo = [...item.motivos.entries()].sort((a, b) => b[1] - a[1])[0];
         return { ...item, topMotivo: topMotivo ? topMotivo[0] : '-' };
       });
+  }, [filtered]);
+
+  // Pareto: grupo por detalhe (sub-motivo) com acumulado %
+  const paretoChart = useMemo(() => {
+    const map = new Map<string, number>();
+    filtered.forEach(i => {
+      const sub = i.detalhe || i.detalhesMotivo || i.novoMotivo || i.motivo || 'Não informado';
+      map.set(sub, (map.get(sub) || 0) + 1);
+    });
+    const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+    const total = sorted.reduce((s, [, v]) => s + v, 0);
+    let cumulative = 0;
+    return sorted.map(([name, qty]) => {
+      cumulative += qty;
+      return {
+        name: name.length > 30 ? name.substring(0, 28) + '...' : name,
+        fullName: name,
+        qty,
+        pctCum: total > 0 ? Math.round((cumulative / total) * 100) : 0,
+      };
+    });
   }, [filtered]);
 
   const handleSort = (col: string) => {
@@ -488,6 +509,54 @@ export function DevolucaoPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Pareto Chart - Sub-motivo */}
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-1">Pareto — Detalhes das Devoluções</h3>
+            <p className="text-[10px] text-muted-foreground mb-4">Sub-motivos ordenados por frequência com % acumulado</p>
+            {paretoChart.length > 0 ? (
+              <ResponsiveContainer width="100%" height={340}>
+                <ComposedChart data={paretoChart} margin={{ left: 10, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                    angle={-35}
+                    textAnchor="end"
+                    height={80}
+                    interval={0}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    label={{ value: 'Qtd', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' } }}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    domain={[0, 100]}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    label={{ value: '% Acum.', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' } }}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                    labelFormatter={(label: string) => {
+                      const item = paretoChart.find(p => p.name === label);
+                      return item?.fullName || label;
+                    }}
+                    formatter={(v: number, name: string) => [
+                      name === 'qty' ? `${v} devoluções` : `${v}%`,
+                      name === 'qty' ? 'Quantidade' : '% Acumulado'
+                    ]}
+                  />
+                  <Bar yAxisId="left" dataKey="qty" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={28} />
+                  <Line yAxisId="right" type="monotone" dataKey="pctCum" stroke="#ef4444" strokeWidth={2.5} dot={{ r: 3, fill: '#ef4444' }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted-foreground text-sm text-center py-10">Sem dados</p>
+            )}
           </div>
 
           {/* Top SKUs */}
