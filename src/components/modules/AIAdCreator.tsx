@@ -287,7 +287,12 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
 
       setPublishMsg(`✅ Publicado! ID: ${result.id}`);
     } catch (err: any) {
-      setError(err.message || 'Erro ao publicar.');
+      const msg = err.message || 'Erro ao publicar.';
+      if (msg.includes('non-2xx') || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+        setError('⏱️ Timeout/erro de rede — o Supabase pode estar sobrecarregado. Aguarde 30s e tente novamente, ou use o formulário manual.');
+      } else {
+        setError(msg);
+      }
       setPublishMsg('');
     } finally {
       setPublishing(false);
