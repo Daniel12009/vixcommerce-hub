@@ -10,6 +10,7 @@ import { MarketingPage } from '@/components/modules/MarketingPage';
 import { AtualizarDadosPage } from '@/components/modules/AtualizarDadosPage';
 import { DevolucaoPage } from '@/components/modules/DevolucaoPage';
 import { UserManagementPage } from '@/components/auth/UserManagementPage';
+import { ConfiguracoesPage } from '@/components/modules/ConfiguracoesPage';
 import { SheetsDataProvider, useSheetsData } from '@/contexts/SheetsDataContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import type { ModuleName } from '@/lib/types';
@@ -53,7 +54,8 @@ function AppContent() {
       case 'financeiro': return <FinanceiroPage />;
       case 'cadastro': return <CadastroPage />;
       case 'marketing': return <MarketingPage />;
-      case 'usuarios': return <UserManagementPage onBack={() => setActiveModule('dashboard')} />;
+      case 'configuracoes': return <ConfiguracoesPage />;
+      case 'usuarios': return <UserManagementPage onBack={() => setActiveModule('configuracoes')} />;
     }
   };
 

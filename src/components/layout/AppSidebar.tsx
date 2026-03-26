@@ -15,6 +15,7 @@ const modules = [
   { id: 'financeiro' as ModuleName, label: 'Financeiro', icon: DollarSign },
   { id: 'cadastro' as ModuleName, label: 'Ficha Técnica', icon: FileText },
   { id: 'marketing' as ModuleName, label: 'Ads / Marketing', icon: Megaphone },
+  { id: 'configuracoes' as ModuleName, label: 'Configurações', icon: Settings },
 ];
 
 export function AppSidebar({ activeModule, onModuleChange }: AppSidebarProps) {
@@ -70,15 +71,6 @@ export function AppSidebar({ activeModule, onModuleChange }: AppSidebarProps) {
             <p className="text-sidebar-foreground text-xs opacity-60">{user?.setor || 'Sem setor'}</p>
           </div>
           <div className="flex items-center gap-1">
-            {user?.role === 'admin' && (
-              <button
-                onClick={() => onModuleChange('usuarios')}
-                className="p-1 rounded hover:bg-sidebar-accent transition-colors"
-                title="Gerenciar Usuários"
-              >
-                <Settings className="w-4 h-4 text-sidebar-foreground opacity-60 hover:opacity-100 transition-opacity" />
-              </button>
-            )}
             <button
               onClick={logout}
               className="p-1 rounded hover:bg-sidebar-accent transition-colors"
