@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, CalendarDays, Bot, Zap, PackageX, BarChart2 } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, CalendarDays, Bot, Zap, PackageX, BarChart2, Settings2, Check } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
@@ -17,7 +17,7 @@ import { StatusAnunciosTab } from './StatusAnunciosTab';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
-import {
+import { type ModuloDestino, CAMPOS_POR_MODULO, loadSheetConfigs } from '@/lib/sheets-store';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
   pendente: { icon: Clock, label: 'Pendente', class: 'text-[hsl(var(--vix-warning))] bg-[hsl(var(--vix-warning)/0.1)]' },
@@ -360,7 +360,7 @@ export function AtualizarDadosPage() {
             <KpiCard title="Total Pedidos" value={ped.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
             <KpiCard title="Margem %" value={`${margemPct.toFixed(1)}%`} icon={TrendingUp} delay={100} />
             <KpiCard title="Contas Conectadas" value={`${connectedCount}/${accounts.length}`} icon={Wifi} delay={150} />
-            <KpiCard title="Planilhas Configuradas" value={String(sheetConfigs.length)} icon={FileSpreadsheet} delay={200} />
+            <KpiCard title="Planilhas Configuradas" value={String(loadSheetConfigs().length)} icon={FileSpreadsheet} delay={200} />
           </div>
         );
       })()}
