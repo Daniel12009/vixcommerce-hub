@@ -9,20 +9,31 @@ import { set, get } from 'idb-keyval';
 
 export async function saveToCloud(key: string, data: any): Promise<boolean> {
   try {
-    // 1. Cross-device Configs (e.g. Sheet URIs) -> Supabase
+    // 1. Cross-device Configs (e.g. Sheet URIs) -> Sync immediately
     if (key === 'sheet_configs') {
       const { error } = await supabase
         .from('app_data')
         .upsert({ data_key: key, data_value: data }, { onConflict: 'data_key' });
       if (error) console.warn(`[Persist] Supabase save failed for "${key}":`, error.message);
       
-      // Also cache in IDB for fast local load
       await set(`vix_${key}`, data).catch(() => {});
       return !error;
     }
 
-    // 2. Huge Data Caches (vendas, ads, estoque) -> Local IndexedDB
+    // 2. Huge Data Caches -> Local IndexedDB instantly
     await set(`vix_${key}`, data);
+    
+    // 3. Fire-and-forget sync to Supabase in the background
+    // This maintains cross-device cache without blocking the UI or throwing hard errors
+    // if the payload is too large or causes a Gateway Timeout.
+    queueMicrotask(() => {
+      supabase.from('app_data')
+        .upsert({ data_key: key, data_value: data }, { onConflict: 'data_key' })
+        .then(({ error }) => {
+          if (error) console.warn(`[Persist-Async] Background sync failed for "${key}":`, error.message);
+        });
+    });
+
     return true;
   } catch (err) {
     console.warn(`[Persist] Error saving "${key}":`, err);
