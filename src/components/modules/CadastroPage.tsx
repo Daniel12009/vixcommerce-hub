@@ -822,7 +822,9 @@ export function CadastroPage() {
             listing_type: 'gold_special',
             category_id: payload.category_id,
             description: payload.description,
-            picture_urls: '',
+            picture_urls: Array.isArray(payload.photo_urls)
+              ? payload.photo_urls.join('\n')
+              : '',
             seller_sku: payload.seller_sku,
           });
           setShowAICreator(false);

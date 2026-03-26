@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Loader2, CheckCircle, XCircle, AlertTriangle, ChevronRight, Copy, Send, RefreshCw, X } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, XCircle, AlertTriangle, ChevronRight, Copy, Send, RefreshCw, X, FolderOpen, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -15,6 +15,7 @@ interface AIAdCreatorProps {
     description: string;
     category_id: string;
     seller_sku: string;
+    photo_urls: string[];
   }) => void;
 }
 
@@ -51,6 +52,13 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
   const [editPrice, setEditPrice] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
 
+  // Drive Photos
+  const [drivePhotos, setDrivePhotos] = useState<string[]>([]);
+  const [driveFolder, setDriveFolder] = useState('');
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveError, setDriveError] = useState('');
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+
   if (!open) return null;
 
   // Busca dados do produto no contexto
@@ -74,6 +82,34 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
     };
   }
 
+  async function searchDrivePhotos() {
+    if (!sku.trim()) { setDriveError('Informe o SKU para buscar as fotos.'); return; }
+    setDriveLoading(true);
+    setDriveError('');
+    setDrivePhotos([]);
+    setSelectedPhotos([]);
+    try {
+      const { data, error } = await supabase.functions.invoke('drive-photos', {
+        body: { sku, account_name: accountName },
+      });
+      if (error) throw new Error(error.message);
+      if (!data.found) { setDriveError(data.message || 'Nenhuma foto encontrada.'); return; }
+      setDrivePhotos(data.urls || []);
+      setDriveFolder(data.folder_name || '');
+      setSelectedPhotos((data.urls || []).slice(0, 6));
+    } catch (err: any) {
+      setDriveError(err.message || 'Erro ao buscar fotos no Drive.');
+    } finally {
+      setDriveLoading(false);
+    }
+  }
+
+  function togglePhoto(url: string) {
+    setSelectedPhotos(prev =>
+      prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url].slice(0, 6)
+    );
+  }
+
   async function handleGenerate() {
     if (!productName.trim()) { setError('Informe o nome do produto.'); return; }
     setError('');
@@ -83,7 +119,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
 
     const ctx = getProductContext();
 
-    // Simula progresso visual dos agentes (a função real faz tudo em sequência internamente)
+    // Simula progresso visual dos agentes
     let stepIdx = 0;
     const stepTimer = setInterval(() => {
       stepIdx++;
@@ -108,6 +144,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           roas: ctx.roas,
           conversao: ctx.conversao,
           conta: accountName,
+          photo_urls: selectedPhotos,
         },
       });
 
@@ -128,15 +165,21 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
 
       // Log
       if (user) {
-        await (supabase as any).from('listing_changelog').insert({
-          item_id: `ai-draft-${sku || productName}`,
-          marketplace: 'ml',
-          account_name: accountName,
-          campo: 'ai_draft_criado',
-          valor_anterior: '',
-          valor_novo: data.copy?.title?.value || '',
-          usuario: user.username,
-        }).catch(() => {});
+        try {
+          await (supabase as any)
+            .from('listing_changelog')
+            .insert({
+              item_id: `ai-draft-${sku || productName}`,
+              marketplace: 'ml',
+              account_name: accountName,
+              campo: 'ai_draft_criado',
+              valor_anterior: '',
+              valor_novo: data?.copy?.title?.value || productName,
+              usuario: user.username,
+            });
+        } catch (logErr) {
+          console.warn('Changelog insert failed:', logErr);
+        }
       }
     } catch (err: any) {
       clearInterval(stepTimer);
@@ -158,6 +201,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       description: editDescription,
       category_id: editCategoryId,
       seller_sku: sku,
+      photo_urls: selectedPhotos,
     });
     onClose();
   }
@@ -186,6 +230,23 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           <button onClick={onClose} className="p-1 rounded hover:bg-muted transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
+        </div>
+
+        {/* Indicador de conta */}
+        <div className={`flex items-center gap-3 px-4 py-2.5 border-b ${accountName ? 'bg-yellow-400/5 border-yellow-400/20' : 'bg-red-400/5 border-red-400/20'}`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${accountName ? 'bg-yellow-400/15' : 'bg-red-400/15'}`}>
+            <DollarSign className={`w-3 h-3 ${accountName ? 'text-yellow-500' : 'text-red-400'}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground leading-none mb-0.5">Publicando na conta</p>
+            <p className={`text-xs font-medium truncate ${accountName ? 'text-foreground' : 'text-red-400'}`}>
+              {accountName || 'Nenhuma conta selecionada — volte e selecione uma conta ML'}
+            </p>
+          </div>
+          {accountName
+            ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+            : <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+          }
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -227,6 +288,83 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                 />
               </div>
 
+              {/* Fotos do Drive */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">
+                    Fotos do produto
+                  </label>
+                  {driveFolder && (
+                    <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> {driveFolder}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={searchDrivePhotos}
+                  disabled={driveLoading || !sku.trim()}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors w-full justify-center"
+                >
+                  {driveLoading
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando no Drive...</>
+                    : <><FolderOpen className="w-3.5 h-3.5" /> Buscar fotos automaticamente (Drive)</>
+                  }
+                </button>
+
+                {driveError && (
+                  <p className="text-[11px] text-amber-400 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3" />{driveError}
+                  </p>
+                )}
+
+                {drivePhotos.length > 0 && (
+                  <>
+                    <p className="text-[10px] text-muted-foreground">
+                      Clique para deselecionar. Máximo 6 fotos para o ML.
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {drivePhotos.map((url, i) => (
+                        <div
+                          key={i}
+                          onClick={() => togglePhoto(url)}
+                          className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all aspect-square ${
+                            selectedPhotos.includes(url)
+                              ? 'border-purple-500 opacity-100'
+                              : 'border-border opacity-40'
+                          }`}
+                        >
+                          <img
+                            src={url}
+                            alt={`Foto ${i + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
+                          />
+                          {selectedPhotos.includes(url) && (
+                            <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center">
+                              <CheckCircle className="w-3.5 h-3.5 text-white" />
+                            </div>
+                          )}
+                          <div className="absolute bottom-1 left-1 bg-black/50 text-white text-[9px] px-1 rounded">
+                            {i + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground text-right">
+                      {selectedPhotos.length} de {Math.min(drivePhotos.length, 6)} selecionada(s)
+                    </p>
+                  </>
+                )}
+
+                {!drivePhotos.length && !driveLoading && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Busca automaticamente na pasta com o nome do SKU em: Drive → Design → IMAGENS - IA
+                  </p>
+                )}
+              </div>
+
               {error && (
                 <p className="text-red-400 text-sm flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" />{error}
@@ -235,7 +373,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
 
               <button
                 onClick={handleGenerate}
-                disabled={generating || !productName.trim()}
+                disabled={generating || !productName.trim() || !accountId}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors"
               >
                 {generating
@@ -371,6 +509,20 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                   className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none resize-y border border-border focus:border-purple-500/50"
                 />
               </div>
+
+              {/* Fotos selecionadas */}
+              {selectedPhotos.length > 0 && (
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">
+                    Fotos selecionadas ({selectedPhotos.length})
+                  </label>
+                  <div className="flex gap-2 mt-2 overflow-x-auto">
+                    {selectedPhotos.map((url, i) => (
+                      <img key={i} src={url} alt={`Foto ${i+1}`} className="w-14 h-14 rounded-lg object-cover border border-border flex-shrink-0" />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Posicionamento estratégico */}
               {draft.strategy?.positioning && (
