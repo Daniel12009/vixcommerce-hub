@@ -276,7 +276,13 @@ Deno.serve(async (req) => {
               response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,shipping_carrier',
             });
 
-            const orders = (detailData.response?.order_list || []).map((o: any) => ({
+            const orders = (detailData.response?.order_list || [])
+              .filter((o: any) => {
+                const s = o.order_status;
+                // Only include pending shipments
+                return s === 'READY_TO_SHIP' || s === 'PROCESSED' || s === 'RETRY_SHIP';
+              })
+              .map((o: any) => ({
               orderId: o.order_sn,
               status: mapShopeeStatus(o.order_status),
               shippingStatus: o.order_status,

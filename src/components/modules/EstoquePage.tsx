@@ -8,6 +8,7 @@ import { formatNumber } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { EnviosTab } from './EnviosTab';
 import { ExpedicaoTab } from './ExpedicaoTab';
+import { EmTransitoTab } from './EmTransitoTab';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, PieChart, Pie, Legend } from 'recharts';
 
 interface MergedStockRow {
@@ -284,12 +285,17 @@ export function EstoquePage() {
         <TabsList className="mb-4">
           <TabsTrigger value="visao-geral">📊 Visão Geral</TabsTrigger>
           <TabsTrigger value="expedicao-api">📦 Expedição (API)</TabsTrigger>
+          <TabsTrigger value="em-transito">✈️ Em Trânsito (API)</TabsTrigger>
           <TabsTrigger value="envios">🚚 Envios (Planilha ML)</TabsTrigger>
           <TabsTrigger value="transferencias">🔄 Transferências</TabsTrigger>
         </TabsList>
 
         <TabsContent value="expedicao-api" className="mt-0">
           <ExpedicaoTab />
+        </TabsContent>
+
+        <TabsContent value="em-transito" className="mt-0">
+          <EmTransitoTab />
         </TabsContent>
 
         <TabsContent value="visao-geral">

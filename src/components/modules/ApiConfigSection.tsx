@@ -39,9 +39,9 @@ export function ApiConfigSection() {
     try {
       const [mlRes, shopeeRes, tinyRes, otherRes] = await Promise.all([
         supabase.from('ml_accounts').select('*').order('nome'),
-        supabase.from('shopee_accounts').select('*').order('nome'),
-        supabase.from('tiny_accounts').select('*').order('nome'),
-        supabase.from('other_api_accounts').select('*').order('nome')
+        supabase.from('shopee_accounts' as any).select('*').order('nome'),
+        supabase.from('tiny_accounts' as any).select('*').order('nome'),
+        supabase.from('other_api_accounts' as any).select('*').order('nome')
       ]);
 
       if (mlRes.error) throw mlRes.error;
@@ -50,9 +50,9 @@ export function ApiConfigSection() {
       // if (otherRes.error) throw otherRes.error; // Ignoring error in case table isn't created yet for smooth UI
 
       setMlAccounts(mlRes.data || []);
-      setShopeeAccounts(shopeeRes.data || []);
-      setTinyAccounts(tinyRes.data || []);
-      setOtherAccounts(otherRes.data || []);
+      setShopeeAccounts((shopeeRes.data as any) || []);
+      setTinyAccounts((tinyRes.data as any) || []);
+      setOtherAccounts((otherRes.data as any) || []);
     } catch (err: any) {
       toast.error('Erro ao carregar contas de API: ' + err.message);
     } finally {
@@ -75,12 +75,12 @@ export function ApiConfigSection() {
     try {
       if (editingId) {
         // Update
-        const { error } = await supabase.from(table).update(formData).eq('id', editingId);
+        const { error } = await supabase.from(table as any).update(formData).eq('id', editingId);
         if (error) throw error;
         toast.success('Integração atualizada com sucesso!');
       } else {
         // Insert
-        const { error } = await supabase.from(table).insert(formData);
+        const { error } = await supabase.from(table as any).insert(formData);
         if (error) throw error;
         toast.success('Integração adicionada com sucesso!');
       }
@@ -100,7 +100,7 @@ export function ApiConfigSection() {
     if (!confirm('Tem certeza que deseja remover esta integração? Se estiver sendo usada, os módulos vão falhar.')) return;
     const table = plataforma === 'other' ? 'other_api_accounts' : `${plataforma}_accounts`;
     try {
-      const { error } = await supabase.from(table).delete().eq('id', id);
+      const { error } = await supabase.from(table as any).delete().eq('id', id);
       if (error) throw error;
       toast.success('Integração removida!');
       loadData();
@@ -294,33 +294,57 @@ export function ApiConfigSection() {
                       <option value="custom">Outra (Personalizada)</option>
                     </select>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                      App Key / ID <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.credentials?.app_key || ''}
-                      onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, app_key: e.target.value } })}
-                      className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono"
-                      placeholder="Chave pública, Key ou Client ID"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                      App Secret / Token <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
-                    </label>
-                    <input
-                      type="password"
-                      value={formData.credentials?.app_secret || ''}
-                      onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, app_secret: e.target.value } })}
-                      className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono"
-                      placeholder="Chave secreta, Access Token ou Api Key"
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground leading-tight mt-2">
-                    Diferentes plataformas exigem diferentes chaves. Preencha apenas os campos que a sua plataforma externa solicitar.
-                  </p>
+                  
+                  {formData.plataforma === 'amazon' ? (
+                    <>
+                      <div className="space-y-1 mt-3">
+                        <label className="text-xs font-semibold text-foreground flex items-center justify-between">Seller ID (Merchant Token) <span className="text-[hsl(var(--vix-danger))]">*</span></label>
+                        <input required type="text" value={formData.credentials?.seller_id || ''} onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, seller_id: e.target.value } })} className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono" placeholder="A3XXXXXXX" />
+                      </div>
+                      <div className="space-y-1 mt-2">
+                        <label className="text-xs font-semibold text-foreground flex items-center justify-between">LWA Client ID (App ID) <span className="text-[hsl(var(--vix-danger))]">*</span></label>
+                        <input required type="text" value={formData.credentials?.client_id || ''} onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, client_id: e.target.value } })} className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono" placeholder="amzn1.application-oa2-client..." />
+                      </div>
+                      <div className="space-y-1 mt-2">
+                        <label className="text-xs font-semibold text-foreground flex items-center justify-between">LWA Client Secret <span className="text-[hsl(var(--vix-danger))]">*</span></label>
+                        <input required type="password" value={formData.credentials?.client_secret || ''} onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, client_secret: e.target.value } })} className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono" />
+                      </div>
+                      <div className="space-y-1 mt-2 border-t border-border pt-2">
+                        <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Refresh Token Oauth <span className="text-[hsl(var(--vix-danger))]">*</span></label>
+                        <input required type="text" value={formData.credentials?.refresh_token || ''} onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, refresh_token: e.target.value } })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono opacity-80" placeholder="Atzr|..." />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1 mt-3">
+                        <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                          App Key / ID <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.credentials?.app_key || ''}
+                          onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, app_key: e.target.value } })}
+                          className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono"
+                          placeholder="Chave pública, Key ou Client ID"
+                        />
+                      </div>
+                      <div className="space-y-1 mt-2">
+                        <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                          App Secret / Token <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
+                        </label>
+                        <input
+                          type="password"
+                          value={formData.credentials?.app_secret || ''}
+                          onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, app_secret: e.target.value } })}
+                          className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono"
+                          placeholder="Chave secreta, Access Token ou Api Key"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-2">
+                        Diferentes plataformas exigem diferentes chaves. Preencha apenas os campos que a sua plataforma externa solicitar.
+                      </p>
+                    </>
+                  )}
                 </>
               )}
 

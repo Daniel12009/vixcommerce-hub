@@ -2,12 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  Search, Loader2, ChevronLeft, ChevronRight, Save, ExternalLink,
-  Image as ImageIcon, Edit3, Clock, Tag, Package, DollarSign, FileText,
-  AlertCircle, CheckCircle, PauseCircle, XCircle, RefreshCw, Plus, X,
-  Upload, Truck, Ruler, Weight, Megaphone, Filter, Star, AlertTriangle, Eye
-} from 'lucide-react';
+import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, FileText, ChevronRight, ChevronLeft, Search, Plus, ExternalLink, ImageIcon, DollarSign, Edit3, Save, Upload, Ruler, Weight, Tag, AlertCircle, AlertTriangle, Filter, Layers, Trash2, PauseCircle, Clock, Megaphone, Star, Eye } from 'lucide-react';
 
 // ━━━ Types ━━━
 interface MLItemSummary {
@@ -296,6 +291,23 @@ export function CadastroPage() {
     setUploading(false);
   };
 
+  const handleDeletePhoto = async () => {
+    if (!detail || detail.pictures?.length <= 1) return; // Need at least 1 photo
+    const pic_id = detail.pictures[selectedPhoto]?.id;
+    if (!pic_id) return;
+    if (!window.confirm('Tem certeza que deseja remover esta foto?')) return;
+    
+    setUploading(true);
+    try {
+      await callML({ action: 'delete_picture', item_id: detail.id, fields: { picture_id: pic_id }, account_id: selectedAccount });
+      if (user) await (supabase as any).from('listing_changelog').insert({ item_id: detail.id, marketplace: 'ml', account_name: detail.conta, campo: 'foto_removida', valor_anterior: pic_id, valor_novo: '', usuario: user.username });
+      setSaveMsg('✅ Foto removida!');
+      setSelectedPhoto(0);
+      await loadDetail(detail.id);
+    } catch (err: any) { setSaveMsg(`❌ Erro ao remover foto: ${err.message}`); }
+    setUploading(false);
+  };
+
   return (
     <div>
       <PageHeader title="Ficha Técnica" subtitle="Gestão de Anúncios — Mercado Livre" />
@@ -517,8 +529,13 @@ export function CadastroPage() {
                     )}
                   </div>
                   <div className="flex gap-3">
-                    <div className="w-48 h-48 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+                    <div className="w-48 h-48 rounded-xl overflow-hidden bg-muted flex-shrink-0 relative group">
                       <img src={detail.pictures[selectedPhoto]?.secure_url || detail.pictures[selectedPhoto]?.url} alt="" className="w-full h-full object-contain" />
+                      {!detail.catalog_listing && detail.pictures?.length > 1 && (
+                        <button onClick={handleDeletePhoto} disabled={uploading} className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 disabled:opacity-50" title="Apagar foto">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-1.5 content-start">
                       {detail.pictures.map((pic, i) => (

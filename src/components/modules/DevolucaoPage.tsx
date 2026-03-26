@@ -46,6 +46,7 @@ export function DevolucaoPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterSituacao, setFilterSituacao] = useState('all');
+  const [filterPlataforma, setFilterPlataforma] = useState('all');
   const [sortCol, setSortCol] = useState<string>('dataPlanilha');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -59,6 +60,7 @@ export function DevolucaoPage() {
   const statusOptions = useMemo(() => [...new Set(items.map(i => i.statusDevolucao).filter(Boolean))], [items]);
   const setorOptions = useMemo(() => [...new Set(items.map(i => i.setor).filter(Boolean))], [items]);
   const situacaoOptions = useMemo(() => [...new Set(items.map(i => i.situacaoMercadoria).filter(Boolean))], [items]);
+  const plataformaOptions = useMemo(() => [...new Set(items.map(i => i.plataforma).filter(Boolean))], [items]);
 
   // Filtered items
   const filtered = useMemo(() => {
@@ -66,6 +68,7 @@ export function DevolucaoPage() {
     if (filterStatus !== 'all') result = result.filter(i => i.statusDevolucao === filterStatus);
     if (filterSetor !== 'all') result = result.filter(i => i.setor === filterSetor);
     if (filterSituacao !== 'all') result = result.filter(i => i.situacaoMercadoria === filterSituacao);
+    if (filterPlataforma !== 'all') result = result.filter(i => i.plataforma === filterPlataforma);
     // Date filter — handles: dd/mm/yyyy, yyyy-mm-dd, mm/dd/yyyy, serial numbers
     const parseDate = (str: string): Date | null => {
       if (!str) return null;
@@ -130,7 +133,7 @@ export function DevolucaoPage() {
       return sortDir === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
     });
     return result;
-  }, [items, filterStatus, filterSetor, filterSituacao, search, sortCol, sortDir, periodDays, dateFrom, dateTo]);
+  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma, search, sortCol, sortDir, periodDays, dateFrom, dateTo]);
 
   // KPIs
   const totalDevolucoes = filtered.length;
@@ -298,6 +301,14 @@ export function DevolucaoPage() {
             className="pl-8 pr-3 py-1.5 rounded-lg bg-muted text-foreground text-xs border-none outline-none w-56"
           />
         </div>
+        <select
+          value={filterPlataforma}
+          onChange={e => setFilterPlataforma(e.target.value)}
+          className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary font-semibold text-xs border-none outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option value="all">Todas Plataformas</option>
+          {plataformaOptions.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}

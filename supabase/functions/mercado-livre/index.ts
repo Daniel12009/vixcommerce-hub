@@ -244,16 +244,16 @@ Deno.serve(async (req) => {
             });
           }
 
-          // Fetch recent paid orders (last 7 days)
+          // Fetch recent paid orders (last 15 days)
           const now = new Date();
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const past = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
 
           let offset = 0;
           const limit = 50;
           let hasMore = true;
 
           while (hasMore) {
-            const url = `/orders/search?seller=${sellerId}&order.status=paid&order.date_created.from=${weekAgo.toISOString()}&order.date_created.to=${now.toISOString()}&sort=date_desc&limit=${limit}&offset=${offset}`;
+            const url = `/orders/search?seller=${sellerId}&order.status=paid&order.date_created.from=${past.toISOString()}&order.date_created.to=${now.toISOString()}&sort=date_desc&limit=${limit}&offset=${offset}`;
             
             let ordersData;
             try {
@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
 
             for (const o of results) {
               const shippingStatus = o.shipping?.status || '';
-              if (shippingStatus && shippingStatus !== 'delivered' && shippingStatus !== 'cancelled') {
+              if (shippingStatus && shippingStatus !== 'shipped' && shippingStatus !== 'delivered' && shippingStatus !== 'not_delivered' && shippingStatus !== 'cancelled') {
                 allShipments.push({
                   orderId: o.id,
                   status: o.status,
@@ -510,6 +510,23 @@ Deno.serve(async (req) => {
       const existingPics = (item.pictures || []).map((p: any) => ({ id: p.id }));
       // Add new picture by URL
       existingPics.push({ source: picture_url });
+      const result = await mlFetchWrite(account, `/items/${item_id}`, 'PUT', { pictures: existingPics });
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'delete_picture') {
+      if (!item_id) throw new Error('item_id is required');
+      const pic_id = (fields as any)?.picture_id;
+      if (!pic_id) throw new Error('picture_id is required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+
+      const account = accounts[0];
+      const item = await mlFetch(account, `/items/${item_id}?attributes=pictures`);
+      const existingPics = (item.pictures || []).filter((p: any) => p.id !== pic_id).map((p: any) => ({ id: p.id }));
       const result = await mlFetchWrite(account, `/items/${item_id}`, 'PUT', { pictures: existingPics });
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
