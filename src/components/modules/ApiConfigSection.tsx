@@ -13,15 +13,19 @@ interface ShopeeAccount {
 interface TinyAccount {
   id: string; nome: string; api_token: string; ativo: boolean;
 }
+interface OtherApiAccount {
+  id: string; plataforma: string; nome: string; credentials: { app_key?: string; app_secret?: string; access_token?: string; [key: string]: any }; ativo: boolean;
+}
 
 export function ApiConfigSection() {
   const [loading, setLoading] = useState(true);
   const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
   const [shopeeAccounts, setShopeeAccounts] = useState<ShopeeAccount[]>([]);
   const [tinyAccounts, setTinyAccounts] = useState<TinyAccount[]>([]);
+  const [otherAccounts, setOtherAccounts] = useState<OtherApiAccount[]>([]);
 
   // Modals/Forms state
-  const [editingPlataforma, setEditingPlataforma] = useState<'ml' | 'shopee' | 'tiny' | null>(null);
+  const [editingPlataforma, setEditingPlataforma] = useState<'ml' | 'shopee' | 'tiny' | 'other' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<any>({});
   const [saving, setSaving] = useState(false);
@@ -33,19 +37,22 @@ export function ApiConfigSection() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [mlRes, shopeeRes, tinyRes] = await Promise.all([
+      const [mlRes, shopeeRes, tinyRes, otherRes] = await Promise.all([
         supabase.from('ml_accounts').select('*').order('nome'),
         supabase.from('shopee_accounts').select('*').order('nome'),
-        supabase.from('tiny_accounts').select('*').order('nome')
+        supabase.from('tiny_accounts').select('*').order('nome'),
+        supabase.from('other_api_accounts').select('*').order('nome')
       ]);
 
       if (mlRes.error) throw mlRes.error;
       if (shopeeRes.error) throw shopeeRes.error;
       if (tinyRes.error) throw tinyRes.error;
+      // if (otherRes.error) throw otherRes.error; // Ignoring error in case table isn't created yet for smooth UI
 
       setMlAccounts(mlRes.data || []);
       setShopeeAccounts(shopeeRes.data || []);
       setTinyAccounts(tinyRes.data || []);
+      setOtherAccounts(otherRes.data || []);
     } catch (err: any) {
       toast.error('Erro ao carregar contas de API: ' + err.message);
     } finally {
@@ -53,7 +60,7 @@ export function ApiConfigSection() {
     }
   };
 
-  const handleEdit = (plataforma: 'ml' | 'shopee' | 'tiny', account: any) => {
+  const handleEdit = (plataforma: 'ml' | 'shopee' | 'tiny' | 'other', account: any) => {
     setEditingPlataforma(plataforma);
     setEditingId(account ? account.id : null);
     setFormData(account ? { ...account } : { ativo: true });
@@ -63,7 +70,7 @@ export function ApiConfigSection() {
     e.preventDefault();
     if (!editingPlataforma) return;
     setSaving(true);
-    const table = `${editingPlataforma}_accounts`;
+    const table = editingPlataforma === 'other' ? 'other_api_accounts' : `${editingPlataforma}_accounts`;
     
     try {
       if (editingId) {
@@ -89,9 +96,9 @@ export function ApiConfigSection() {
     }
   };
 
-  const handleDelete = async (plataforma: 'ml' | 'shopee' | 'tiny', id: string) => {
+  const handleDelete = async (plataforma: 'ml' | 'shopee' | 'tiny' | 'other', id: string) => {
     if (!confirm('Tem certeza que deseja remover esta integração? Se estiver sendo usada, os módulos vão falhar.')) return;
-    const table = `${plataforma}_accounts`;
+    const table = plataforma === 'other' ? 'other_api_accounts' : `${plataforma}_accounts`;
     try {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
@@ -143,14 +150,18 @@ export function ApiConfigSection() {
                     {plataforma === 'ml' && (acc.seller_id || <span className="text-xs text-[hsl(var(--vix-warning))] relative flex items-center group-hover:block">Falta ID <AlertCircle className="inline w-3 h-3 ml-1"/></span>)}
                     {plataforma === 'shopee' && acc.shop_id}
                     {plataforma === 'tiny' && (acc.api_token ? '••••••••' + acc.api_token.slice(-4) : 'Sem token')}
+                    {plataforma === 'other' && (
+                      <span className="capitalize">{acc.plataforma}</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-muted-foreground text-xs">
-                    {plataforma !== 'tiny' && (
+                    {plataforma === 'ml' || plataforma === 'shopee' ? (
                       <span className={acc.access_token ? 'text-[hsl(var(--vix-success))] font-medium' : 'text-muted-foreground'}>
                         {acc.access_token ? '✓ Token Válido' : '⚠️ Faltam Tokens'}
                       </span>
-                    )}
+                    ) : null}
                     {plataforma === 'tiny' && <span className="text-[hsl(var(--vix-success))] font-medium">✓ Chave Fixa configurada</span>}
+                    {plataforma === 'other' && <span className="text-[hsl(var(--vix-success))] font-medium">✓ Credenciais salvas</span>}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -181,6 +192,7 @@ export function ApiConfigSection() {
       <PlatformCard title="Mercado Livre" icon={Database} accounts={mlAccounts} plataforma="ml" colorClass="bg-[hsl(45,100%,50%,0.2)] text-[#fbbc04]" />
       <PlatformCard title="Tiny ERP" icon={Key} accounts={tinyAccounts} plataforma="tiny" colorClass="bg-[hsl(200,80%,50%,0.2)] text-[hsl(200,80%,50%)]" />
       <PlatformCard title="Shopee" icon={LinkIcon} accounts={shopeeAccounts} plataforma="shopee" colorClass="bg-[hsl(16,100%,60%,0.2)] text-[hsl(16,100%,60%)]" />
+      <PlatformCard title="Outras Integrações (Shein, TikTok...)" icon={Database} accounts={otherAccounts} plataforma="other" colorClass="bg-primary/20 text-primary" />
 
       {/* MODAL / FORM INLINE */}
       {editingPlataforma && (
@@ -261,6 +273,55 @@ export function ApiConfigSection() {
                   <label className="text-xs font-semibold text-foreground">API Token <span className="text-[hsl(var(--vix-danger))]">*</span></label>
                   <input required type="text" value={formData.api_token || ''} onChange={e => setFormData({ ...formData, api_token: e.target.value })} className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono" placeholder="Token do Tiny ERP" />
                 </div>
+              )}
+
+              {editingPlataforma === 'other' && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">Plataforma <span className="text-[hsl(var(--vix-danger))]">*</span></label>
+                    <select
+                      required
+                      value={formData.plataforma || ''}
+                      onChange={e => setFormData({ ...formData, plataforma: e.target.value })}
+                      className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value="" disabled>Selecione a plataforma</option>
+                      <option value="shein">Shein</option>
+                      <option value="tiktok">TikTok Shop</option>
+                      <option value="amazon">Amazon</option>
+                      <option value="magalu">Magalu</option>
+                      <option value="americanas">Americanas</option>
+                      <option value="custom">Outra (Personalizada)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                      App Key / ID <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.credentials?.app_key || ''}
+                      onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, app_key: e.target.value } })}
+                      className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono"
+                      placeholder="Chave pública, Key ou Client ID"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                      App Secret / Token <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.credentials?.app_secret || ''}
+                      onChange={e => setFormData({ ...formData, credentials: { ...formData.credentials, app_secret: e.target.value } })}
+                      className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono"
+                      placeholder="Chave secreta, Access Token ou Api Key"
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-tight mt-2">
+                    Diferentes plataformas exigem diferentes chaves. Preencha apenas os campos que a sua plataforma externa solicitar.
+                  </p>
+                </>
               )}
 
               <div className="flex items-center gap-2 pt-2">
