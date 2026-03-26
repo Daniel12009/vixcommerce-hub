@@ -17,6 +17,7 @@ import { StatusAnunciosTab } from './StatusAnunciosTab';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
+import { type ModuloDestino, CAMPOS_POR_MODULO, loadSheetConfigs } from '@/lib/sheets-store';
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; class: string }> = {
   pendente: { icon: Clock, label: 'Pendente', class: 'text-[hsl(var(--vix-warning))] bg-[hsl(var(--vix-warning)/0.1)]' },
