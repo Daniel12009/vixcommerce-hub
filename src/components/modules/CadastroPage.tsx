@@ -336,7 +336,7 @@ export function CadastroPage() {
               </div>
               <div>
                 <h3 className="font-bold text-lg">{p.label}</h3>
-                <p className="text-xs text-muted-foreground mt-1 font-medium">Acessar Ads</p>
+                <p className="text-xs text-muted-foreground mt-1 font-medium">Acessar Anúncios</p>
               </div>
             </button>
           ))}
