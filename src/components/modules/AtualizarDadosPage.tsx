@@ -190,9 +190,15 @@ export function AtualizarDadosPage() {
   const [customColumns, setCustomColumns] = useState<{ id: string; targetName: string; selectedSourceColumn: string }[]>([]);
 
   // Persist configs to localStorage AND Supabase
+  // IMPORTANT: Only save to cloud AFTER we've loaded from cloud (prevents overwriting with empty on new device)
+  const cloudReady = useRef(false);
   useEffect(() => {
+    // Always save to localStorage (fast cache)
     saveSheetConfigs(sheetConfigs);
-    saveSheetConfigsToCloud(sheetConfigs);
+    // Only save to Supabase once we've loaded from cloud first
+    if (cloudReady.current) {
+      saveSheetConfigsToCloud(sheetConfigs);
+    }
   }, [sheetConfigs]);
 
   // On mount: load configs from Supabase (cross-browser)
@@ -245,6 +251,8 @@ export function AtualizarDadosPage() {
         };
         configs = [...configs, devolDefault];
       }
+      // Mark cloud as ready BEFORE setting state, so the save effect can now sync
+      cloudReady.current = true;
       setSheetConfigs(configs);
     });
     // Also load imported data from cloud
