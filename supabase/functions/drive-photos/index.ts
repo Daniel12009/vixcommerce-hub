@@ -64,14 +64,33 @@ async function listFolders(token: string, parentId: string): Promise<{ id: strin
 async function listImages(token: string, folderId: string): Promise<{ url: string; name: string }[]> {
   const q = encodeURIComponent(`'${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/webp') and trashed=false`);
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=20`,
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=10`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const data = await res.json();
-  return (data.files || []).map((f: any) => ({
-    url: `https://drive.google.com/uc?export=view&id=${f.id}`,
-    name: f.name,
-  }));
+  const files = data.files || [];
+
+  // Download each image and convert to base64 data URI
+  const results: { url: string; name: string }[] = [];
+  for (const f of files.slice(0, 10)) {
+    try {
+      const imgRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!imgRes.ok) continue;
+      const buf = await imgRes.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const b64 = btoa(binary);
+      const mime = f.mimeType || 'image/jpeg';
+      results.push({ url: `data:${mime};base64,${b64}`, name: f.name });
+    } catch {
+      // skip failed downloads
+    }
+  }
+  return results;
 }
 
 function scoreFolder(folderName: string, sku: string, accountName: string): number {
