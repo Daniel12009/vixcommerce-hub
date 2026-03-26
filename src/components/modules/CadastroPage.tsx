@@ -139,6 +139,7 @@ export function CadastroPage() {
     title: '', price: '', quantity: '1', condition: 'new',
     listing_type: 'gold_special', category_id: '', description: '',
     picture_urls: '', seller_sku: '',
+    warranty_type: 'Garantia do vendedor', warranty_time: '90 dias',
   });
 
   const [uploading, setUploading] = useState(false);
@@ -275,14 +276,28 @@ export function CadastroPage() {
     setCreating(true); setCreateMsg('');
     try {
       const pictures = newItem.picture_urls.split('\n').filter(u => u.trim()).map(u => ({ source: u.trim() }));
-      const itemPayload: any = { title: newItem.title, price: Number(newItem.price), available_quantity: Number(newItem.quantity) || 1, condition: newItem.condition, listing_type_id: newItem.listing_type, category_id: newItem.category_id, currency_id: 'BRL', buying_mode: 'buy_it_now' };
+      const itemPayload: any = {
+        title: newItem.title,
+        price: Number(newItem.price),
+        available_quantity: Number(newItem.quantity) || 1,
+        condition: newItem.condition,
+        listing_type_id: newItem.listing_type,
+        category_id: newItem.category_id,
+        currency_id: 'BRL',
+        buying_mode: 'buy_it_now',
+        channels: ['marketplace'],
+        sale_terms: [
+          { id: 'WARRANTY_TYPE', value_name: newItem.warranty_type || 'Garantia do vendedor' },
+          { id: 'WARRANTY_TIME', value_name: newItem.warranty_time || '90 dias' },
+        ],
+      };
       if (pictures.length > 0) itemPayload.pictures = pictures;
       if (newItem.seller_sku) itemPayload.seller_custom_field = newItem.seller_sku;
       const result = await callML({ action: 'create_item', new_item: itemPayload, account_id: selectedAccount });
       if (newItem.description.trim() && result.id) await callML({ action: 'update_description', item_id: result.id, description_text: newItem.description, account_id: selectedAccount });
       if (user && result.id) await (supabase as any).from('listing_changelog').insert({ item_id: result.id, marketplace: 'ml', account_name: accounts.find(a => a.id === selectedAccount)?.nome || '', campo: 'criação', valor_anterior: '', valor_novo: newItem.title, usuario: user.username });
       setCreateMsg(`✅ Anúncio criado! ID: ${result.id}`);
-      setNewItem({ title: '', price: '', quantity: '1', condition: 'new', listing_type: 'gold_special', category_id: '', description: '', picture_urls: '', seller_sku: '' });
+      setNewItem({ title: '', price: '', quantity: '1', condition: 'new', listing_type: 'gold_special', category_id: '', description: '', picture_urls: '', seller_sku: '', warranty_type: 'Garantia do vendedor', warranty_time: '90 dias' });
       setTimeout(() => { loadItems(0); setShowCreate(false); setCreateMsg(''); }, 2000);
     } catch (err: any) { setCreateMsg(`❌ Erro: ${err.message}`); }
     setCreating(false);
@@ -501,6 +516,20 @@ export function CadastroPage() {
               <select value={newItem.listing_type} onChange={e => setNewItem(n => ({ ...n, listing_type: e.target.value }))} className="w-full mt-1 px-3 py-2 rounded-lg bg-muted text-foreground text-sm outline-none">
                 <option value="gold_special">Clássico</option><option value="gold_pro">Premium</option><option value="free">Grátis</option>
               </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            <div>
+              <label className="text-[10px] text-muted-foreground font-semibold uppercase">Tipo Garantia</label>
+              <select value={newItem.warranty_type} onChange={e => setNewItem(n => ({ ...n, warranty_type: e.target.value }))} className="w-full mt-1 px-3 py-2 rounded-lg bg-muted text-foreground text-sm outline-none">
+                <option value="Garantia do vendedor">Garantia do vendedor</option>
+                <option value="Garantia de fábrica">Garantia de fábrica</option>
+                <option value="Sem garantia">Sem garantia</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground font-semibold uppercase">Tempo Garantia</label>
+              <input value={newItem.warranty_time} onChange={e => setNewItem(n => ({ ...n, warranty_time: e.target.value }))} className="w-full mt-1 px-3 py-2 rounded-lg bg-muted text-foreground text-sm outline-none" placeholder="90 dias" />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
@@ -817,15 +846,17 @@ export function CadastroPage() {
           setNewItem({
             title: payload.title,
             price: String(payload.price),
-            quantity: '1',
+            quantity: String(payload.quantity || '1'),
             condition: 'new',
-            listing_type: 'gold_special',
+            listing_type: payload.listing_type || 'gold_special',
             category_id: payload.category_id,
             description: payload.description,
             picture_urls: Array.isArray(payload.photo_urls)
               ? payload.photo_urls.join('\n')
               : '',
             seller_sku: payload.seller_sku,
+            warranty_type: payload.warranty_type || 'Garantia do vendedor',
+            warranty_time: payload.warranty_time || '90 dias',
           });
           setShowAICreator(false);
           setShowCreate(true);

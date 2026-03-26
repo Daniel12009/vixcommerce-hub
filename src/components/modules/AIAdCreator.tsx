@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Loader2, CheckCircle, XCircle, AlertTriangle, ChevronRight, Copy, Send, RefreshCw, X, FolderOpen, DollarSign, Search } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, XCircle, AlertTriangle, ChevronRight, Copy, Send, RefreshCw, X, FolderOpen, DollarSign, Search, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -16,6 +16,10 @@ interface AIAdCreatorProps {
     category_id: string;
     seller_sku: string;
     photo_urls: string[];
+    quantity?: number;
+    listing_type?: string;
+    warranty_type?: string;
+    warranty_time?: string;
   }) => void;
 }
 
@@ -64,6 +68,14 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
   const [catQuery, setCatQuery] = useState('');
   const [catResults, setCatResults] = useState<{ id: string; name: string; path: string }[]>([]);
   const [catSearching, setCatSearching] = useState(false);
+
+  // Publish fields
+  const [editQuantity, setEditQuantity] = useState('1');
+  const [editListingType, setEditListingType] = useState('gold_special');
+  const [editWarrantyType, setEditWarrantyType] = useState('Garantia do vendedor');
+  const [editWarrantyTime, setEditWarrantyTime] = useState('90 dias');
+  const [publishing, setPublishing] = useState(false);
+  const [publishMsg, setPublishMsg] = useState('');
 
   if (!open) return null;
 
@@ -215,11 +227,74 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
     }
   }
 
-  function handlePublish() {
+  async function handlePublish() {
     if (!editTitle || !editPrice || !editCategoryId) {
       setError('Preencha título, preço e categoria antes de publicar.');
       return;
     }
+    setPublishing(true);
+    setPublishMsg('');
+    setError('');
+    try {
+      // Step 1: Create item
+      setPublishMsg('Publicando anúncio...');
+      const pictures = selectedPhotos.map(u => ({ source: u }));
+      const itemPayload: any = {
+        title: editTitleSeo || editTitle,
+        price: Number(editPrice),
+        available_quantity: Number(editQuantity) || 1,
+        condition: 'new',
+        listing_type_id: editListingType,
+        category_id: editCategoryId,
+        currency_id: 'BRL',
+        buying_mode: 'buy_it_now',
+        channels: ['marketplace'],
+        sale_terms: [
+          { id: 'WARRANTY_TYPE', value_name: editWarrantyType },
+          { id: 'WARRANTY_TIME', value_name: editWarrantyTime },
+        ],
+      };
+      if (pictures.length > 0) itemPayload.pictures = pictures;
+      if (sku) itemPayload.seller_custom_field = sku;
+
+      const { data: result, error: fnError } = await supabase.functions.invoke('mercado-livre', {
+        body: { action: 'create_item', new_item: itemPayload, account_id: accountId },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (result?.error) throw new Error(result.error);
+      if (!result?.id) throw new Error('Resposta inesperada da API — sem ID do item.');
+
+      // Step 2: Create description
+      if (editDescription.trim()) {
+        setPublishMsg('Criando descrição...');
+        await supabase.functions.invoke('mercado-livre', {
+          body: { action: 'update_description', item_id: result.id, description_text: editDescription, account_id: accountId },
+        });
+      }
+
+      // Step 3: Log
+      try {
+        await (supabase as any).from('listing_changelog').insert({
+          item_id: result.id,
+          marketplace: 'ml',
+          account_name: accountName,
+          campo: 'criação_ia',
+          valor_anterior: '',
+          valor_novo: editTitleSeo || editTitle,
+          usuario: user?.username || 'system',
+        });
+      } catch { /* optional */ }
+
+      setPublishMsg(`✅ Publicado! ID: ${result.id}`);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao publicar.');
+      setPublishMsg('');
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  function handleFallbackPublish() {
     onPublish({
       title: editTitleSeo || editTitle,
       price: Number(editPrice),
@@ -227,6 +302,10 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       category_id: editCategoryId,
       seller_sku: sku,
       photo_urls: selectedPhotos,
+      quantity: Number(editQuantity) || 1,
+      listing_type: editListingType,
+      warranty_type: editWarrantyType,
+      warranty_time: editWarrantyTime,
     });
     onClose();
   }
@@ -588,6 +667,34 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                 </div>
               </div>
 
+              {/* Quantidade, Tipo Listagem, Garantia */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Quantidade</label>
+                  <input type="number" min="1" value={editQuantity} onChange={e => setEditQuantity(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Tipo Listagem</label>
+                  <select value={editListingType} onChange={e => setEditListingType(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border">
+                    <option value="gold_special">Clássico</option>
+                    <option value="gold_pro">Premium</option>
+                    <option value="free">Grátis</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Tipo Garantia</label>
+                  <select value={editWarrantyType} onChange={e => setEditWarrantyType(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border">
+                    <option value="Garantia do vendedor">Garantia do vendedor</option>
+                    <option value="Garantia de fábrica">Garantia de fábrica</option>
+                    <option value="Sem garantia">Sem garantia</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Tempo Garantia</label>
+                  <input value={editWarrantyTime} onChange={e => setEditWarrantyTime(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border" placeholder="90 dias" />
+                </div>
+              </div>
+
               {/* Dimensões */}
               {draft.dimensions?.found && (
                 <div className="px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-blue-400">
@@ -638,21 +745,45 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                 </p>
               )}
 
+              {publishMsg && (
+                <div className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${publishMsg.startsWith('✅') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+                  {publishMsg.startsWith('✅') ? <CheckCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
+                  {publishMsg}
+                  {publishMsg.includes('ID:') && (
+                    <a href={`https://www.mercadolivre.com.br/anuncios/${publishMsg.split('ID: ')[1]}`} target="_blank" rel="noopener noreferrer" className="ml-auto">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              )}
+
               {/* Botões */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setDraft(null); setCurrentStep(null); setError(''); }}
+                  onClick={() => { setDraft(null); setCurrentStep(null); setError(''); setPublishMsg(''); }}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
                 >
                   <RefreshCw className="w-4 h-4" /> Gerar novamente
                 </button>
                 <button
                   onClick={handlePublish}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors"
+                  disabled={publishing || publishMsg.startsWith('✅')}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
                 >
-                  <Send className="w-4 h-4" /> Publicar no Mercado Livre
+                  {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {publishing ? 'Publicando...' : publishMsg.startsWith('✅') ? 'Publicado!' : 'Publicar no Mercado Livre'}
                 </button>
               </div>
+
+              {/* Fallback: enviar pro formulário manual */}
+              {!publishMsg.startsWith('✅') && (
+                <button
+                  onClick={handleFallbackPublish}
+                  className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                >
+                  Ou enviar para o formulário manual →
+                </button>
+              )}
             </div>
           )}
         </div>
