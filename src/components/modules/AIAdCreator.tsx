@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Loader2, CheckCircle, XCircle, AlertTriangle, ChevronRight, Copy, Send, RefreshCw, X, FolderOpen, DollarSign } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, XCircle, AlertTriangle, ChevronRight, Copy, Send, RefreshCw, X, FolderOpen, DollarSign, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -60,6 +60,11 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
   const [driveError, setDriveError] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
 
+  // Category search
+  const [catQuery, setCatQuery] = useState('');
+  const [catResults, setCatResults] = useState<{ id: string; name: string; path: string }[]>([]);
+  const [catSearching, setCatSearching] = useState(false);
+
   if (!open) return null;
 
   function getProductContext() {
@@ -115,6 +120,22 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
     setSelectedPhotos(prev =>
       prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url].slice(0, 6)
     );
+  }
+
+  async function searchCategories(query: string) {
+    setCatQuery(query);
+    if (query.length < 2) { setCatResults([]); return; }
+    setCatSearching(true);
+    try {
+      const res = await fetch(`https://api.mercadolibre.com/sites/MLB/domain_discovery/search?q=${encodeURIComponent(query)}`);
+      if (!res.ok) { setCatResults([]); return; }
+      const data = await res.json();
+      setCatResults((data || []).slice(0, 8).map((d: any) => ({
+        id: d.category_id || '',
+        name: d.category_name || d.domain_name || '',
+        path: (d.attributes || []).map((a: any) => a.name).join(' → ') || d.domain_name || '',
+      })));
+    } catch { setCatResults([]); } finally { setCatSearching(false); }
   }
 
   async function handleGenerate() {
@@ -517,15 +538,53 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold uppercase text-muted-foreground">Categoria ML</label>
-                  <input
-                    value={editCategoryId}
-                    onChange={e => setEditCategoryId(e.target.value)}
-                    placeholder={draft.compliance?.category_suggestion || 'MLB12345'}
-                    className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
-                  />
-                  {draft.compliance?.category_suggestion && (
-                    <p className="text-[10px] text-muted-foreground mt-1">Sugestão: {draft.compliance.category_suggestion}</p>
-                  )}
+                  <div className="relative mt-1">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={editCategoryId}
+                        onChange={e => setEditCategoryId(e.target.value)}
+                        placeholder={draft.compliance?.category_suggestion || 'MLB...'}
+                        className="flex-1 px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                      />
+                    </div>
+                    {editCategoryId && (
+                      <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        {draft.compliance?.category_suggestion || editCategoryId}
+                      </p>
+                    )}
+                  </div>
+                  {/* Category search */}
+                  <div className="mt-2">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={catQuery}
+                        onChange={e => searchCategories(e.target.value)}
+                        placeholder="Buscar categoria... ex: torneira"
+                        className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-muted/50 text-xs text-foreground outline-none border border-border focus:border-purple-500/50"
+                      />
+                      {catSearching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin text-muted-foreground" />}
+                    </div>
+                    {catResults.length > 0 && (
+                      <div className="mt-1 border border-border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                        {catResults.map((cat, i) => (
+                          <button
+                            key={i}
+                            onClick={() => { setEditCategoryId(cat.id); setCatResults([]); setCatQuery(''); }}
+                            className={`w-full text-left px-3 py-2 text-xs hover:bg-purple-500/10 transition-colors border-b border-border last:border-b-0 ${
+                              editCategoryId === cat.id ? 'bg-purple-500/10 text-purple-400' : 'text-foreground'
+                            }`}
+                          >
+                            <span className="font-medium">{cat.id}</span>
+                            <span className="text-muted-foreground ml-2">— {cat.name}</span>
+                            {cat.path && <p className="text-[10px] text-muted-foreground mt-0.5">{cat.path}</p>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
