@@ -10,9 +10,10 @@ interface KpiCardProps {
   extra?: ReactNode;
   subtitle?: string;
   trend?: string;
+  valueColor?: string;
 }
 
-export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra, subtitle }: KpiCardProps) {
+export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra, subtitle, valueColor }: KpiCardProps) {
   return (
     <div
       className="bg-card border border-border rounded-xl p-5 vix-card-hover animate-fade-in"
@@ -21,7 +22,7 @@ export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra, su
       <div className="flex items-start justify-between">
         <div>
           <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">{title}</p>
-          <p className="text-2xl font-bold text-foreground mt-2 animate-count-up">{value}</p>
+          <p className={`text-2xl font-bold mt-2 animate-count-up ${valueColor || 'text-foreground'}`}>{value}</p>
           {subtitle && (
             <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
           )}

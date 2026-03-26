@@ -233,6 +233,123 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'get_pending_shipments') {
+      const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+
+      if (!accounts || accounts.length === 0) {
+        return new Response(JSON.stringify({ shipments: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Last 15 days
+      const now = new Date();
+      const past = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+      
+      const formatTinyDate = (d: Date) => {
+        const spOffset = -3 * 60;
+        const local = new Date(d.getTime() + (spOffset + d.getTimezoneOffset()) * 60000);
+        return `${String(local.getDate()).padStart(2, '0')}/${String(local.getMonth() + 1).padStart(2, '0')}/${local.getFullYear()}`;
+      };
+
+      const dataInicial = formatTinyDate(past);
+      const dataFinal = formatTinyDate(now);
+
+      const allShipments: any[] = [];
+
+      for (const account of accounts) {
+        try {
+          let pagina = 1;
+          let hasMore = true;
+
+          while (hasMore) {
+            const data = await searchOrders(account.api_token, dataInicial, dataFinal, pagina);
+
+            if (data?.retorno?.status === 'Erro') {
+              if (data.retorno?.codigo_erro === '2') { hasMore = false; break; }
+              throw new Error(`Tiny error: ${data.retorno?.erros?.[0]?.erro || 'Unknown'}`);
+            }
+
+            const pedidos = data?.retorno?.pedidos || [];
+
+            for (const p of pedidos) {
+              const pedido = p.pedido;
+              const situacaoRaw = (pedido.situacao || '').toLowerCase();
+              
+              // Only pending shipments: Aberto, Aprovado, Preparando envio, Em separação
+              if (!situacaoRaw.includes('aberto') && !situacaoRaw.includes('aprovado') && !situacaoRaw.includes('preparando') && !situacaoRaw.includes('separação')) {
+                continue;
+              }
+
+              const numEcom = (pedido.numero_ecommerce || '').toString();
+              const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
+
+              // We also want to include marketplaces from Tiny here if they are pending!
+              let plataforma = 'tiny';
+              if (ecommerce.includes('tiktok')) plataforma = 'tiktok';
+              else if (ecommerce.includes('shein')) plataforma = 'shein';
+              else if (ecommerce.includes('amazon')) plataforma = 'amazon';
+              else if (ecommerce.includes('magalu')) plataforma = 'magalu';
+              else if (ecommerce.includes('americanas')) plataforma = 'americanas';
+              else if (ecommerce.includes('temu')) plataforma = 'temu';
+              else if (ecommerce.includes('mercado') || ecommerce.includes('shopee')) {
+                 continue; // ML and Shopee are handled directly via their APIs
+              }
+
+              // Fetch details
+              const orderId = pedido.id || pedido.numero;
+              let detail: any = null;
+              try { detail = await fetchOrderDetail(account.api_token, String(orderId)); } catch (e) { /* skip */ }
+
+              const detailPedido = detail || pedido;
+              const totalAmount = parseFloat(detailPedido.total_pedido || detailPedido.totalPedido || detailPedido.valor || '0');
+              const vendedor = detailPedido.vendedor || detailPedido.nome_vendedor || '';
+              
+              const formatedDate = detailPedido.data_pedido ? parseTinyDate(detailPedido.data_pedido) : new Date().toISOString();
+
+              const itens = detailPedido.itens || [];
+              const items = itens.length > 0 ? itens.map((i: any) => {
+                const it = i.item || i;
+                return {
+                  title: it.descricao || it.nome || '',
+                  sku: it.codigo || '',
+                  quantity: parseInt(it.quantidade || '1'),
+                  unitPrice: parseFloat(it.valor_unitario || '0'),
+                };
+              }) : [{ title: `Pedido #${orderId}`, sku: numEcom, quantity: 1, unitPrice: totalAmount }];
+
+              allShipments.push({
+                orderId: orderId,
+                status: mapTinyStatus(detailPedido.situacao),
+                shippingStatus: detailPedido.situacao,
+                logisticType: detailPedido.forma_envio || 'Padrão',
+                dateCreated: formatedDate,
+                totalAmount: totalAmount,
+                buyer: detailPedido.cliente?.nome || pedido.cliente?.nome || 'N/A',
+                items,
+                vendedor,
+                conta: account.nome,
+                accountId: account.id,
+                plataforma
+              });
+            }
+
+            const totalPaginas = data?.retorno?.numero_paginas || 1;
+            pagina++;
+            hasMore = pagina <= totalPaginas;
+          }
+        } catch (err) {
+          console.error(`Error fetching Tiny pending shipments for ${account.nome}:`, err);
+          allShipments.push({ error: `Tiny|${account.nome}: ${err instanceof Error ? err.message : 'Unknown'}`, conta: account.nome });
+        }
+      }
+
+      return new Response(JSON.stringify({ shipments: allShipments }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Fetch marketplace orders from Tiny (TikTok, Shein, Amazon, etc.)
     if (action === 'get_marketplace_orders') {
       const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');

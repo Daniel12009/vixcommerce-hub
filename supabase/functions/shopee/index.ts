@@ -229,6 +229,88 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'get_pending_shipments') {
+      const accountsRes = await supabaseFetch('/shopee_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+
+      if (!accounts || accounts.length === 0) {
+        return new Response(JSON.stringify({ shipments: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Last 15 days
+      const now = new Date();
+      const past = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+      const timeFrom = Math.floor(past.getTime() / 1000);
+      const timeTo = Math.floor(now.getTime() / 1000);
+
+      const allShipments: any[] = [];
+
+      for (const account of accounts) {
+        try {
+          let cursor = '';
+          let hasMore = true;
+
+          while (hasMore) {
+            const params: Record<string, string> = {
+              time_range_field: 'create_time',
+              time_from: String(timeFrom),
+              time_to: String(timeTo),
+              page_size: '50',
+              status: 'READY_TO_SHIP', // Only fetch pending orders
+            };
+            if (cursor) params.cursor = cursor;
+
+            const listData = await shopeeFetch(account, '/api/v2/order/get_order_list', params);
+            const orderSns = (listData.response?.order_list || []).map((o: any) => o.order_sn);
+
+            if (orderSns.length === 0) {
+              hasMore = false;
+              break;
+            }
+
+            // Get order details including shipping_carrier
+            const detailData = await shopeeFetch(account, '/api/v2/order/get_order_detail', {
+              order_sn_list: orderSns.join(','),
+              response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,shipping_carrier',
+            });
+
+            const orders = (detailData.response?.order_list || []).map((o: any) => ({
+              orderId: o.order_sn,
+              status: mapShopeeStatus(o.order_status),
+              shippingStatus: o.order_status,
+              logisticType: o.shipping_carrier || 'Standard',
+              dateCreated: new Date(o.create_time * 1000).toISOString(),
+              totalAmount: o.total_amount || 0,
+              buyer: o.buyer_username || 'N/A',
+              items: (o.item_list || []).map((item: any) => ({
+                title: item.item_name || '',
+                sku: item.model_sku || item.item_sku || '',
+                quantity: item.model_quantity_purchased || 1,
+                unitPrice: item.model_discounted_price || item.model_original_price || 0,
+              })),
+              conta: account.nome,
+              accountId: account.id,
+              plataforma: 'shopee'
+            }));
+
+            allShipments.push(...orders);
+            
+            hasMore = listData.response?.more || false;
+            cursor = listData.response?.next_cursor || '';
+          }
+        } catch (err) {
+          console.error(`Error fetching Shopee pending shipments for ${account.nome}:`, err);
+          allShipments.push({ error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`, conta: account.nome });
+        }
+      }
+
+      return new Response(JSON.stringify({ shipments: allShipments }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     console.error('Shopee API error:', error);
