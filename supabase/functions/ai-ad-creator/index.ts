@@ -41,6 +41,24 @@ function parseJSON(text: string): any {
   return JSON.parse(clean);
 }
 
+async function predictCategory(productName: string): Promise<{ id: string; name: string; path: string[] }> {
+  try {
+    const q = encodeURIComponent(productName);
+    const res = await fetch(`https://api.mercadolibre.com/sites/MLB/domain_discovery/search?q=${q}`);
+    if (!res.ok) return { id: '', name: '', path: [] };
+    const data = await res.json();
+    if (data.length > 0) {
+      const best = data[0];
+      return {
+        id: best.category_id || '',
+        name: best.category_name || best.domain_name || '',
+        path: best.attributes?.map((a: any) => a.name) || [],
+      };
+    }
+  } catch { /* ignore */ }
+  return { id: '', name: '', path: [] };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -75,8 +93,8 @@ Marketplace: Mercado Livre Brasil (MLB)
 ${dimensionsText}
     `.trim();
 
-    // ━━━ BATCH 1: Research + SEO em paralelo ━━━
-    const [researchResult, seoResult] = await Promise.all([
+    // ━━━ BATCH 1: Research + SEO + Category prediction em paralelo ━━━
+    const [researchResult, seoResult, mlCategory] = await Promise.all([
       callClaude(
         `Você é especialista em pesquisa de mercado para Mercado Livre Brasil. Retorne APENAS JSON válido (sem markdown):
 {"top_competitors":[{"title":string,"price":number}],"price_range":{"min":number,"max":number,"avg":number},"category_trends":[string]}
@@ -91,6 +109,7 @@ Regras: 5 termos principais + 5 long-tail. Use termos de busca real de comprador
         `Produto:\n${productContext}`,
         400
       ),
+      predictCategory(product_name),
     ]);
 
     let market_research: any = {};
@@ -129,8 +148,9 @@ Keywords: ${seo.primary_keywords?.join(', ') || ''}, ${seo.secondary_keywords?.j
         `Você valida anúncios do Mercado Livre Brasil. Retorne APENAS JSON válido:
 {"approved":boolean,"issues":[string],"category_suggestion":string,"category_id_hint":string,"warranty_suggestion":string}
 Validar: título ≤60 chars, sem proibições, sugerir categoria MLB e garantia.
-Se dimensões estiverem disponíveis, validar compatibilidade com a categoria.`,
-        `Produto: ${product_name}\nSKU: ${sku}\nContexto:\n${productContext}`,
+Se dimensões estiverem disponíveis, validar compatibilidade com a categoria.
+IMPORTANTE: A categoria real detectada pela API do ML é: ID=${mlCategory.id} Nome=${mlCategory.name}. Use este ID real no campo category_id_hint.`,
+        `Produto: ${product_name}\nSKU: ${sku}\nCategoria detectada: ${mlCategory.id} (${mlCategory.name})\nContexto:\n${productContext}`,
         400
       ),
     ]);
@@ -173,8 +193,8 @@ Se dimensões estiverem disponíveis, validar compatibilidade com a categoria.`,
         status: 'done',
         approved: compliance.approved ?? true,
         issues: compliance.issues || [],
-        category_suggestion: compliance.category_suggestion || '',
-        category_id_hint: compliance.category_id_hint || '',
+        category_suggestion: compliance.category_suggestion || mlCategory.name || '',
+        category_id_hint: mlCategory.id || compliance.category_id_hint || '',
         warranty_suggestion: compliance.warranty_suggestion || '12 meses',
         compliance_notes: compliance.compliance_notes || '',
       },
