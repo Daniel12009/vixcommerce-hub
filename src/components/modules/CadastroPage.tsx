@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, FileText, ChevronRight, ChevronLeft, Search, Plus, ExternalLink, ImageIcon, DollarSign, Edit3, Save, Upload, Ruler, Weight, Tag, AlertCircle, AlertTriangle, Filter, Layers, Trash2, PauseCircle, Clock, Megaphone, Star, Eye } from 'lucide-react';
+import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, FileText, ChevronRight, ChevronLeft, Search, Plus, ExternalLink, ImageIcon, DollarSign, Edit3, Save, Upload, Ruler, Weight, Tag, AlertCircle, AlertTriangle, Filter, Layers, Trash2, PauseCircle, Clock, Megaphone, Star, Eye, Store, Settings2 } from 'lucide-react';
 
 // ━━━ Types ━━━
 interface MLItemSummary {
@@ -88,6 +88,16 @@ function TypeBadge({ catalog, logistic }: { catalog?: boolean; logistic?: string
 export function CadastroPage() {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+
+  const PlatformTabs = [
+    { id: 'ml', label: 'Mercado Livre', icon: DollarSign, colorClass: 'bg-[hsl(45,100%,50%,0.1)] text-[#fbbc04] border-[#fbbc04]/30' },
+    { id: 'shopee', label: 'Shopee', icon: Store, colorClass: 'bg-[#ee4d2d]/10 text-[#ee4d2d] border-[#ee4d2d]/30' },
+    { id: 'amazon', label: 'Amazon', icon: Package, colorClass: 'bg-[#ff9900]/10 text-[#ff9900] border-[#ff9900]/30' },
+    { id: 'tiktok', label: 'TikTok Shop', icon: Layers, colorClass: 'bg-black/5 text-foreground border-border' },
+    { id: 'generic', label: 'Outros Canais', icon: Settings2, colorClass: 'bg-primary/5 text-primary border-primary/20' },
+  ];
 
   // Accounts — cached
   const [accounts, setAccounts] = useState<{ id: string; nome: string }[]>(() => {
@@ -308,9 +318,63 @@ export function CadastroPage() {
     setUploading(false);
   };
 
+  if (!selectedPlatform) {
+    return (
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+        <PageHeader title="Ficha Técnica" subtitle="Selecione um marketplace para gerenciar, editar e criar novos anúncios." />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mt-6">
+          {PlatformTabs.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setSelectedPlatform(p.id)}
+              className={`p-6 rounded-2xl border bg-card hover:bg-muted/50 transition-all text-left group relative overflow-hidden flex flex-col items-center text-center gap-4 ${p.colorClass}`}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="p-4 rounded-full bg-background shadow-sm group-hover:scale-110 transition-transform duration-300">
+                <p.icon className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">{p.label}</h3>
+                <p className="text-xs text-muted-foreground mt-1 font-medium">Acessar Ads</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedPlatform !== 'ml') {
+    return (
+      <div className="animate-in fade-in slide-in-from-right-8 duration-300 pb-12">
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => setSelectedPlatform(null)} className="p-2 -ml-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <h2 className="text-xl font-bold text-foreground capitalize flex items-center gap-2">
+            {PlatformTabs.find(p => p.id === selectedPlatform)?.label} — Ficha Técnica
+          </h2>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-12 text-center mt-4">
+          <Layers className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-30" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Conexão API em Desenvolvimento</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            A gestão de anúncios (CRUD completo) para {PlatformTabs.find(p => p.id === selectedPlatform)?.label} será integrada na próxima atualização.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <PageHeader title="Ficha Técnica" subtitle="Gestão de Anúncios — Mercado Livre" />
+    <div className="animate-in fade-in slide-in-from-right-8 duration-300">
+      <div className="flex items-center gap-3 mb-3">
+        <button onClick={() => setSelectedPlatform(null)} className="p-2 -ml-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <PageHeader title="Ficha Técnica" subtitle="Gestão de Anúncios — Mercado Livre" />
+      </div>
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">

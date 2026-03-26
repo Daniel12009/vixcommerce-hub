@@ -1,38 +1,28 @@
 import { supabase } from '@/integrations/supabase/client';
+import { set, get } from 'idb-keyval';
 
 /**
- * Persistence layer using Supabase `app_data` table.
- * Falls back to localStorage if Supabase is unavailable.
- *
- * Keys used:
- *   - 'sheet_configs'     → SheetConfig[]
- *   - 'vendas_data'       → VendaItem[]
- *   - 'performance_data'  → PerformanceItem[]
- *   - 'estoque_data'      → any[]
- *   - 'financeiro_data'   → any[]
+ * Persistence layer.
+ * - 'sheet_configs' (small, cross-device): saved to Supabase `app_data`.
+ * - all other data arrays (huge, local cache): saved to IndexedDB to avoid Supabase 504 timeouts.
  */
 
 export async function saveToCloud(key: string, data: any): Promise<boolean> {
   try {
-    // Save to localStorage (fast local cache) — ignore quota errors
-    try {
-      localStorage.setItem(`vix_${key}`, JSON.stringify(data));
-    } catch {
-      // localStorage quota exceeded — no problem, Supabase is the primary store
+    // 1. Cross-device Configs (e.g. Sheet URIs) -> Supabase
+    if (key === 'sheet_configs') {
+      const { error } = await supabase
+        .from('app_data')
+        .upsert({ data_key: key, data_value: data }, { onConflict: 'data_key' });
+      if (error) console.warn(`[Persist] Supabase save failed for "${key}":`, error.message);
+      
+      // Also cache in IDB for fast local load
+      await set(`vix_${key}`, data).catch(() => {});
+      return !error;
     }
 
-    // Save to Supabase (cross-browser persistence)
-    const { error } = await (supabase as any)
-      .from('app_data')
-      .upsert(
-        { data_key: key, data_value: data },
-        { onConflict: 'data_key' }
-      );
-
-    if (error) {
-      console.warn(`[Persist] Supabase save failed for "${key}":`, error.message);
-      return false;
-    }
+    // 2. Huge Data Caches (vendas, ads, estoque) -> Local IndexedDB
+    await set(`vix_${key}`, data);
     return true;
   } catch (err) {
     console.warn(`[Persist] Error saving "${key}":`, err);
@@ -42,31 +32,25 @@ export async function saveToCloud(key: string, data: any): Promise<boolean> {
 
 export async function loadFromCloud<T>(key: string): Promise<T | null> {
   try {
-    // Try Supabase first (cross-browser source of truth)
-    const { data, error } = await (supabase as any)
-      .from('app_data')
-      .select('data_value')
-      .eq('data_key', key)
-      .maybeSingle();
+    // 1. Cross-device Configs -> Supabase
+    if (key === 'sheet_configs') {
+      const { data, error } = await supabase
+        .from('app_data')
+        .select('data_value')
+        .eq('data_key', key)
+        .maybeSingle();
 
-    if (!error && data?.data_value) {
-      // Update localStorage cache (ignore quota errors)
-      try { localStorage.setItem(`vix_${key}`, JSON.stringify(data.data_value)); } catch {}
-      return data.data_value as T;
+      if (!error && data?.data_value) {
+        await set(`vix_${key}`, data.data_value).catch(() => {});
+        return data.data_value as T;
+      }
     }
 
-    if (error) {
-      console.warn(`[Persist] Supabase load failed for "${key}":`, error.message);
-    }
+    // 2. Fallback or Huge Data -> IndexedDB
+    const localData = await get(`vix_${key}`);
+    return (localData as T) || null;
   } catch (err) {
-    console.warn(`[Persist] Error loading "${key}" from cloud:`, err);
+    console.warn(`[Persist] Error loading "${key}":`, err);
+    return null;
   }
-
-  // Fallback to localStorage
-  try {
-    const local = localStorage.getItem(`vix_${key}`);
-    if (local) return JSON.parse(local) as T;
-  } catch {}
-
-  return null;
 }
