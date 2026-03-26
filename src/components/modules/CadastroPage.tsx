@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, FileText, ChevronRight, ChevronLeft, Search, Plus, ExternalLink, ImageIcon, DollarSign, Edit3, Save, Upload, Ruler, Weight, Tag, AlertCircle, AlertTriangle, Filter, Layers, Trash2, PauseCircle, Clock, Megaphone, Star, Eye, Store, Settings2 } from 'lucide-react';
+import { ShopeeCadastroTab } from './ShopeeCadastroTab';
 
 // ━━━ Types ━━━
 interface MLItemSummary {
@@ -341,6 +342,23 @@ export function CadastroPage() {
             </button>
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (selectedPlatform === 'shopee') {
+    return (
+      <div className="animate-in fade-in slide-in-from-right-8 duration-300 pb-12">
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => setSelectedPlatform(null)} className="p-2 -ml-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <span className="bg-[#ee4d2d]/10 text-[#ee4d2d] p-1 rounded-md"><Store className="w-4 h-4"/></span>
+            Shopee — Ficha Técnica
+          </h2>
+        </div>
+        <ShopeeCadastroTab />
       </div>
     );
   }
