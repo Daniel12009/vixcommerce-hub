@@ -491,31 +491,27 @@ Deno.serve(async (req) => {
 
       const account = accounts[0];
 
-      // Auto-fetch required attributes for category and populate family_name
-      if (new_item.category_id) {
+      // Auto-populate family_name (required body-level field for many categories)
+      if (new_item.category_id && !new_item.family_name) {
         try {
-          // Use domain_discovery to find the correct family_name
           const q = encodeURIComponent(new_item.title || '');
           const ddRes = await fetch(`${ML_API}/sites/MLB/domain_discovery/search?q=${q}`);
           if (ddRes.ok) {
             const ddData = await ddRes.json();
             if (ddData?.length > 0) {
               const domain = ddData[0];
-              // If domain has a domain_id, use it for family_name
-              if (domain.domain_id || domain.domain_name) {
-                const existingAttrs = new_item.attributes || [];
-                const hasFamilyName = existingAttrs.some((a: any) => a.id === 'FAMILY_NAME');
-                if (!hasFamilyName) {
-                  new_item.attributes = [
-                    ...existingAttrs,
-                    { id: 'FAMILY_NAME', value_name: domain.domain_name || new_item.title?.split(' ').slice(0, 3).join(' ') || '' },
-                  ];
-                }
+              // family_name is a top-level body property
+              new_item.family_name = domain.domain_name || new_item.title?.split(' ').slice(0, 3).join(' ') || 'Produto';
+              // Also use the detected category if more specific
+              if (domain.category_id && domain.category_id !== new_item.category_id) {
+                console.log(`Category hint: ${domain.category_id} (${domain.category_name}) vs selected: ${new_item.category_id}`);
               }
             }
           }
         } catch (e) {
           console.warn('Could not auto-populate family_name:', e);
+          // Fallback: use product title first 3 words
+          new_item.family_name = new_item.title?.split(' ').slice(0, 3).join(' ') || 'Produto';
         }
       }
 
