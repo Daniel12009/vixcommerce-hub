@@ -490,6 +490,35 @@ Deno.serve(async (req) => {
       if (!accounts?.length) throw new Error('No ML account found');
 
       const account = accounts[0];
+
+      // Auto-fetch required attributes for category and populate family_name
+      if (new_item.category_id) {
+        try {
+          // Use domain_discovery to find the correct family_name
+          const q = encodeURIComponent(new_item.title || '');
+          const ddRes = await fetch(`${ML_API}/sites/MLB/domain_discovery/search?q=${q}`);
+          if (ddRes.ok) {
+            const ddData = await ddRes.json();
+            if (ddData?.length > 0) {
+              const domain = ddData[0];
+              // If domain has a domain_id, use it for family_name
+              if (domain.domain_id || domain.domain_name) {
+                const existingAttrs = new_item.attributes || [];
+                const hasFamilyName = existingAttrs.some((a: any) => a.id === 'FAMILY_NAME');
+                if (!hasFamilyName) {
+                  new_item.attributes = [
+                    ...existingAttrs,
+                    { id: 'FAMILY_NAME', value_name: domain.domain_name || new_item.title?.split(' ').slice(0, 3).join(' ') || '' },
+                  ];
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Could not auto-populate family_name:', e);
+        }
+      }
+
       const result = await mlFetchWrite(account, '/items', 'POST', new_item);
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
