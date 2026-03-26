@@ -116,7 +116,6 @@ export function ConfiguracoesPage() {
       <PageHeader
         title="Configurações"
         subtitle="Planilhas, integrações e gerenciamento de usuários"
-        icon={Settings}
       />
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-6 mt-6">

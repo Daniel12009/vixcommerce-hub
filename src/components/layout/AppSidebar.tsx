@@ -1,4 +1,4 @@
-import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings, RotateCcw, LogOut } from 'lucide-react';
+import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings, RotateCcw, LogOut, MessageCircle, Target } from 'lucide-react';
 import type { ModuleName } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -15,6 +15,8 @@ const modules = [
   { id: 'financeiro' as ModuleName, label: 'Financeiro', icon: DollarSign },
   { id: 'cadastro' as ModuleName, label: 'Ficha Técnica', icon: FileText },
   { id: 'marketing' as ModuleName, label: 'Ads / Marketing', icon: Megaphone },
+  { id: 'atendimento' as ModuleName, label: 'Atendimento', icon: MessageCircle },
+  { id: 'metas' as ModuleName, label: 'Metas', icon: Target },
   { id: 'configuracoes' as ModuleName, label: 'Configurações', icon: Settings },
 ];
 

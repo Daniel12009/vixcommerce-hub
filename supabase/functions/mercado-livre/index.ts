@@ -865,6 +865,72 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ═══ QUESTIONS (Atendimento) ═══
+    if (action === 'get_questions') {
+      const accountsRes = await supabaseFetch('/ml_accounts?ativo=eq.true&select=*');
+      const allAccounts = await accountsRes.json();
+      if (!allAccounts?.length) throw new Error('No active accounts');
+
+      const filterStatus = reqStatus || 'UNANSWERED'; // UNANSWERED, ANSWERED, ALL
+      const limit = reqLimit || 50;
+      const allQuestions: any[] = [];
+
+      for (const account of allAccounts) {
+        try {
+          const token = await refreshToken(account);
+          const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+          
+          let url = `${ML_API}/my/received_questions/search?sort_fields=date_created&sort_types=DESC&limit=${limit}&api_version=4`;
+          if (filterStatus !== 'ALL') url += `&status=${filterStatus}`;
+          
+          const qRes = await fetch(url, { headers });
+          console.log(`[QA] questions for ${account.nickname}: status=${qRes.status}`);
+          if (qRes.ok) {
+            const qData = await qRes.json();
+            const questions = qData.questions || [];
+            
+            // Enrich with item title (batch)
+            const itemIds = [...new Set(questions.map((q: any) => q.item_id).filter(Boolean))];
+            const itemTitles: Record<string, string> = {};
+            const itemThumbs: Record<string, string> = {};
+            for (const iid of itemIds.slice(0, 20)) {
+              try {
+                const iRes = await fetch(`${ML_API}/items/${iid}?attributes=title,thumbnail`, { headers });
+                if (iRes.ok) {
+                  const iData = await iRes.json();
+                  itemTitles[iid as string] = iData.title || '';
+                  itemThumbs[iid as string] = iData.thumbnail || '';
+                }
+              } catch {}
+            }
+            
+            for (const q of questions) {
+              allQuestions.push({
+                id: q.id,
+                item_id: q.item_id,
+                item_title: itemTitles[q.item_id] || '',
+                item_thumbnail: itemThumbs[q.item_id] || '',
+                text: q.text || '',
+                status: q.status,
+                date_created: q.date_created,
+                answer: q.answer ? { text: q.answer.text, date_created: q.answer.date_created } : null,
+                from: { id: q.from?.id, nickname: '' },
+                seller_id: account.seller_id,
+                conta: account.nickname,
+              });
+            }
+          }
+        } catch (e) {
+          console.error(`[QA] error for ${account.nickname}:`, e);
+        }
+      }
+
+      console.log(`[QA] total questions: ${allQuestions.length}`);
+      return new Response(JSON.stringify({ questions: allQuestions }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     console.error('ML API error:', error);

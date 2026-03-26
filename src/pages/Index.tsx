@@ -11,6 +11,8 @@ import { AtualizarDadosPage } from '@/components/modules/AtualizarDadosPage';
 import { DevolucaoPage } from '@/components/modules/DevolucaoPage';
 import { UserManagementPage } from '@/components/auth/UserManagementPage';
 import { ConfiguracoesPage } from '@/components/modules/ConfiguracoesPage';
+import { AtendimentoPage } from '@/components/modules/AtendimentoPage';
+import { MetasPage } from '@/components/modules/MetasPage';
 import { SheetsDataProvider, useSheetsData } from '@/contexts/SheetsDataContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import type { ModuleName } from '@/lib/types';
@@ -55,6 +57,8 @@ function AppContent() {
       case 'cadastro': return <CadastroPage />;
       case 'marketing': return <MarketingPage />;
       case 'configuracoes': return <ConfiguracoesPage />;
+      case 'atendimento': return <AtendimentoPage />;
+      case 'metas': return <MetasPage />;
       case 'usuarios': return <UserManagementPage onBack={() => setActiveModule('configuracoes')} />;
     }
   };
