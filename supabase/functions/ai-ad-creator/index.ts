@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 async function callClaude(systemPrompt: string, userContent: string): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
