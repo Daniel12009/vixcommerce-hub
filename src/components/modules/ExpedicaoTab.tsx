@@ -137,6 +137,17 @@ export function ExpedicaoTab() {
     } catch { return iso; }
   };
 
+  const renderPlatformBadge = (plataforma: string) => {
+    const p = (plataforma || '').toLowerCase();
+    if (p === 'ml') return <span className="px-2 py-1 rounded bg-[#FFE600]/20 text-[#B3A100] dark:text-[#FFE600] font-bold text-[10px] uppercase tracking-wider border border-[#FFE600]/30 flex w-fit items-center gap-1"><Package className="w-3 h-3"/> Mercado Livre</span>;
+    if (p === 'shopee') return <span className="px-2 py-1 rounded bg-[#EE4D2D]/10 text-[#EE4D2D] font-bold text-[10px] uppercase tracking-wider border border-[#EE4D2D]/20 flex w-fit items-center gap-1"><Package className="w-3 h-3"/> Shopee</span>;
+    if (p === 'tiny') return <span className="px-2 py-1 rounded bg-[#0055FF]/10 text-[#0055FF] font-bold text-[10px] uppercase tracking-wider border border-[#0055FF]/20 flex w-fit items-center gap-1"><Layers className="w-3 h-3"/> Tiny Vendas</span>;
+    if (p === 'shein') return <span className="px-2 py-1 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white font-bold text-[10px] uppercase tracking-wider border border-black/20 dark:border-white/20 flex w-fit items-center gap-1">Shein</span>;
+    if (p === 'tiktok') return <span className="px-2 py-1 rounded bg-[#00F2FE]/10 text-[#008C9E] dark:text-[#00F2FE] font-bold text-[10px] uppercase tracking-wider border border-[#00F2FE]/20 flex w-fit items-center gap-1">TikTok</span>;
+    
+    return <span className="px-2 py-1 rounded bg-muted text-muted-foreground font-bold text-[10px] uppercase tracking-wider border border-border flex w-fit items-center gap-1">{p}</span>;
+  };
+
   const ShipmentTable = ({ title, icon: Icon, data, colorClass, emptyMsg }: any) => (
     <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mb-6 animate-fade-in">
       <div className={`px-4 py-3 border-b border-border flex items-center justify-between ${colorClass}`}>
@@ -154,7 +165,8 @@ export function ExpedicaoTab() {
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Data / Hora</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Pedido</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Comprador</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground w-48">Conta</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Origem</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground w-40">Conta</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground w-40">Logística</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground w-32">Valor Total</th>
               </tr>
@@ -171,8 +183,11 @@ export function ExpedicaoTab() {
                     </p>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-muted text-foreground border border-border">
-                      {s.conta.replace('Tiny | ', '')}
+                    {renderPlatformBadge(s.plataforma)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-muted text-foreground border border-border">
+                      {s.conta.replace('Tiny | ', '').replace('Shopee|', '')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground capitalize">
