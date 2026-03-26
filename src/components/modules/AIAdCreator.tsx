@@ -1,0 +1,409 @@
+import { useState } from 'react';
+import { Sparkles, Loader2, CheckCircle, XCircle, AlertTriangle, ChevronRight, Copy, Send, RefreshCw, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
+
+interface AIAdCreatorProps {
+  open: boolean;
+  onClose: () => void;
+  accountId: string;
+  accountName: string;
+  onPublish: (payload: {
+    title: string;
+    price: number;
+    description: string;
+    category_id: string;
+    seller_sku: string;
+  }) => void;
+}
+
+type AgentStep = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+const AGENT_STEPS: AgentStep[] = [
+  { key: 'market_research', label: 'Pesquisa de Mercado', description: 'Analisando concorrentes e tendências...' },
+  { key: 'strategy', label: 'Estratégia', description: 'Definindo posicionamento e preço...' },
+  { key: 'seo', label: 'SEO', description: 'Mapeando palavras-chave...' },
+  { key: 'copy', label: 'Copywriter', description: 'Criando título e descrição...' },
+  { key: 'compliance', label: 'Compliance', description: 'Validando políticas do Mercado Livre...' },
+];
+
+export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }: AIAdCreatorProps) {
+  const { user } = useAuth();
+  const { vendasItems, financeiroItems, adsItems, performanceItems, estoqueItems } = useSheetsData();
+
+  const [sku, setSku] = useState('');
+  const [productName, setProductName] = useState('');
+  const [productDesc, setProductDesc] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [draft, setDraft] = useState<any>(null);
+  const [error, setError] = useState('');
+
+  // Campos editáveis do draft
+  const [editTitle, setEditTitle] = useState('');
+  const [editTitleSeo, setEditTitleSeo] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+
+  if (!open) return null;
+
+  // Busca dados do produto no contexto
+  function getProductContext() {
+    const venda = vendasItems?.find(v => v.sku === sku || v.skuProduto === sku);
+    const financeiro = financeiroItems?.find(f => f.skuPrincipal === sku);
+    const ads = adsItems?.filter(a => a.idAnuncio?.includes(sku) || a.titulo?.toLowerCase().includes(productName.toLowerCase()));
+    const perf = performanceItems?.find(p => p.sku === sku);
+    const estoque = estoqueItems?.find(e => e.skuPrincipal === sku);
+
+    const avgRoas = ads && ads.length > 0 ? (ads.reduce((s, a) => s + (a.roas || 0), 0) / ads.length).toFixed(2) : null;
+
+    return {
+      price_sell: venda?.precoUnitario || financeiro?.receita || null,
+      price_cost: financeiro?.custo || null,
+      margin: financeiro?.margemPercent || null,
+      vmd: estoque?.vmd || null,
+      stock: estoque?.estoqueAtual || null,
+      roas: avgRoas,
+      conversao: perf?.conversao || null,
+    };
+  }
+
+  async function handleGenerate() {
+    if (!productName.trim()) { setError('Informe o nome do produto.'); return; }
+    setError('');
+    setGenerating(true);
+    setDraft(null);
+    setCurrentStep('market_research');
+
+    const ctx = getProductContext();
+
+    // Simula progresso visual dos agentes (a função real faz tudo em sequência internamente)
+    let stepIdx = 0;
+    const stepTimer = setInterval(() => {
+      stepIdx++;
+      if (stepIdx < AGENT_STEPS.length) {
+        setCurrentStep(AGENT_STEPS[stepIdx].key);
+      } else {
+        clearInterval(stepTimer);
+      }
+    }, 3500);
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('ai-ad-creator', {
+        body: {
+          sku: sku || productName.slice(0, 20).toUpperCase().replace(/\s/g, '-'),
+          product_name: productName,
+          product_description: productDesc,
+          price_sell: ctx.price_sell,
+          price_cost: ctx.price_cost,
+          margin: ctx.margin,
+          vmd: ctx.vmd,
+          stock: ctx.stock,
+          roas: ctx.roas,
+          conversao: ctx.conversao,
+          conta: accountName,
+        },
+      });
+
+      clearInterval(stepTimer);
+
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+
+      setDraft(data);
+      setCurrentStep(null);
+
+      // Preenche campos editáveis
+      setEditTitle(data.copy?.title?.value || '');
+      setEditTitleSeo(data.copy?.title_seo?.value || '');
+      setEditDescription(data.copy?.description?.value || '');
+      setEditPrice(String(data.strategy?.price_suggestion || ''));
+      setEditCategoryId(data.compliance?.category_id_hint || '');
+
+      // Log
+      if (user) {
+        await (supabase as any).from('listing_changelog').insert({
+          item_id: `ai-draft-${sku || productName}`,
+          marketplace: 'ml',
+          account_name: accountName,
+          campo: 'ai_draft_criado',
+          valor_anterior: '',
+          valor_novo: data.copy?.title?.value || '',
+          usuario: user.username,
+        }).catch(() => {});
+      }
+    } catch (err: any) {
+      clearInterval(stepTimer);
+      setCurrentStep(null);
+      setError(err.message || 'Erro ao gerar anúncio.');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function handlePublish() {
+    if (!editTitle || !editPrice || !editCategoryId) {
+      setError('Preencha título, preço e categoria antes de publicar.');
+      return;
+    }
+    onPublish({
+      title: editTitleSeo || editTitle,
+      price: Number(editPrice),
+      description: editDescription,
+      category_id: editCategoryId,
+      seller_sku: sku,
+    });
+    onClose();
+  }
+
+  function StatusDot({ status }: { status: string }) {
+    if (status === 'pending') return <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />;
+    if (status === 'generating') return <Loader2 className="w-3 h-3 text-yellow-400 animate-spin" />;
+    if (status === 'done') return <CheckCircle className="w-3 h-3 text-emerald-400" />;
+    return <XCircle className="w-3 h-3 text-red-400" />;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Overlay */}
+      <div className="flex-1 bg-black/50" onClick={onClose} />
+
+      {/* Drawer */}
+      <div className="w-full max-w-2xl h-full bg-background border-l border-border flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-purple-400" />
+            <span className="font-semibold text-foreground">Criar Anúncio com IA</span>
+            <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-muted">Mercado Livre</span>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted transition-colors">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+          {/* FASE 1: Input */}
+          {!draft && !generating && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground">SKU (opcional)</label>
+                <input
+                  value={sku}
+                  onChange={e => setSku(e.target.value.toUpperCase())}
+                  placeholder="VIX-001"
+                  className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none"
+                />
+                {sku && estoqueItems?.find(e => e.skuPrincipal === sku) && (
+                  <p className="mt-1 text-xs text-emerald-400 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Dados encontrados nas planilhas
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground">Nome do Produto *</label>
+                <input
+                  value={productName}
+                  onChange={e => setProductName(e.target.value)}
+                  placeholder="Ex: Mochila Impermeável 30L USB"
+                  className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground">Descrição base (opcional)</label>
+                <textarea
+                  value={productDesc}
+                  onChange={e => setProductDesc(e.target.value)}
+                  rows={3}
+                  placeholder="Características principais, material, uso..."
+                  className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none resize-y"
+                />
+              </div>
+
+              {error && (
+                <p className="text-red-400 text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />{error}
+                </p>
+              )}
+
+              <button
+                onClick={handleGenerate}
+                disabled={generating || !productName.trim()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              >
+                {generating
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Gerando anúncio...</>
+                  : <><Sparkles className="w-4 h-4" /> Gerar Anúncio com IA</>
+                }
+              </button>
+            </div>
+          )}
+
+          {/* FASE 2: Progresso dos agentes */}
+          {generating && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Os agentes estão trabalhando em sequência...</p>
+              {AGENT_STEPS.map((step) => {
+                const stepIndex = AGENT_STEPS.indexOf(step);
+                const currentIndex = AGENT_STEPS.findIndex(s => s.key === currentStep);
+                const isActive = currentStep === step.key;
+                const isDone = currentIndex > stepIndex;
+                return (
+                  <div key={step.key} className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${isActive ? 'border-purple-500/50 bg-purple-500/5' : 'border-border bg-muted/30'}`}>
+                    <StatusDot status={isActive ? 'generating' : isDone ? 'done' : 'pending'} />
+                    <div>
+                      <p className={`text-sm font-medium ${isActive ? 'text-purple-300' : 'text-foreground'}`}>{step.label}</p>
+                      {isActive && <p className="text-xs text-muted-foreground">{step.description}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* FASE 3: Draft gerado */}
+          {draft && !generating && (
+            <div className="space-y-5">
+              {/* Compliance badge */}
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${draft.compliance?.approved ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                {draft.compliance?.approved
+                  ? <><CheckCircle className="w-4 h-4" /> Anúncio aprovado pelo agente de compliance</>
+                  : <><AlertTriangle className="w-4 h-4" /> {draft.compliance?.issues?.join(' • ')}</>
+                }
+              </div>
+
+              {/* Agentes resumo */}
+              <div className="grid grid-cols-5 gap-2">
+                {AGENT_STEPS.map(step => (
+                  <div key={step.key} className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/40 text-center">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-[10px] text-muted-foreground leading-tight">{step.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Título */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground flex justify-between">
+                  Título <span className={editTitle.length > 55 ? 'text-red-400' : 'text-muted-foreground'}>{editTitle.length}/60</span>
+                </label>
+                <input
+                  maxLength={60}
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                />
+                {editTitleSeo && editTitleSeo !== editTitle && (
+                  <div className="text-xs text-muted-foreground flex items-start gap-2">
+                    <span className="text-purple-400 font-medium shrink-0">SEO:</span>
+                    <span className="cursor-pointer hover:text-foreground" onClick={() => setEditTitle(editTitleSeo)}>
+                      {editTitleSeo} <span className="text-purple-400 ml-1">← usar este</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Keywords */}
+              {draft.seo?.primary_keywords?.length > 0 && (
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Keywords Primárias</label>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {draft.seo.primary_keywords.map((kw: string, i: number) => (
+                      <span key={i} className="px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">{kw}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Highlights */}
+              {draft.copy?.highlights?.value?.length > 0 && (
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Destaques do Produto</label>
+                  <ul className="mt-2 space-y-1.5">
+                    {draft.copy.highlights.value.map((h: string, i: number) => (
+                      <li key={i} className="text-sm text-foreground bg-muted/40 px-3 py-1.5 rounded-lg">{h}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Preço */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Preço Sugerido (R$)</label>
+                  <input
+                    type="number" step="0.01"
+                    value={editPrice}
+                    onChange={e => setEditPrice(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">Categoria ML</label>
+                  <input
+                    value={editCategoryId}
+                    onChange={e => setEditCategoryId(e.target.value)}
+                    placeholder={draft.compliance?.category_suggestion || 'MLB12345'}
+                    className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                  />
+                  {draft.compliance?.category_suggestion && (
+                    <p className="text-[10px] text-muted-foreground mt-1">Sugestão: {draft.compliance.category_suggestion}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground flex justify-between">
+                  Descrição <span>{editDescription.length} chars</span>
+                </label>
+                <textarea
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  rows={6}
+                  className="mt-1 w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none resize-y border border-border focus:border-purple-500/50"
+                />
+              </div>
+
+              {/* Posicionamento estratégico */}
+              {draft.strategy?.positioning && (
+                <div className="px-3 py-2.5 rounded-lg bg-purple-500/5 border border-purple-500/20 text-xs text-purple-300">
+                  <span className="font-semibold">Estratégia: </span>{draft.strategy.positioning}
+                </div>
+              )}
+
+              {error && (
+                <p className="text-red-400 text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />{error}
+                </p>
+              )}
+
+              {/* Botões */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setDraft(null); setCurrentStep(null); setError(''); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" /> Gerar novamente
+                </button>
+                <button
+                  onClick={handlePublish}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors"
+                >
+                  <Send className="w-4 h-4" /> Publicar no Mercado Livre
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

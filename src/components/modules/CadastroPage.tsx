@@ -2,8 +2,9 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, FileText, ChevronRight, ChevronLeft, Search, Plus, ExternalLink, ImageIcon, DollarSign, Edit3, Save, Upload, Ruler, Weight, Tag, AlertCircle, AlertTriangle, Filter, Layers, Trash2, PauseCircle, Clock, Megaphone, Star, Eye, Store, Settings2 } from 'lucide-react';
+import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, FileText, ChevronRight, ChevronLeft, Search, Plus, ExternalLink, ImageIcon, DollarSign, Edit3, Save, Upload, Ruler, Weight, Tag, AlertCircle, AlertTriangle, Filter, Layers, Trash2, PauseCircle, Clock, Megaphone, Star, Eye, Store, Settings2, Sparkles } from 'lucide-react';
 import { ShopeeCadastroTab } from './ShopeeCadastroTab';
+import { AIAdCreator } from './AIAdCreator';
 
 // ━━━ Types ━━━
 interface MLItemSummary {
@@ -131,6 +132,7 @@ export function CadastroPage() {
   const [selectedPhoto, setSelectedPhoto] = useState(0);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showAICreator, setShowAICreator] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
   const [newItem, setNewItem] = useState({
@@ -403,6 +405,15 @@ export function CadastroPage() {
         <button onClick={() => loadItems(0)} disabled={listLoading || !selectedAccount} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50">
           {listLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Carregar
         </button>
+        {selectedPlatform === 'ml' && (
+          <button
+            onClick={() => setShowAICreator(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
+          >
+            <Sparkles className="w-4 h-4" />
+            Criar com IA
+          </button>
+        )}
         <button onClick={() => { setShowCreate(!showCreate); setCreateMsg(''); }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
           <Plus className="w-4 h-4" /> Novo
         </button>
@@ -796,6 +807,28 @@ export function CadastroPage() {
           )}
         </div>
       </div>
+
+      <AIAdCreator
+        open={showAICreator}
+        onClose={() => setShowAICreator(false)}
+        accountId={selectedAccount}
+        accountName={accounts.find(a => a.id === selectedAccount)?.nome || ''}
+        onPublish={(payload) => {
+          setNewItem({
+            title: payload.title,
+            price: String(payload.price),
+            quantity: '1',
+            condition: 'new',
+            listing_type: 'gold_special',
+            category_id: payload.category_id,
+            description: payload.description,
+            picture_urls: '',
+            seller_sku: payload.seller_sku,
+          });
+          setShowAICreator(false);
+          setShowCreate(true);
+        }}
+      />
     </div>
   );
 }
