@@ -95,7 +95,7 @@ async function listFolders(token: string, parentId: string): Promise<{ id: strin
   return data.files || [];
 }
 
-async function listImages(token: string, folderId: string): Promise<string[]> {
+async function listImages(token: string, folderId: string, sku: string): Promise<string[]> {
   const q = encodeURIComponent(`'${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/webp') and trashed=false`);
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=10`,
@@ -104,22 +104,43 @@ async function listImages(token: string, folderId: string): Promise<string[]> {
   const data = await res.json();
   const files = data.files || [];
 
-  // Download each image and return as base64 data URI (avoids CORS)
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+  const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const BUCKET = 'listing-photos';
+
   const results: string[] = [];
   for (const f of files.slice(0, 10)) {
     try {
+      // Download from Drive
       const imgRes = await fetch(
         `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!imgRes.ok) continue;
       const buf = await imgRes.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      const b64 = btoa(binary);
-      const mime = f.mimeType || 'image/jpeg';
-      results.push(`data:${mime};base64,${b64}`);
+
+      // Determine extension
+      const ext = f.mimeType === 'image/png' ? 'png' : f.mimeType === 'image/webp' ? 'webp' : 'jpg';
+      const path = `drive/${sku.toUpperCase()}/${f.id}.${ext}`;
+
+      // Upload to Supabase Storage
+      const uploadRes = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+            'Content-Type': f.mimeType || 'image/jpeg',
+            'x-upsert': 'true',
+          },
+          body: buf,
+        }
+      );
+
+      if (uploadRes.ok) {
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+        results.push(publicUrl);
+      }
     } catch { /* skip */ }
   }
   return results;
@@ -157,7 +178,7 @@ Deno.serve(async (req) => {
 
     if (scored.length > 0) {
       const best = scored[0];
-      const urls = await listImages(token, best.id);
+      const urls = await listImages(token, best.id, sku);
       result.photos = { found: true, urls, folder_name: best.name, total: urls.length };
     } else {
       result.photos = { found: false, urls: [], folder_name: null, message: `Pasta não encontrada para SKU "${sku}"` };
