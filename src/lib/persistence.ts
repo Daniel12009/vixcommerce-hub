@@ -24,8 +24,13 @@ export async function saveToCloud(key: string, data: any): Promise<boolean> {
     await set(`vix_${key}`, data);
     
     // 3. Fire-and-forget sync to Supabase in the background
-    // This maintains cross-device cache without blocking the UI or throwing hard errors
-    // if the payload is too large or causes a Gateway Timeout.
+    // Skip if payload is too large (>500KB) to avoid Supabase Gateway Timeouts
+    const str = JSON.stringify(data);
+    if (str.length > 500000) {
+      console.log(`[Persist] Skipping cloud sync for "${key}" — too large (${(str.length / 1024).toFixed(0)}KB)`);
+      return true;
+    }
+
     queueMicrotask(() => {
       supabase.from('app_data')
         .upsert({ data_key: key, data_value: data }, { onConflict: 'data_key' })
