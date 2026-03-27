@@ -312,13 +312,15 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
 
       // ALWAYS add attributes — family_name and BRAND are required for all physical ML categories
       itemPayload.attributes = [
-        { id: 'family_name', value_name: attrValues['family_name']?.trim() || (editTitle || '').split(' ').slice(0, 3).join(' ') },
+        { id: 'family_name', value_name: attrValues['family_name']?.trim() || (editTitleSeo || editTitle || '').split(' ').slice(0, 3).join(' ') },
         { id: 'BRAND', value_name: attrValues['BRAND']?.trim() || 'Sem marca' },
         // Other attributes filled by user
-        ...Object.entries(attrValues)
+        ...Object.entries(attrValues || {})
           .filter(([id, val]) => id !== 'BRAND' && id !== 'family_name' && val?.trim())
-          .map(([id, value]) => ({ id, value_name: value.trim() })),
+          .map(([id, value]) => ({ id, value_name: String(value).trim() })),
       ];
+      console.log('[PUBLISH] attributes:', JSON.stringify(itemPayload.attributes));
+      console.log('[PUBLISH] full payload keys:', Object.keys(itemPayload));
 
       const { data: result, error: fnError } = await supabase.functions.invoke('mercado-livre', {
         body: { action: 'create_item', new_item: itemPayload, account_id: accountId },
