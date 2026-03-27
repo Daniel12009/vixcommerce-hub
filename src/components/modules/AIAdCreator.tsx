@@ -310,20 +310,15 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
         };
       }
 
-      // Category attributes (required fields like family_name, BRAND, etc.)
-      const attrs: any[] = [];
-      Object.entries(attrValues).forEach(([id, value]) => {
-        if (value?.trim()) attrs.push({ id, value_name: value.trim() });
-      });
-      // family_name is required in all physical product categories
-      if (!attrValues['family_name']) {
-        attrs.push({ id: 'family_name', value_name: editTitle.split(' ').slice(0, 3).join(' ') });
-      }
-      // BRAND — fallback to 'Sem marca' if not filled
-      if (!attrValues['BRAND']) {
-        attrs.push({ id: 'BRAND', value_name: 'Sem marca' });
-      }
-      if (attrs.length > 0) itemPayload.attributes = attrs;
+      // ALWAYS add attributes — family_name and BRAND are required for all physical ML categories
+      itemPayload.attributes = [
+        { id: 'family_name', value_name: attrValues['family_name']?.trim() || (editTitle || '').split(' ').slice(0, 3).join(' ') },
+        { id: 'BRAND', value_name: attrValues['BRAND']?.trim() || 'Sem marca' },
+        // Other attributes filled by user
+        ...Object.entries(attrValues)
+          .filter(([id, val]) => id !== 'BRAND' && id !== 'family_name' && val?.trim())
+          .map(([id, value]) => ({ id, value_name: value.trim() })),
+      ];
 
       const { data: result, error: fnError } = await supabase.functions.invoke('mercado-livre', {
         body: { action: 'create_item', new_item: itemPayload, account_id: accountId },
