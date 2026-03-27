@@ -16,13 +16,13 @@ interface KpiCardProps {
 export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra, subtitle, valueColor }: KpiCardProps) {
   return (
     <div
-      className="bg-card border border-border rounded-xl p-5 vix-card-hover animate-fade-in"
+      className="bg-card border border-border rounded-xl p-3 md:p-5 vix-card-hover animate-fade-in overflow-hidden"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start justify-between">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">{title}</p>
-          <p className={`text-2xl font-bold mt-2 animate-count-up ${valueColor || 'text-foreground'}`}>{value}</p>
+          <p className={`text-lg md:text-2xl font-bold mt-1 md:mt-2 animate-count-up truncate ${valueColor || 'text-foreground'}`}>{value}</p>
           {subtitle && (
             <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
           )}
@@ -34,7 +34,7 @@ export function KpiCard({ title, value, change, icon: Icon, delay = 0, extra, su
           )}
           {extra && <div className="mt-1">{extra}</div>}
         </div>
-        <div className="p-2.5 rounded-lg bg-primary/10">
+        <div className="p-2 md:p-2.5 rounded-lg bg-primary/10 flex-shrink-0">
           <Icon className="w-5 h-5 text-primary" />
         </div>
       </div>
