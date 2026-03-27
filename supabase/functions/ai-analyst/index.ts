@@ -30,9 +30,11 @@ async function callClaude(system: string, user: string): Promise<string> {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  // Aceitar tanto anon key quanto user JWT — não bloquear
+  // O Supabase injeta a anon key automaticamente nas chamadas do frontend
+
   try {
     const { mode, question, context_data } = await req.json();
-    // context_data = { vendas, ads, estoque, financeiro, performance } — dados das planilhas resumidos
 
     const SYSTEM = `Você é um analista especialista em e-commerce brasileiro, com foco em Mercado Livre, Shopee e Amazon.
 Você tem acesso aos dados reais do negócio do usuário (vendas, estoque, ADS, financeiro, performance de anúncios).
@@ -50,38 +52,18 @@ Formate a resposta em markdown simples — use **negrito** para destacar o que �
 ## ✅ Top 3 Ações para Hoje
 
 Dados:
-${JSON.stringify(context_data, null, 2)}`;
+${JSON.stringify(context_data, null, 2).slice(0, 6000)}`;
 
     } else if (mode === 'ads') {
-      prompt = `Analise as campanhas de ADS abaixo e responda: ${question}
-
-Dados de ADS:
-${JSON.stringify(context_data?.ads || [], null, 2)}`;
-
+      prompt = `Analise as campanhas de ADS abaixo e responda: ${question}\n\nDados:\n${JSON.stringify(context_data?.ads || [], null, 2).slice(0, 5000)}`;
     } else if (mode === 'estoque') {
-      prompt = `Analise o estoque abaixo e responda: ${question}
-
-Dados de Estoque:
-${JSON.stringify(context_data?.estoque || [], null, 2)}`;
-
+      prompt = `Analise o estoque abaixo e responda: ${question}\n\nDados:\n${JSON.stringify(context_data?.estoque || [], null, 2).slice(0, 5000)}`;
     } else if (mode === 'performance') {
-      prompt = `Analise a performance dos anúncios abaixo e responda: ${question}
-
-Dados de Performance:
-${JSON.stringify(context_data?.performance || [], null, 2)}`;
-
+      prompt = `Analise a performance dos anúncios abaixo e responda: ${question}\n\nDados:\n${JSON.stringify(context_data?.performance || [], null, 2).slice(0, 5000)}`;
     } else if (mode === 'financeiro') {
-      prompt = `Analise os dados financeiros abaixo e responda: ${question}
-
-Dados Financeiros:
-${JSON.stringify(context_data?.financeiro || [], null, 2)}`;
-
+      prompt = `Analise os dados financeiros abaixo e responda: ${question}\n\nDados:\n${JSON.stringify(context_data?.financeiro || [], null, 2).slice(0, 5000)}`;
     } else {
-      // Modo livre — usa todos os dados
-      prompt = `Pergunta do usuário: ${question}
-
-Dados disponíveis:
-${JSON.stringify(context_data, null, 2)}`;
+      prompt = `Pergunta: ${question}\n\nDados:\n${JSON.stringify(context_data, null, 2).slice(0, 5000)}`;
     }
 
     const answer = await callClaude(SYSTEM, prompt);
@@ -92,6 +74,7 @@ ${JSON.stringify(context_data, null, 2)}`;
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('ai-analyst error:', message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

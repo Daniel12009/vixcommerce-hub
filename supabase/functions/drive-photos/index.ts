@@ -96,7 +96,9 @@ async function listFolders(token: string, parentId: string): Promise<{ id: strin
 }
 
 async function listImages(token: string, folderId: string, sku: string): Promise<string[]> {
-  const q = encodeURIComponent(`'${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/webp') and trashed=false`);
+  const q = encodeURIComponent(
+    `'${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/webp') and trashed=false`
+  );
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=10`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -109,23 +111,36 @@ async function listImages(token: string, folderId: string, sku: string): Promise
   const BUCKET = 'listing-photos';
 
   const results: string[] = [];
+
   for (const f of files.slice(0, 10)) {
     try {
+      const ext = f.mimeType === 'image/png' ? 'png' : f.mimeType === 'image/webp' ? 'webp' : 'jpg';
+      const filePath = `drive/${sku.toUpperCase()}/${f.id}.${ext}`;
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${filePath}`;
+
+      // Check if already uploaded to Supabase Storage
+      const checkRes = await fetch(publicUrl, { method: 'HEAD' });
+      if (checkRes.ok) {
+        console.log(`Already in storage: ${publicUrl}`);
+        results.push(publicUrl);
+        continue;
+      }
+
       // Download from Drive
       const imgRes = await fetch(
         `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (!imgRes.ok) { console.log(`Drive download failed for ${f.id}: ${imgRes.status}`); continue; }
+      if (!imgRes.ok) {
+        console.log(`Drive download failed for ${f.id}: ${imgRes.status}`);
+        continue;
+      }
+
       const buf = await imgRes.arrayBuffer();
       const bytes = new Uint8Array(buf);
       console.log(`Downloaded ${f.name}: ${bytes.length} bytes`);
 
-      // Determine extension
-      const ext = f.mimeType === 'image/png' ? 'png' : f.mimeType === 'image/webp' ? 'webp' : 'jpg';
-      const filePath = `drive/${sku.toUpperCase()}/${f.id}.${ext}`;
-
-      // Upload to Supabase Storage (upsert)
+      // Upload to Supabase Storage
       const uploadRes = await fetch(
         `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${filePath}`,
         {
@@ -140,20 +155,18 @@ async function listImages(token: string, folderId: string, sku: string): Promise
       );
 
       if (uploadRes.ok) {
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${filePath}`;
-        console.log(`Uploaded: ${publicUrl}`);
+        console.log(`Uploaded to storage: ${publicUrl}`);
         results.push(publicUrl);
       } else {
         const errText = await uploadRes.text();
         console.error(`Storage upload failed for ${f.name}: ${uploadRes.status} ${errText}`);
-        // Fallback to base64 data URI
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-        const b64 = btoa(binary);
-        const mime = f.mimeType || 'image/jpeg';
-        results.push(`data:${mime};base64,${b64}`);
+        // Fallback: use Drive public export URL instead of base64
+        results.push(`https://drive.google.com/uc?export=view&id=${f.id}`);
       }
-    } catch (err) { console.error(`Image processing error:`, err); }
+    } catch (err) {
+      console.error(`Image processing error for ${f.id}:`, err);
+      results.push(`https://drive.google.com/uc?export=view&id=${f.id}`);
+    }
   }
   return results;
 }
