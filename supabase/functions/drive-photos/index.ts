@@ -110,15 +110,20 @@ async function listImages(token: string, folderId: string, sku: string): Promise
   const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const BUCKET = 'listing-photos';
 
+  // Use Supabase JS client for storage uploads — fixes Invalid Compact JWS error
+  const { createClient } = await import('jsr:@supabase/supabase-js@2');
+  const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
   const results: string[] = [];
 
   for (const f of files.slice(0, 10)) {
     try {
       const ext = f.mimeType === 'image/png' ? 'png' : f.mimeType === 'image/webp' ? 'webp' : 'jpg';
       const filePath = `drive/${sku.toUpperCase()}/${f.id}.${ext}`;
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${filePath}`;
 
-      // Check if already uploaded to Supabase Storage
+      // Check if already uploaded
+      const { data: urlData } = supabaseClient.storage.from(BUCKET).getPublicUrl(filePath);
+      const publicUrl = urlData.publicUrl;
       const checkRes = await fetch(publicUrl, { method: 'HEAD' });
       if (checkRes.ok) {
         console.log(`Already in storage: ${publicUrl}`);
@@ -140,49 +145,24 @@ async function listImages(token: string, folderId: string, sku: string): Promise
       const bytes = new Uint8Array(buf);
       console.log(`Downloaded ${f.name}: ${bytes.length} bytes`);
 
-      // Upload to Supabase Storage
-      const uploadRes = await fetch(
-        `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${filePath}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-            'Content-Type': f.mimeType || 'image/jpeg',
-            'x-upsert': 'true',
-          },
-          body: bytes,
-        }
-      );
+      // Upload via Supabase JS client (handles auth correctly)
+      const { data: uploadData, error: uploadError } = await supabaseClient
+        .storage
+        .from(BUCKET)
+        .upload(filePath, bytes, {
+          contentType: f.mimeType || 'image/jpeg',
+          upsert: true,
+        });
 
-      if (uploadRes.ok) {
-        console.log(`Uploaded to storage: ${publicUrl}`);
+      if (!uploadError) {
+        console.log(`Uploaded: ${publicUrl}`);
         results.push(publicUrl);
       } else {
-        // Tentar upsert (arquivo pode já existir)
-        const upsertRes = await fetch(
-          `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${filePath}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-              'Content-Type': f.mimeType || 'image/jpeg',
-              'x-upsert': 'true',
-            },
-            body: bytes,
-          }
-        );
-        if (upsertRes.ok) {
-          console.log(`Upserted to storage: ${publicUrl}`);
-          results.push(publicUrl);
-        } else {
-          const errText = await upsertRes.text();
-          console.error(`Upload+upsert failed for ${f.name}: ${errText}`);
-          // Skip this photo — don't add broken URLs
-        }
+        console.error(`Upload failed for ${f.name}:`, uploadError.message);
+        // Skip — don't add broken URLs
       }
     } catch (err) {
       console.error(`Image processing error for ${f.id}:`, err);
-      // Skip — don't add fallback URLs that won't render
     }
   }
   return results;
