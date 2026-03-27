@@ -16,7 +16,7 @@ import {
   saveSheetConfigsToCloud, loadSheetConfigsFromCloud,
   extractSpreadsheetId, parseSheetRowsWithFixos,
 } from '@/lib/sheets-store';
-import { saveToCloud, loadFromCloud } from '@/lib/persistence';
+import { saveToCloud, loadFromCloud, syncVendasIncremental } from '@/lib/persistence';
 
 const moduloLabels: Record<ModuloDestino, string> = {
   estoque: 'Estoque',
@@ -223,7 +223,7 @@ export function PlanilhasConfigSection() {
       else if (config.moduloDestino === 'estoque-full') { sheetsData.setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
       else if (config.moduloDestino === 'estoque-tiny') { sheetsData.setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
       else if (config.moduloDestino === 'financeiro') { sheetsData.setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
-      else if (config.moduloDestino === 'vendas') { sheetsData.setVendasFromSheet(parsed); saveToCloud('vendas_data', parsed); }
+      else if (config.moduloDestino === 'vendas') { sheetsData.setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
       else if (config.moduloDestino === 'performance') {
         sheetsData.setPerformanceFromSheet(parsed, config.abaNome);
         const existing = await loadFromCloud<any[]>('performance_data') || [];

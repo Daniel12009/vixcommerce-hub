@@ -70,3 +70,86 @@ export async function loadFromCloud<T>(key: string): Promise<T | null> {
     return null;
   }
 }
+
+// ━━━ Incremental Sync ━━━
+
+export async function getCheckpoint(key: string): Promise<string | null> {
+  try {
+    const { data } = await (supabase as any)
+      .from('sync_checkpoints')
+      .select('last_sync_date')
+      .eq('key', key)
+      .single();
+    return data?.last_sync_date || null;
+  } catch { return null; }
+}
+
+export async function saveCheckpoint(key: string, lastDate: string, totalRecords: number) {
+  try {
+    await (supabase as any)
+      .from('sync_checkpoints')
+      .upsert({ key, last_sync_date: lastDate, last_sync_at: new Date().toISOString(), total_records: totalRecords },
+        { onConflict: 'key' });
+  } catch { /* ignore */ }
+}
+
+function parseDate(d: string): string {
+  if (!d) return '';
+  if (d.includes('/')) {
+    const [day, mon, yr] = d.split('/');
+    return `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  return d;
+}
+
+export async function syncVendasIncremental(allVendas: any[]): Promise<{ inserted: number; skipped: number }> {
+  try {
+    const checkpoint = await getCheckpoint('vendas');
+
+    const newRecords = checkpoint
+      ? allVendas.filter(v => {
+          if (!v.data) return false;
+          return parseDate(v.data) > checkpoint;
+        })
+      : allVendas;
+
+    if (newRecords.length === 0) {
+      console.log('[Sync] Vendas: nada novo desde', checkpoint);
+      return { inserted: 0, skipped: allVendas.length };
+    }
+
+    // Insert in batches of 100
+    const BATCH = 100;
+    let inserted = 0;
+    for (let i = 0; i < newRecords.length; i += BATCH) {
+      const batch = newRecords.slice(i, i + BATCH).map(v => ({
+        id: v.numeroPedido || `${v.data}-${v.sku}-${Math.random()}`,
+        data: v.data,
+        conta: v.conta,
+        sku: v.sku || v.skuProduto,
+        valor_total: v.valorTotal || 0,
+        payload: v,
+      }));
+      const { error } = await (supabase as any)
+        .from('vendas_cache')
+        .upsert(batch, { onConflict: 'id', ignoreDuplicates: true });
+      if (!error) inserted += batch.length;
+    }
+
+    // Update checkpoint with latest date
+    const latestDate = newRecords
+      .map(v => parseDate(v.data))
+      .filter(Boolean)
+      .sort()
+      .pop() || '';
+
+    if (latestDate) await saveCheckpoint('vendas', latestDate, allVendas.length);
+
+    console.log(`[Sync] Vendas: ${inserted} inseridos, ${allVendas.length - newRecords.length} ignorados (já existiam)`);
+    return { inserted, skipped: allVendas.length - newRecords.length };
+  } catch (err) {
+    console.warn('[Sync] Erro no sync incremental:', err);
+    return { inserted: 0, skipped: 0 };
+  }
+}
+

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem, DevolucaoItem } from '@/lib/types';
-import { loadFromCloud, saveToCloud } from '@/lib/persistence';
+import { loadFromCloud, saveToCloud, syncVendasIncremental } from '@/lib/persistence';
 import type { ModuloDestino } from '@/lib/sheets-store';
 
 interface SheetsData {
@@ -335,7 +335,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         for (const { parsed, config } of results) {
           if (!parsed || parsed.length === 0) continue;
           const mod = config.moduloDestino;
-          if (mod === 'vendas') { setVendasFromSheet(parsed); saveToCloud('vendas_data', parsed); }
+          if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
           else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
           else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
           else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
@@ -394,7 +394,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
             else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
             else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
-            else if (mod === 'vendas') { setVendasFromSheet(parsed); saveToCloud('vendas_data', parsed); }
+            else if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
             else if (mod === 'performance') {
               setPerformanceFromSheet(parsed, config.abaNome);
               const existing = await loadFromCloud<any[]>('performance_data') || [];
