@@ -492,7 +492,7 @@ Deno.serve(async (req) => {
       const account = accounts[0];
       console.log('[CREATE] payload:', JSON.stringify(new_item).slice(0, 500));
       const result = await mlFetchWrite(account, '/items', 'POST', new_item);
-      console.log('[CREATE] result:', JSON.stringify(result).slice(0, 500));
+      console.log('[CREATE_ITEM] ML response:', JSON.stringify(result).slice(0, 1000));
       // Return full result including ML error details
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }

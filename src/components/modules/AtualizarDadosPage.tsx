@@ -356,8 +356,10 @@ export function AtualizarDadosPage() {
     async function callAnalyst(mode: string, question: string) {
       setAiLoading(true);
       try {
+        const { data: { session } } = await supabase.auth.getSession();
         const { data, error } = await supabase.functions.invoke('ai-analyst', {
           body: { mode, question, context_data: buildContextData(mode) },
+          headers: { Authorization: `Bearer ${session?.access_token}` },
         });
         if (error) throw new Error(error.message);
         return data?.answer || 'Sem resposta.';
@@ -372,8 +374,10 @@ export function AtualizarDadosPage() {
       if (briefingDone) return;
       setBriefingLoading(true);
       try {
+        const { data: { session } } = await supabase.auth.getSession();
         const { data, error } = await supabase.functions.invoke('ai-analyst', {
           body: { mode: 'briefing', context_data: buildContextData('briefing') },
+          headers: { Authorization: `Bearer ${session?.access_token}` },
         });
         if (error) throw new Error(error.message);
         setBriefing(data?.answer || '');
