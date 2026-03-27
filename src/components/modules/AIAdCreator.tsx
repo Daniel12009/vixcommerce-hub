@@ -235,41 +235,79 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
     setPublishing(true);
     setPublishMsg('');
     setError('');
+
     try {
-      // Step 1: Create item
       setPublishMsg('Publicando anúncio...');
+
       const pictures = selectedPhotos.map(u => ({ source: u }));
+
+      // Build base payload — minimal and safe for all categories
       const itemPayload: any = {
-        title: editTitleSeo || editTitle,
+        title: (editTitleSeo || editTitle).slice(0, 60),
         price: Number(editPrice),
         available_quantity: Number(editQuantity) || 1,
         condition: 'new',
-        listing_type_id: editListingType,
+        listing_type_id: editListingType || 'gold_special',
         category_id: editCategoryId,
         currency_id: 'BRL',
         buying_mode: 'buy_it_now',
-        channels: ['marketplace'],
-        sale_terms: [
+      };
+
+      // SKU
+      if (sku) itemPayload.seller_custom_field = sku;
+
+      // Pictures
+      if (pictures.length > 0) itemPayload.pictures = pictures;
+
+      // Warranty — only add if both fields are filled
+      if (editWarrantyType && editWarrantyTime) {
+        itemPayload.sale_terms = [
           { id: 'WARRANTY_TYPE', value_name: editWarrantyType },
           { id: 'WARRANTY_TIME', value_name: editWarrantyTime },
-        ],
-      };
-      if (pictures.length > 0) itemPayload.pictures = pictures;
-      if (sku) itemPayload.seller_custom_field = sku;
+        ];
+      }
+
+      // Shipping dimensions from planilha — only add if we have all values
+      const dim = driveDimensions;
+      if (
+        dim?.largura_embalagem && dim?.altura_embalagem &&
+        dim?.profundidade_embalagem && dim?.peso_embalagem
+      ) {
+        itemPayload.shipping = {
+          dimensions: {
+            width: Math.round(dim.largura_embalagem * 10),   // ML usa mm
+            height: Math.round(dim.altura_embalagem * 10),
+            length: Math.round(dim.profundidade_embalagem * 10),
+            weight: Math.round(dim.peso_embalagem * 1000),   // ML usa gramas
+          },
+        };
+      }
 
       const { data: result, error: fnError } = await supabase.functions.invoke('mercado-livre', {
         body: { action: 'create_item', new_item: itemPayload, account_id: accountId },
       });
-      if (fnError) throw new Error(fnError.message);
-      if (result?.error) throw new Error(result.error);
-      if (!result?.id) throw new Error('Resposta inesperada da API — sem ID do item.');
 
-      // Step 2: Create description
+      if (fnError) throw new Error(fnError.message);
+
+      // ML returns error details in result.error or result.message
+      if (result?.error) {
+        const detail = result.cause ? ` (${JSON.stringify(result.cause)})` : '';
+        throw new Error(`ML: ${result.message || result.error}${detail}`);
+      }
+
+      if (!result?.id) throw new Error('ML não retornou ID — verifique os atributos obrigatórios da categoria.');
+
+      // Step 2: Description
       if (editDescription.trim()) {
         setPublishMsg('Criando descrição...');
         await supabase.functions.invoke('mercado-livre', {
-          body: { action: 'update_description', item_id: result.id, description_text: editDescription, account_id: accountId },
-        });
+          body: {
+            action: 'update_description',
+            item_id: result.id,
+            description_text: editDescription,
+            account_id: accountId,
+          },
+        }).catch(() => {});
       }
 
       // Step 3: Log
@@ -280,19 +318,17 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           account_name: accountName,
           campo: 'criação_ia',
           valor_anterior: '',
-          valor_novo: editTitleSeo || editTitle,
+          valor_novo: itemPayload.title,
           usuario: user?.username || 'system',
         });
       } catch { /* optional */ }
 
       setPublishMsg(`✅ Publicado! ID: ${result.id}`);
+
     } catch (err: any) {
       const msg = err.message || 'Erro ao publicar.';
-      if (msg.includes('non-2xx') || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
-        setError('⏱️ Timeout/erro de rede — o Supabase pode estar sobrecarregado. Aguarde 30s e tente novamente, ou use o formulário manual.');
-      } else {
-        setError(msg);
-      }
+      // Show the real ML error — not just a generic timeout message
+      setError(`❌ ${msg}`);
       setPublishMsg('');
     } finally {
       setPublishing(false);

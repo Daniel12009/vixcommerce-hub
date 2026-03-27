@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, CalendarDays, Bot, Zap, PackageX, BarChart2, Settings2, Check } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, CalendarDays, Bot, Zap, PackageX, BarChart2, Settings2, Check, Sparkles, Send, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { mockMarketplaceAccounts, mockOrders, mockAdsCampaigns, mockSalesByDay, mockRevenueByMarketplace } from '@/lib/mock-marketplace';
@@ -307,6 +308,247 @@ export function AtualizarDadosPage() {
     accounts.filter(a => a.status === 'connected').forEach(a => handleSync(a.id));
   };
 
+  // ──── AlertasIA sub-component ────
+  function AlertasIA() {
+    const { vendasItems, adsItems, estoqueItems, financeiroItems, performanceItems } = useSheetsData();
+    const [activeCard, setActiveCard] = useState<string | null>(null);
+    const [chatInput, setChatInput] = useState('');
+    const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [briefing, setBriefing] = useState('');
+    const [briefingLoading, setBriefingLoading] = useState(false);
+    const [briefingDone, setBriefingDone] = useState(false);
+
+    function buildContextData(mode: string) {
+      const resumeArray = (arr: any[] | null, fields: string[], limit = 30) =>
+        (arr || []).slice(0, limit).map((item: any) =>
+          Object.fromEntries(fields.map(f => [f, item[f]]))
+        );
+
+      if (mode === 'ads') return {
+        ads: resumeArray(adsItems, ['campanha', 'conta', 'investimento', 'receita', 'roas', 'acos', 'cliques', 'impressoes'], 40),
+      };
+      if (mode === 'estoque') return {
+        estoque: resumeArray(estoqueItems, ['skuPrincipal', 'nome', 'estoqueAtual', 'vmd', 'diasCobertura', 'necessidadeReposicao', 'conta'], 40),
+      };
+      if (mode === 'performance') return {
+        performance: resumeArray(performanceItems, ['sku', 'titulo', 'visitas', 'vendas', 'conversao', 'preco', 'conta'], 40),
+      };
+      if (mode === 'financeiro') return {
+        financeiro: resumeArray(financeiroItems, ['skuPrincipal', 'nome', 'receita', 'margemReal', 'margemPercent', 'custo', 'taxas'], 40),
+      };
+      return {
+        vendas_resumo: {
+          total_pedidos: vendasItems?.length || 0,
+          faturamento_total: vendasItems?.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0).toFixed(2),
+          top_skus: resumeArray(vendasItems, ['sku', 'produto', 'quantidade', 'valorTotal', 'margem'], 10),
+        },
+        ads_criticos: (adsItems || []).filter((a: any) => a.roas < 2).slice(0, 10).map((a: any) => ({
+          campanha: a.campanha, roas: a.roas, investimento: a.investimento, conta: a.conta,
+        })),
+        estoque_critico: (estoqueItems || []).filter((e: any) => e.diasCobertura < 15).slice(0, 10).map((e: any) => ({
+          sku: e.skuPrincipal, nome: e.nome, diasCobertura: e.diasCobertura, vmd: e.vmd,
+        })),
+        financeiro_resumo: resumeArray(financeiroItems, ['skuPrincipal', 'receita', 'margemPercent'], 10),
+      };
+    }
+
+    async function callAnalyst(mode: string, question: string) {
+      setAiLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-analyst', {
+          body: { mode, question, context_data: buildContextData(mode) },
+        });
+        if (error) throw new Error(error.message);
+        return data?.answer || 'Sem resposta.';
+      } catch (err: any) {
+        return `Erro: ${err.message}`;
+      } finally {
+        setAiLoading(false);
+      }
+    }
+
+    async function loadBriefing() {
+      if (briefingDone) return;
+      setBriefingLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-analyst', {
+          body: { mode: 'briefing', context_data: buildContextData('briefing') },
+        });
+        if (error) throw new Error(error.message);
+        setBriefing(data?.answer || '');
+        setBriefingDone(true);
+      } catch (err: any) {
+        setBriefing(`Erro ao gerar briefing: ${err.message}`);
+      } finally {
+        setBriefingLoading(false);
+      }
+    }
+
+    async function sendMessage() {
+      if (!chatInput.trim() || !activeCard) return;
+      const userMsg = chatInput.trim();
+      setChatInput('');
+      setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+      const answer = await callAnalyst(activeCard, userMsg);
+      setMessages(prev => [...prev, { role: 'ai', text: answer }]);
+    }
+
+    const CARDS = [
+      { id: 'performance', icon: <BarChart2 className="w-5 h-5 text-yellow-500" />, bg: 'bg-yellow-500/10', title: 'Anúncios com Baixa Performance', desc: 'Visitas, conversão e vendas por anúncio', prompts: ['Quais anúncios pioraram esta semana?', 'Por que meus anúncios têm baixa conversão?', 'Quais são meus 10 melhores anúncios?'] },
+      { id: 'ads', icon: <Zap className="w-5 h-5 text-red-500" />, bg: 'bg-red-500/10', title: 'ADS em Estado Crítico', desc: 'Campanhas com ROAS baixo queimando budget', prompts: ['Quais campanhas devo pausar agora?', 'Onde devo aumentar investimento?', 'Quanto perdi em campanhas ruins este mês?'] },
+      { id: 'estoque', icon: <PackageX className="w-5 h-5 text-blue-500" />, bg: 'bg-blue-500/10', title: 'Risco de Ruptura de Estoque', desc: 'Produtos com cobertura crítica vs VMD', prompts: ['Quais produtos vão rupturar esta semana?', 'Monte minha lista de compras do mês', 'O que devo enviar para o Full agora?'] },
+      { id: 'financeiro', icon: <TrendingUp className="w-5 h-5 text-emerald-500" />, bg: 'bg-emerald-500/10', title: 'Insights & Oportunidades', desc: 'Margem, lucratividade e oportunidades', prompts: ['Quais produtos estou vendendo no prejuízo?', 'Onde o ADS corrói minha margem?', 'Qual meu produto mais lucrativo do mês?'] },
+    ];
+
+    const activeCardData = CARDS.find(c => c.id === activeCard);
+
+    return (
+      <div className="space-y-5">
+        {/* Header + Briefing */}
+        <div className="bg-gradient-to-br from-primary/10 via-card to-accent/10 border border-border rounded-2xl p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/20">
+                <Bot className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Análise Inteligente</h2>
+                <p className="text-xs text-muted-foreground">Agente IA com seus dados reais</p>
+              </div>
+            </div>
+            <button
+              onClick={loadBriefing}
+              disabled={briefingLoading || briefingDone}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {briefingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {briefingLoading ? 'Analisando...' : briefingDone ? '✓ Briefing gerado' : 'Gerar briefing do dia'}
+            </button>
+          </div>
+
+          {briefingLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Analisando seus dados...
+            </div>
+          )}
+
+          {briefing && (
+            <div className="prose prose-sm max-w-none text-foreground [&_strong]:text-foreground [&_h2]:text-foreground [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_ul]:mt-1 [&_li]:text-sm [&_li]:text-muted-foreground">
+              <ReactMarkdown>{briefing}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+
+        {/* 4 Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {CARDS.map(card => (
+            <div
+              key={card.id}
+              onClick={() => { setActiveCard(card.id); setMessages([]); setChatInput(''); }}
+              className={`bg-card border rounded-xl p-4 md:p-5 cursor-pointer transition-all ${
+                activeCard === card.id ? 'border-primary ring-1 ring-primary/20' : 'border-border hover:border-primary/40'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`p-2 rounded-lg ${card.bg}`}>{card.icon}</div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
+                  <p className="text-xs text-muted-foreground">{card.desc}</p>
+                </div>
+                {activeCard === card.id && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium flex-shrink-0">Ativo</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {card.prompts.map((p, i) => (
+                  <button
+                    key={i}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setActiveCard(card.id);
+                      setMessages(prev => [...prev, { role: 'user', text: p }]);
+                      const answer = await callAnalyst(card.id, p);
+                      setMessages(prev => [...prev, { role: 'ai', text: answer }]);
+                    }}
+                    className="text-[11px] px-2.5 py-1 rounded-full border border-border bg-muted/40 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Chat panel */}
+        {activeCard && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
+              <div className={`p-1.5 rounded-lg ${activeCardData?.bg}`}>{activeCardData?.icon}</div>
+              <span className="text-sm font-medium text-foreground">{activeCardData?.title}</span>
+              <button onClick={() => { setActiveCard(null); setMessages([]); }} className="ml-auto text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="p-4 space-y-3 min-h-[120px] max-h-[400px] overflow-y-auto">
+              {messages.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center pt-4">
+                  Clique em um prompt acima ou faça sua pergunta abaixo
+                </p>
+              )}
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm ${
+                    msg.role === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-foreground'
+                  }`}>
+                    {msg.role === 'ai' ? (
+                      <div className="prose prose-sm max-w-none [&_strong]:font-semibold [&_ul]:mt-1 [&_li]:text-sm [&_p]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2">
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                      </div>
+                    ) : msg.text}
+                  </div>
+                </div>
+              ))}
+              {aiLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-muted px-3 py-2 rounded-xl flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Analisando seus dados...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="px-4 pb-4 flex gap-2">
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                placeholder={`Pergunte sobre ${activeCardData?.title.toLowerCase()}...`}
+                className="flex-1 px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-primary/50"
+                disabled={aiLoading}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={aiLoading || !chatInput.trim()}
+                className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader title="Performance" subtitle="Análise de vendas, anúncios e métricas de desempenho" />
@@ -388,52 +630,7 @@ export function AtualizarDadosPage() {
 
         {/* Tab: Alertas - AI Analysis */}
         <TabsContent value="alertas">
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-primary/10 via-card to-accent/10 border border-border rounded-2xl p-4 md:p-8 text-center animate-fade-in">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/20 mb-4">
-                <Bot className="w-8 h-8 text-primary" />
-              </div>
-              <h2 className="text-xl font-bold text-foreground mb-2">Análise Inteligente</h2>
-              <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-                O agente de IA analisa seus dados em tempo real e identifica oportunidades e riscos para priorizar suas ações.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '100ms' }}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-warning)/0.1)]"><BarChart2 className="w-5 h-5 text-[hsl(var(--vix-warning))]" /></div>
-                  <div><h3 className="text-sm font-semibold text-foreground">Anúncios com Baixa Performance</h3><p className="text-xs text-muted-foreground">Anúncios que não estão performando como deveriam</p></div>
-                </div>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA analisará visitas, vendas e conversão</span></div>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '200ms' }}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-danger)/0.1)]"><Zap className="w-5 h-5 text-[hsl(var(--vix-danger))]" /></div>
-                  <div><h3 className="text-sm font-semibold text-foreground">ADS em Estado Crítico</h3><p className="text-xs text-muted-foreground">Campanhas com ROAS muito baixo gastando sem retorno</p></div>
-                </div>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA identificará campanhas queimando investimento</span></div>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '300ms' }}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-info)/0.1)]"><PackageX className="w-5 h-5 text-[hsl(var(--vix-info))]" /></div>
-                  <div><h3 className="text-sm font-semibold text-foreground">Risco de Ruptura de Estoque</h3><p className="text-xs text-muted-foreground">Produtos com profundidade crítica vs vendas diárias</p></div>
-                </div>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA cruzará estoque, VMD e transferências</span></div>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-5 animate-fade-in" style={{ animationDelay: '400ms' }}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-[hsl(var(--vix-success)/0.1)]"><TrendingUp className="w-5 h-5 text-[hsl(var(--vix-success))]" /></div>
-                  <div><h3 className="text-sm font-semibold text-foreground">Insights & Oportunidades</h3><p className="text-xs text-muted-foreground">Tendências positivas e oportunidades de crescimento</p></div>
-                </div>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA identificará tendências e oportunidades</span></div>
-              </div>
-            </div>
-            <div className="bg-card border border-dashed border-primary/30 rounded-xl p-4 md:p-6 text-center animate-fade-in" style={{ animationDelay: '500ms' }}>
-              <Bot className="w-10 h-10 text-primary/40 mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground mb-1">Agente de IA em Desenvolvimento</p>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">Em breve, um robô inteligente analisará automaticamente todos os seus dados e priorizará as ações mais urgentes.</p>
-            </div>
-          </div>
+          <AlertasIA />
         </TabsContent>
 
         {/* Tab: Pedidos */}

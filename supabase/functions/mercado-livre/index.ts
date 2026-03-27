@@ -490,82 +490,11 @@ Deno.serve(async (req) => {
       if (!accounts?.length) throw new Error('No ML account found');
 
       const account = accounts[0];
-
-      // ━━━ Enrich payload with required fields per ML API 2026 ━━━
-
-      // 1. Add channels if not set
-      if (!new_item.channels) {
-        new_item.channels = ['marketplace'];
-      }
-
-      // 2. Add sale_terms (warranty) if not set
-      if (!new_item.sale_terms || new_item.sale_terms.length === 0) {
-        new_item.sale_terms = [
-          { id: 'WARRANTY_TYPE', value_name: 'Garantia do vendedor' },
-          { id: 'WARRANTY_TIME', value_name: '90 dias' },
-        ];
-      }
-
-      // 3. Add ITEM_CONDITION to attributes (keep legacy 'condition' for backwards compat)
-      if (!new_item.attributes) new_item.attributes = [];
-      const hasItemCondition = new_item.attributes.some((a: any) => a.id === 'ITEM_CONDITION');
-      if (!hasItemCondition) {
-        const conditionValue = new_item.condition === 'used' ? '2230581' : '2230284'; // used : new
-        new_item.attributes.push({ id: 'ITEM_CONDITION', value_id: conditionValue });
-      }
-
-      // 4. Add SELLER_SKU to attributes if seller_custom_field is set
-      if (new_item.seller_custom_field) {
-        const hasSellerSku = new_item.attributes.some((a: any) => a.id === 'SELLER_SKU');
-        if (!hasSellerSku) {
-          new_item.attributes.push({ id: 'SELLER_SKU', value_name: new_item.seller_custom_field });
-        }
-      }
-
-      console.log('[CREATE_ITEM] payload:', JSON.stringify(new_item).substring(0, 500));
-
-      // Try creating the item. If ML requires family_name, retry with it.
-      try {
-        const result = await mlFetchWrite(account, '/items', 'POST', new_item);
-        return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      } catch (firstErr: any) {
-        const errMsg = firstErr.message || '';
-        console.error('[CREATE_ITEM] first attempt error:', errMsg.substring(0, 500));
-
-        // If ML requires family_name, retry with it (and remove title since ML auto-generates it)
-        if (errMsg.includes('family_name') && errMsg.includes('required_fields')) {
-          console.log('ML requires family_name — retrying with domain_discovery...');
-          try {
-            const q = encodeURIComponent(new_item.title || '');
-            const ddRes = await fetch(`${ML_API}/sites/MLB/domain_discovery/search?q=${q}`);
-            if (ddRes.ok) {
-              const ddData = await ddRes.json();
-              if (ddData?.length > 0) {
-                new_item.family_name = ddData[0].domain_name || new_item.title?.split(' ').slice(0, 3).join(' ') || 'Produto';
-              }
-            }
-          } catch { /* ignore */ }
-          if (!new_item.family_name) {
-            new_item.family_name = new_item.title?.split(' ').slice(0, 3).join(' ') || 'Produto';
-          }
-          // ML auto-generates title from attributes when family_name is set — remove title to avoid conflict
-          delete new_item.title;
-          console.log('[CREATE_ITEM] retry payload:', JSON.stringify(new_item).substring(0, 500));
-          const retryResult = await mlFetchWrite(account, '/items', 'POST', new_item);
-          return new Response(JSON.stringify(retryResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-
-        // Parse ML error to give a human-readable message
-        try {
-          const parsed = JSON.parse(errMsg.replace(/^ML API error \[\d+\]: /, ''));
-          const mlMessage = parsed.message || '';
-          const causes = (parsed.cause || []).map((c: any) => c.message || c.code || '').filter(Boolean).join('; ');
-          throw new Error(`ML: ${mlMessage}${causes ? ' — ' + causes : ''}`);
-        } catch (parseErr) {
-          if (parseErr instanceof Error && parseErr.message.startsWith('ML:')) throw parseErr;
-        }
-        throw firstErr;
-      }
+      console.log('[CREATE] payload:', JSON.stringify(new_item).slice(0, 500));
+      const result = await mlFetchWrite(account, '/items', 'POST', new_item);
+      console.log('[CREATE] result:', JSON.stringify(result).slice(0, 500));
+      // Return full result including ML error details
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (action === 'upload_picture') {
