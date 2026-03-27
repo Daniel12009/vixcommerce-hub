@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, account_id, sku, item_id, fields, description_text, new_item, query, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, query, category_id, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -947,6 +947,29 @@ Deno.serve(async (req) => {
 
       console.log(`[QA] total questions: ${allQuestions.length}`);
       return new Response(JSON.stringify({ questions: allQuestions }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'get_category_attributes') {
+      if (!category_id) throw new Error('category_id is required');
+      // Public ML endpoint — no token needed
+      const res = await fetch(`https://api.mercadolibre.com/categories/${category_id}/attributes`);
+      if (!res.ok) throw new Error(`ML attributes error [${res.status}]`);
+      const allAttrs = await res.json();
+      const required = (Array.isArray(allAttrs) ? allAttrs : [])
+        .filter((a: any) => a.tags?.required || a.tags?.catalog_required)
+        .map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          type: a.value_type,
+          required: !!a.tags?.required,
+          catalog_required: !!a.tags?.catalog_required,
+          allowed_units: a.allowed_units || [],
+          values: (a.values || []).slice(0, 20).map((v: any) => ({ id: v.id, name: v.name })),
+          hint: a.hint || '',
+        }));
+      return new Response(JSON.stringify({ attributes: required, total: allAttrs.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

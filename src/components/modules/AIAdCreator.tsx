@@ -55,6 +55,9 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
   const [editDescription, setEditDescription] = useState('');
   const [editPrice, setEditPrice] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
+  const [categoryAttributes, setCategoryAttributes] = useState<any[]>([]);
+  const [attrValues, setAttrValues] = useState<Record<string, string>>({});
+  const [loadingAttrs, setLoadingAttrs] = useState(false);
 
   // Drive Photos + Dimensions
   const [drivePhotos, setDrivePhotos] = useState<string[]>([]);
@@ -200,7 +203,9 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       setEditTitleSeo(data.copy?.title_seo?.value || data.seo?.title_optimized?.value || '');
       setEditDescription(data.copy?.description?.value || '');
       setEditPrice(String(data.strategy?.price_suggestion || ''));
-      setEditCategoryId(data.compliance?.category_id_hint || '');
+      const catId = data.compliance?.category_id_hint || '';
+      setEditCategoryId(catId);
+      if (catId) fetchCategoryAttributes(catId);
 
       // Changelog
       if (user) {
@@ -224,6 +229,28 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       setError(err.message || 'Erro ao gerar anúncio.');
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function fetchCategoryAttributes(catId: string) {
+    if (!catId || catId.length < 4) return;
+    setLoadingAttrs(true);
+    setCategoryAttributes([]);
+    try {
+      const { data, error } = await supabase.functions.invoke('mercado-livre', {
+        body: { action: 'get_category_attributes', category_id: catId },
+      });
+      if (error || !data?.attributes) return;
+      setCategoryAttributes(data.attributes);
+      const newVals: Record<string, string> = {};
+      data.attributes.forEach((a: any) => {
+        if (a.id === 'family_name') newVals['family_name'] = editTitle.split(' ').slice(0, 3).join(' ');
+        if (a.id === 'BRAND') newVals['BRAND'] = 'Sem marca';
+        if (a.id === 'MODEL') newVals['MODEL'] = sku || '';
+      });
+      setAttrValues(prev => ({ ...prev, ...newVals }));
+    } catch { /* ignore */ } finally {
+      setLoadingAttrs(false);
     }
   }
 
@@ -282,6 +309,21 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           },
         };
       }
+
+      // Category attributes (required fields like family_name, BRAND, etc.)
+      const attrs: any[] = [];
+      if (Object.keys(attrValues).length > 0) {
+        Object.entries(attrValues).forEach(([id, value]) => {
+          if (value && value.trim()) {
+            attrs.push({ id, value_name: value.trim() });
+          }
+        });
+      }
+      // Always include family_name if not already set
+      if (!attrValues['family_name']) {
+        attrs.push({ id: 'family_name', value_name: editTitle.split(' ').slice(0, 3).join(' ') });
+      }
+      if (attrs.length > 0) itemPayload.attributes = attrs;
 
       const { data: result, error: fnError } = await supabase.functions.invoke('mercado-livre', {
         body: { action: 'create_item', new_item: itemPayload, account_id: accountId },
@@ -692,7 +734,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                         {catResults.map((cat, i) => (
                           <button
                             key={i}
-                            onClick={() => { setEditCategoryId(cat.id); setCatResults([]); setCatQuery(''); }}
+                            onClick={() => { setEditCategoryId(cat.id); setCatResults([]); setCatQuery(''); fetchCategoryAttributes(cat.id); }}
                             className={`w-full text-left px-3 py-2 text-xs hover:bg-purple-500/10 transition-colors border-b border-border last:border-b-0 ${
                               editCategoryId === cat.id ? 'bg-purple-500/10 text-purple-400' : 'text-foreground'
                             }`}
@@ -707,6 +749,52 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                   </div>
                 </div>
               </div>
+
+              {/* Atributos obrigatórios da categoria */}
+              {loadingAttrs && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Carregando atributos obrigatórios da categoria...
+                </div>
+              )}
+
+              {categoryAttributes.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3 text-amber-400" />
+                    Atributos obrigatórios da categoria
+                  </label>
+                  <div className="space-y-2">
+                    {categoryAttributes.map((attr) => (
+                      <div key={attr.id}>
+                        <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          {attr.name}
+                          {attr.required && <span className="text-red-400">*</span>}
+                        </label>
+                        {attr.values.length > 0 ? (
+                          <select
+                            value={attrValues[attr.id] || ''}
+                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
+                            className="mt-0.5 w-full px-3 py-1.5 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                          >
+                            <option value="">Selecionar...</option>
+                            {attr.values.map((v: any) => (
+                              <option key={v.id} value={v.name}>{v.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            value={attrValues[attr.id] || ''}
+                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
+                            placeholder={attr.hint || `Digite ${attr.name.toLowerCase()}...`}
+                            className="mt-0.5 w-full px-3 py-1.5 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Quantidade, Tipo Listagem, Garantia */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
