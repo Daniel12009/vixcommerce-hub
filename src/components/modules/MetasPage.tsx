@@ -185,7 +185,7 @@ export function MetasPage() {
           const Icon = TIPO_ICONS[m.tipo] || Target;
 
           return (
-            <div key={m.id} className="bg-card border border-border rounded-xl p-5 relative group">
+            <div key={m.id} className="bg-card border border-border rounded-xl p-3 md:p-5 relative group">
               <button
                 onClick={() => handleRemove(m.id)}
                 className="absolute top-3 right-3 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-all"
@@ -227,7 +227,7 @@ export function MetasPage() {
       </div>
 
       {/* Chart */}
-      <div className="bg-card border border-border rounded-xl p-5 mb-6">
+      <div className="bg-card border border-border rounded-xl p-3 md:p-5 mb-6">
         <h3 className="text-sm font-semibold text-foreground mb-4">Progresso Geral</h3>
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height={280}>
@@ -254,7 +254,7 @@ export function MetasPage() {
       </div>
 
       {/* Add Meta */}
-      <div className="bg-card border border-border rounded-xl p-5">
+      <div className="bg-card border border-border rounded-xl p-3 md:p-5">
         {!showAdd ? (
           <button
             onClick={() => setShowAdd(true)}

@@ -116,32 +116,44 @@ async function listImages(token: string, folderId: string, sku: string): Promise
         `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (!imgRes.ok) continue;
+      if (!imgRes.ok) { console.log(`Drive download failed for ${f.id}: ${imgRes.status}`); continue; }
       const buf = await imgRes.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      console.log(`Downloaded ${f.name}: ${bytes.length} bytes`);
 
       // Determine extension
       const ext = f.mimeType === 'image/png' ? 'png' : f.mimeType === 'image/webp' ? 'webp' : 'jpg';
-      const path = `drive/${sku.toUpperCase()}/${f.id}.${ext}`;
+      const filePath = `drive/${sku.toUpperCase()}/${f.id}.${ext}`;
 
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage (upsert)
       const uploadRes = await fetch(
-        `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`,
+        `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${filePath}`,
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
             'Content-Type': f.mimeType || 'image/jpeg',
             'x-upsert': 'true',
           },
-          body: buf,
+          body: bytes,
         }
       );
 
       if (uploadRes.ok) {
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${filePath}`;
+        console.log(`Uploaded: ${publicUrl}`);
         results.push(publicUrl);
+      } else {
+        const errText = await uploadRes.text();
+        console.error(`Storage upload failed for ${f.name}: ${uploadRes.status} ${errText}`);
+        // Fallback to base64 data URI
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        const b64 = btoa(binary);
+        const mime = f.mimeType || 'image/jpeg';
+        results.push(`data:${mime};base64,${b64}`);
       }
-    } catch { /* skip */ }
+    } catch (err) { console.error(`Image processing error:`, err); }
   }
   return results;
 }

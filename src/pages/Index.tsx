@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Menu } from 'lucide-react';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { LoadingScreen } from '@/components/layout/LoadingScreen';
 import { LoginPage } from '@/components/auth/LoginPage';
@@ -23,6 +24,7 @@ function AppContent() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [showSplash, setShowSplash] = useState(false);
   const wasAuthenticated = useRef(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Show splash screen briefly after login
   useEffect(() => {
@@ -65,8 +67,30 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppSidebar activeModule={activeModule} onModuleChange={setActiveModule} />
-      <main className="ml-64 p-8">
+      <AppSidebar
+        activeModule={activeModule}
+        onModuleChange={setActiveModule}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      {/* Mobile top bar with hamburger */}
+      <div className="fixed top-0 left-0 right-0 z-30 flex items-center gap-3 px-4 py-3 bg-background/95 backdrop-blur-sm border-b border-border lg:hidden">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+        >
+          <Menu className="w-5 h-5 text-foreground" />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-md vix-gradient flex items-center justify-center">
+            <span className="text-white font-bold text-[10px]">VP</span>
+          </div>
+          <span className="text-foreground font-semibold text-sm">VixPainel</span>
+        </div>
+      </div>
+
+      <main className="lg:ml-64 p-4 pt-16 lg:p-8 lg:pt-8">
         {renderModule()}
       </main>
     </div>

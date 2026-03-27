@@ -286,25 +286,25 @@ export function DashboardPage() {
       </div>
 
       {/* Large Faturamento Hero */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 p-8 mb-6">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 p-4 md:p-8 mb-6">
         <div className="absolute inset-0 bg-black/10" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <p className="text-white/70 text-sm font-medium mb-1">Faturamento do Dia</p>
-            <p className="text-white text-4xl md:text-5xl font-black tracking-tight">{formatBRL(totalFaturamento)}</p>
+            <p className="text-white text-3xl md:text-5xl font-black tracking-tight">{formatBRL(totalFaturamento)}</p>
           </div>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-3 gap-3 md:gap-6">
             <div className="text-center">
               <p className="text-white/60 text-xs">Pedidos</p>
-              <p className="text-white text-2xl font-bold">{totalPedidos}</p>
+              <p className="text-white text-xl md:text-2xl font-bold">{totalPedidos}</p>
             </div>
             <div className="text-center">
               <p className="text-white/60 text-xs">Unidades</p>
-              <p className="text-white text-2xl font-bold">{totalUnidades}</p>
+              <p className="text-white text-xl md:text-2xl font-bold">{totalUnidades}</p>
             </div>
             <div className="text-center">
               <p className="text-white/60 text-xs">Ticket Médio</p>
-              <p className="text-white text-2xl font-bold">{formatBRL(ticketMedio)}</p>
+              <p className="text-white text-xl md:text-2xl font-bold">{formatBRL(ticketMedio)}</p>
             </div>
           </div>
         </div>
@@ -334,7 +334,7 @@ export function DashboardPage() {
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Vendas por Hora */}
-            <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+            <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
               <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" /> Faturamento por Hora
               </h3>
@@ -357,7 +357,7 @@ export function DashboardPage() {
 
             {/* Faturamento por Conta */}
             {fatPorConta.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+              <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-green-500" /> Faturamento por Conta
                 </h3>
@@ -378,7 +378,7 @@ export function DashboardPage() {
 
           {/* Top SKUs */}
           {topSkus.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-6 mb-6 animate-fade-in">
+            <div className="bg-card border border-border rounded-xl p-4 md:p-6 mb-6 animate-fade-in min-w-0">
               <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
                 <Package className="w-4 h-4 text-indigo-500" /> Top Vendas do Dia (SKU)
               </h3>
@@ -386,7 +386,7 @@ export function DashboardPage() {
                 <BarChart data={topSkus} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis dataKey="sku" type="category" tick={{ fontSize: 9 }} width={120} />
+                  <YAxis dataKey="sku" type="category" tick={{ fontSize: 9 }} width={80} />
                   <Tooltip formatter={(v: number, name: string) => name === 'faturamento' ? formatBRL(v) : v} />
                   <Legend />
                   <Bar dataKey="vendas" fill="#22c55e" name="Qtd" radius={[0, 4, 4, 0]} />
@@ -397,7 +397,7 @@ export function DashboardPage() {
           )}
 
           {/* Últimos Pedidos */}
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
               <ShoppingCart className="w-4 h-4 text-amber-500" /> Últimos Pedidos
             </h3>

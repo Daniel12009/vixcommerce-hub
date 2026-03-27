@@ -287,7 +287,7 @@ export function GraficosTab() {
 
         {/* 1. Vendas por Dia */}
         {vendasPorDia.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in lg:col-span-2">
             <h3 className="text-foreground font-semibold mb-4">📈 Vendas por Dia</h3>
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={vendasPorDia}>
@@ -305,7 +305,7 @@ export function GraficosTab() {
 
         {/* 2. Pedidos por Dia */}
         {vendasPorDia.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">📦 Pedidos por Dia</h3>
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={vendasPorDia}>
@@ -321,7 +321,7 @@ export function GraficosTab() {
 
         {/* 3. Faturamento por Conta */}
         {vendasPorConta.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🏪 Faturamento por Conta</h3>
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -336,7 +336,7 @@ export function GraficosTab() {
 
         {/* 4. Faturamento por Marketplace */}
         {isMarketplaceView && vendasPorOrigem.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🌐 Faturamento por Marketplace</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={vendasPorOrigem} layout="vertical">
@@ -352,7 +352,7 @@ export function GraficosTab() {
 
         {/* 5. Líquido por Conta */}
         {vendasPorConta.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">💰 Líquido por Conta</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={vendasPorConta}>
@@ -369,7 +369,7 @@ export function GraficosTab() {
 
         {/* 6. Top 10 SKUs mais vendidos */}
         {topSkus.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🏆 Top 10 SKUs Mais Vendidos</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={topSkus} layout="vertical">
@@ -385,7 +385,7 @@ export function GraficosTab() {
 
         {/* 7. Melhor Margem por SKU (Marketplaces only) */}
         {isMarketplaceView && melhoresMargens.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">✅ Melhor Margem (Marketplaces)</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={melhoresMargens} layout="vertical">
@@ -401,7 +401,7 @@ export function GraficosTab() {
 
         {/* 8. Pior Margem por SKU (Marketplaces only) */}
         {isMarketplaceView && pioresMargens.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">⚠️ Pior Margem (Marketplaces)</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={pioresMargens} layout="vertical">
@@ -417,7 +417,7 @@ export function GraficosTab() {
 
         {/* 9. Top Anúncios por Vendas - by SKU */}
         {isMarketplaceView && topAnunciosVendas.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">📊 Top Anúncios por Vendas (SKU)</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={topAnunciosVendas} layout="vertical">
@@ -433,7 +433,7 @@ export function GraficosTab() {
 
         {/* 10. Top Anúncios por Conversão - by SKU */}
         {isMarketplaceView && topAnunciosConversao.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🎯 Top Anúncios por Conversão (SKU)</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={topAnunciosConversao} layout="vertical">
@@ -449,7 +449,7 @@ export function GraficosTab() {
 
         {/* 11. Visitas vs Vendas por Conta */}
         {isMarketplaceView && perfPorConta.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in lg:col-span-2">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in lg:col-span-2">
             <h3 className="text-foreground font-semibold mb-4">🏬 Visitas vs Vendas por Conta</h3>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={perfPorConta}>

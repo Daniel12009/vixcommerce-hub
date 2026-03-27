@@ -46,7 +46,7 @@ export function FinanceiroPage() {
         <KpiCard title="Margem Média" value={formatPercent(margemMedia)} icon={Percent} delay={100} />
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-6 mb-6 animate-fade-in" style={{ animationDelay: '150ms' }}>
+      <div className="bg-card border border-border rounded-xl p-4 md:p-6 mb-6 animate-fade-in" style={{ animationDelay: '150ms' }}>
         <h3 className="text-foreground font-semibold mb-4">Margem Real por SKU</h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={items}>

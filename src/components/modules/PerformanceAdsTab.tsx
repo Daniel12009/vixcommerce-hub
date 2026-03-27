@@ -338,7 +338,7 @@ export function PerformanceAdsTab() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 1. Investimento vs Receita por Conta */}
         {investReceitaPorConta.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">💰 Investimento vs Receita por Conta</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={investReceitaPorConta}>
@@ -356,7 +356,7 @@ export function PerformanceAdsTab() {
 
         {/* 2. Top Campanhas por ROAS */}
         {topCampanhasRoas.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🏆 Top Campanhas por ROAS</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={topCampanhasRoas} layout="vertical">
@@ -372,7 +372,7 @@ export function PerformanceAdsTab() {
 
         {/* 3. Top Campanhas por Investimento (campaign name, not ad title) */}
         {topCampanhasInvestimento.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">📈 Top Campanhas por Investimento</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={topCampanhasInvestimento} layout="vertical">
@@ -390,7 +390,7 @@ export function PerformanceAdsTab() {
 
         {/* 4. Cliques vs Impressões por Conta */}
         {cliquesImpressoesPorConta.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">👆 Cliques vs Impressões por Conta</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={cliquesImpressoesPorConta}>
@@ -408,7 +408,7 @@ export function PerformanceAdsTab() {
 
         {/* 5. Investimento por Tipo (Pie) */}
         {investimentoPorTipo.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">🎯 Investimento por Tipo</h3>
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -423,7 +423,7 @@ export function PerformanceAdsTab() {
 
         {/* 6. Piores ACOS */}
         {pioresAcos.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
             <h3 className="text-foreground font-semibold mb-4">⚠️ Piores ACOS (Campanhas)</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={pioresAcos} layout="vertical">
@@ -440,7 +440,7 @@ export function PerformanceAdsTab() {
 
       {/* Campaign Table with Delta Arrows */}
       {campanhaTable.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6 animate-fade-in">
+        <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
           <h3 className="text-foreground font-semibold mb-4">📋 Lista de Campanhas {hasPrevData && <span className="text-xs font-normal text-muted-foreground ml-2">comparando com período anterior</span>}</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">

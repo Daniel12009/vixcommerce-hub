@@ -233,7 +233,7 @@ export function MLMarketingTab({ activeTab }: { activeTab: 'dashboard' | 'gerenc
           <div className="grid lg:grid-cols-3 gap-6 mb-6">
             {/* Bar Chart */}
             {campChart.length > 0 && (
-              <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5">
+              <div className="lg:col-span-2 bg-card border border-border rounded-xl p-3 md:p-5">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2 text-sm"><BarChart3 className="w-4 h-4 text-primary" /> Investimento vs Receita</h3>
                 <ResponsiveContainer width="100%" height={Math.max(220, campChart.length * 28)}>
                   <BarChart data={campChart} layout="vertical">
@@ -251,7 +251,7 @@ export function MLMarketingTab({ activeTab }: { activeTab: 'dashboard' | 'gerenc
 
             {/* Pie Chart: Status */}
             {statusPie.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-5">
+              <div className="bg-card border border-border rounded-xl p-3 md:p-5">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2 text-sm"><Target className="w-4 h-4 text-primary" /> Status das Campanhas</h3>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>

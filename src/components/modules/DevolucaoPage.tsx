@@ -401,7 +401,7 @@ export function DevolucaoPage() {
           {/* Charts Row 1 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Motivo chart */}
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-xl p-3 md:p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Top Motivos de Devolução</h3>
               {motivoChart.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
@@ -423,7 +423,7 @@ export function DevolucaoPage() {
             </div>
 
             {/* Situação Pie */}
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-xl p-3 md:p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Situação da Mercadoria</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -463,7 +463,7 @@ export function DevolucaoPage() {
           {/* Charts Row 2 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Setor */}
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-xl p-3 md:p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Por Setor</h3>
               {setorChart.length > 0 ? (
                 <ResponsiveContainer width="100%" height={220}>
@@ -486,7 +486,7 @@ export function DevolucaoPage() {
             </div>
 
             {/* Plataforma */}
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-xl p-3 md:p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Por Plataforma</h3>
               {plataformaChart.length > 0 ? (
                 <ResponsiveContainer width="100%" height={220}>
@@ -510,7 +510,7 @@ export function DevolucaoPage() {
           </div>
 
           {/* Depósito mini-stats */}
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className="bg-card border border-border rounded-xl p-3 md:p-5">
             <h3 className="text-sm font-semibold text-foreground mb-3">Depósito da Devolução</h3>
             <div className="flex flex-wrap gap-3">
               {depositoChart.map(d => (
@@ -523,7 +523,7 @@ export function DevolucaoPage() {
           </div>
 
           {/* Pareto Chart - Sub-motivo */}
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className="bg-card border border-border rounded-xl p-3 md:p-5">
             <h3 className="text-sm font-semibold text-foreground mb-1">Pareto — Detalhes das Devoluções</h3>
             <p className="text-[10px] text-muted-foreground mb-4">Sub-motivos ordenados por frequência com % acumulado</p>
             {paretoChart.length > 0 ? (
@@ -571,7 +571,7 @@ export function DevolucaoPage() {
           </div>
 
           {/* Top SKUs */}
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className="bg-card border border-border rounded-xl p-3 md:p-5">
             <h3 className="text-sm font-semibold text-foreground mb-4">Top SKUs com mais Devoluções</h3>
             {skuChart.length > 0 ? (
               <div className="overflow-x-auto">
