@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, account_id, sku, item_id, fields, description_text, new_item, query, category_id, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, query, category_id, promotion_id, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -978,6 +978,107 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ attributes: required }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (action === 'list_seller_promotions') {
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+      const account = accounts[0];
+
+      let sellerId = account.seller_id;
+      if (!sellerId) {
+        const me = await mlFetch(account, '/users/me');
+        sellerId = me.id;
+      }
+
+      const promos = await mlFetch(account, `/seller-promotions/promotions?seller_id=${sellerId}&status=active&limit=50`).catch(() => []);
+      const list = Array.isArray(promos) ? promos : (promos?.results || []);
+
+      const result = list.map((p: any) => ({
+        id: p.id,
+        name: p.name || p.type || 'Promoção',
+        type: p.type,
+        status: p.status,
+        start_date: p.start_date,
+        end_date: p.end_date,
+        discount_type: p.discount_type,
+        discount_value: p.discount_value,
+        items_count: p.items_count || 0,
+        conta: account.nome,
+        account_id: account.id,
+        seller_id: sellerId,
+      }));
+
+      return new Response(JSON.stringify({ promotions: result, conta: account.nome }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'get_promotion_items') {
+      if (!promotion_id) throw new Error('promotion_id is required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+      const account = accounts[0];
+
+      const data = await mlFetch(account, `/seller-promotions/promotions/${promotion_id}/items?limit=100`);
+      const items = Array.isArray(data) ? data : (data?.results || []);
+
+      return new Response(JSON.stringify({
+        promotion_id,
+        items: items.map((i: any) => ({
+          item_id: i.id || i.item_id,
+          title: i.title || '',
+          original_price: i.original_price || i.price || 0,
+          deal_price: i.deal_price || 0,
+          status: i.status,
+          seller_custom_field: i.seller_custom_field || '',
+        })),
+        conta: account.nome,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'add_item_to_promotion') {
+      if (!promotion_id || !item_id) throw new Error('promotion_id and item_id are required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+      const account = accounts[0];
+
+      const dealPrice = (fields as any)?.deal_price;
+      const body: any = { id: item_id };
+      if (dealPrice) body.deal_price = Number(dealPrice);
+
+      const result = await mlFetchWrite(account, `/seller-promotions/promotions/${promotion_id}/items`, 'POST', body);
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'remove_item_from_promotion') {
+      if (!promotion_id || !item_id) throw new Error('promotion_id and item_id are required');
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+      const account = accounts[0];
+
+      let token = account.access_token;
+      if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+        token = await refreshToken(account);
+      }
+      const res = await fetch(`${ML_API}/seller-promotions/promotions/${promotion_id}/items/${item_id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const text = await res.text();
+      return new Response(text || '{"ok":true}', { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     throw new Error(`Unknown action: ${action}`);

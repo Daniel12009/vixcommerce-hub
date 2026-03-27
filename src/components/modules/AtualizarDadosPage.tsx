@@ -322,7 +322,7 @@ export function AtualizarDadosPage() {
     const { vendasItems, adsItems, estoqueItems, financeiroItems, performanceItems } = useSheetsData();
     const [activeCard, setActiveCard] = useState<string | null>(null);
     const [chatInput, setChatInput] = useState('');
-    const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; execute_result?: any; campaigns_data?: any }[]>([]);
+    const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; execute_result?: any; campaigns_data?: any; promotions_data?: any }[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [briefing, setBriefing] = useState('');
     const [briefingLoading, setBriefingLoading] = useState(false);
@@ -411,9 +411,10 @@ export function AtualizarDadosPage() {
           answer: data?.answer || 'Sem resposta.',
           execute_result: data?.execute_result || null,
           campaigns_data: data?.campaigns_data || null,
+          promotions_data: data?.promotions_data || null,
         };
       } catch (err: any) {
-        return { answer: `Erro: ${err.message}`, execute_result: null, campaigns_data: null };
+        return { answer: `Erro: ${err.message}`, execute_result: null, campaigns_data: null, promotions_data: null };
       } finally {
         setAiLoading(false);
       }
@@ -450,6 +451,7 @@ export function AtualizarDadosPage() {
         content: result.answer,
         execute_result: result.execute_result,
         campaigns_data: result.campaigns_data,
+        promotions_data: result.promotions_data,
       }]);
     }
 
@@ -550,7 +552,7 @@ export function AtualizarDadosPage() {
                       setActiveCard(card.id);
                       setMessages(prev => [...prev, { role: 'user', content: p }]);
                       const result = await callAnalyst(card.id, p);
-                      setMessages(prev => [...prev, { role: 'assistant', content: result.answer, execute_result: result.execute_result, campaigns_data: result.campaigns_data }]);
+                      setMessages(prev => [...prev, { role: 'assistant', content: result.answer, execute_result: result.execute_result, campaigns_data: result.campaigns_data, promotions_data: result.promotions_data }]);
                     }}
                     className="text-[11px] px-2.5 py-1 rounded-full border border-border bg-muted/40 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
                   >
@@ -616,7 +618,28 @@ export function AtualizarDadosPage() {
                                 </div>
                                 <div className="flex gap-3 mt-1 text-muted-foreground">
                                   <span>Budget: R$ {camp.budget}/dia</span>
-                                  <span>ROAS target: {camp.roas_target}x</span>
+                                  {camp.roas_target > 0 && <span>ROAS target: {camp.roas_target}x</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {msg.promotions_data?.promotions?.length > 0 && (
+                          <div className="mt-2 space-y-1.5">
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                              Promoções ativas — {msg.promotions_data.conta}
+                            </p>
+                            {msg.promotions_data.promotions.map((promo: any, pi: number) => (
+                              <div key={pi} className="px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-0.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-medium text-foreground">{promo.name || promo.type}</span>
+                                  <span className="text-amber-400 font-medium">
+                                    {promo.discount_value ? `-${promo.discount_value}%` : ''}
+                                  </span>
+                                </div>
+                                <div className="text-muted-foreground flex gap-3">
+                                  {promo.items_count > 0 && <span>{promo.items_count} produtos</span>}
+                                  {promo.end_date && <span>até {new Date(promo.end_date).toLocaleDateString('pt-BR')}</span>}
                                 </div>
                               </div>
                             ))}

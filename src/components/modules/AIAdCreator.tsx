@@ -312,16 +312,16 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
 
       // Category attributes (required fields like family_name, BRAND, etc.)
       const attrs: any[] = [];
-      if (Object.keys(attrValues).length > 0) {
-        Object.entries(attrValues).forEach(([id, value]) => {
-          if (value && value.trim()) {
-            attrs.push({ id, value_name: value.trim() });
-          }
-        });
-      }
-      // Always include family_name if not already set
+      Object.entries(attrValues).forEach(([id, value]) => {
+        if (value?.trim()) attrs.push({ id, value_name: value.trim() });
+      });
+      // family_name is required in all physical product categories
       if (!attrValues['family_name']) {
         attrs.push({ id: 'family_name', value_name: editTitle.split(' ').slice(0, 3).join(' ') });
+      }
+      // BRAND — fallback to 'Sem marca' if not filled
+      if (!attrValues['BRAND']) {
+        attrs.push({ id: 'BRAND', value_name: 'Sem marca' });
       }
       if (attrs.length > 0) itemPayload.attributes = attrs;
 
@@ -771,19 +771,25 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                           {attr.name}
                           {attr.required && <span className="text-red-400">*</span>}
                         </label>
-                        {/* BRAND and fields without fixed values = free text input */}
-                        {attr.id === 'BRAND' || attr.values.length === 0 ? (
-                          <input
-                            value={attrValues[attr.id] || ''}
-                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
-                            placeholder={
-                              attr.id === 'BRAND'
-                                ? 'Digite a marca do produto ou "Sem marca"'
-                                : attr.hint || `Digite ${attr.name.toLowerCase()}...`
-                            }
-                            className="mt-0.5 w-full px-3 py-1.5 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
-                          />
-                        ) : (
+                        {attr.id === 'BRAND' ? (
+                          <div className="relative mt-0.5">
+                            <input
+                              value={attrValues['BRAND'] || ''}
+                              onChange={e => setAttrValues(prev => ({ ...prev, BRAND: e.target.value }))}
+                              list="brand-suggestions"
+                              placeholder="Digite sua marca ou busque na lista..."
+                              className="w-full px-3 py-1.5 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                            />
+                            <datalist id="brand-suggestions">
+                              {attr.values.map((v: any) => (
+                                <option key={v.id} value={v.name} />
+                              ))}
+                            </datalist>
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Digite o nome da sua marca. Se não estiver na lista, escreva assim mesmo.
+                            </p>
+                          </div>
+                        ) : attr.values.length > 0 ? (
                           <select
                             value={attrValues[attr.id] || ''}
                             onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
@@ -794,6 +800,13 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                               <option key={v.id} value={v.name}>{v.name}</option>
                             ))}
                           </select>
+                        ) : (
+                          <input
+                            value={attrValues[attr.id] || ''}
+                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
+                            placeholder={attr.hint || `Digite ${attr.name.toLowerCase()}...`}
+                            className="mt-0.5 w-full px-3 py-1.5 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                          />
                         )}
                       </div>
                     ))}
