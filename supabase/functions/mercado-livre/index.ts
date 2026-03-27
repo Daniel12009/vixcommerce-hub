@@ -954,10 +954,16 @@ Deno.serve(async (req) => {
     if (action === 'get_category_attributes') {
       const catId = category_id || (fields as any)?.category_id;
       if (!catId) throw new Error('category_id is required');
-      // Public ML endpoint — no token needed
-      const res = await fetch(`https://api.mercadolibre.com/categories/${catId}/attributes`);
-      if (!res.ok) throw new Error(`ML attributes error [${res.status}]`);
-      const allAttrs = await res.json();
+
+      // Busca autenticada — retorna marcas registradas na conta do seller
+      const accountsRes = account_id
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch('/ml_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('No ML account found');
+      const account = accounts[0];
+
+      const allAttrs = await mlFetch(account, `/categories/${catId}/attributes`);
       const required = (Array.isArray(allAttrs) ? allAttrs : [])
         .filter((a: any) => a.tags?.required || a.tags?.catalog_required)
         .map((a: any) => ({
@@ -965,9 +971,10 @@ Deno.serve(async (req) => {
           name: a.name,
           type: a.value_type,
           required: !!a.tags?.required,
-          values: (a.values || []).slice(0, 20).map((v: any) => ({ id: v.id, name: v.name })),
+          values: (a.values || []).slice(0, 80).map((v: any) => ({ id: v.id, name: v.name })),
           hint: a.hint || '',
         }));
+
       return new Response(JSON.stringify({ attributes: required }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

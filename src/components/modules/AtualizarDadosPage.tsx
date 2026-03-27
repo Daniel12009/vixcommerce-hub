@@ -183,7 +183,14 @@ export function AtualizarDadosPage() {
   const totalPedidos = accounts.reduce((s, a) => s + (a.totalPedidos || 0), 0);
   const connectedCount = accounts.filter(a => a.status === 'connected').length;
 
-  // Helper: parse date string
+  // Helper: get current date in BR timezone (UTC-3)
+  const getNowBR = () => {
+    const now = new Date();
+    const brOffset = -3 * 60;
+    return new Date(now.getTime() + (brOffset - now.getTimezoneOffset()) * 60000);
+  };
+
+  // Helper: parse date string (DD/MM/YYYY or ISO)
   const parseDate = (d: string) => {
     if (!d) return null;
     const parts = d.split('/');
@@ -205,7 +212,7 @@ export function AtualizarDadosPage() {
       end.setHours(23, 59, 59);
       items = items.filter(v => { const d = parseDate(v.data); return d && d >= start && d <= end; });
     } else if (!showCustomDate && filterDias > 0) {
-      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - filterDias);
+      const cutoff = getNowBR(); cutoff.setDate(cutoff.getDate() - filterDias); cutoff.setHours(0, 0, 0, 0);
       items = items.filter(v => { const d = parseDate(v.data); return d && d >= cutoff; });
     }
     return items;
@@ -254,8 +261,9 @@ export function AtualizarDadosPage() {
           return d && d >= start && d <= end;
         });
       } else if (!showCustomDate && filterDias > 0) {
-        const cutoff = new Date();
+        const cutoff = getNowBR();
         cutoff.setDate(cutoff.getDate() - filterDias);
+        cutoff.setHours(0, 0, 0, 0);
         items = items.filter(v => {
           const d = parseDate(v.data);
           return d && d >= cutoff;
@@ -283,8 +291,9 @@ export function AtualizarDadosPage() {
         return true;
       });
     } else if (!showCustomDate && filterDias > 0) {
-      const cutoff = new Date();
+      const cutoff = getNowBR();
       cutoff.setDate(cutoff.getDate() - filterDias);
+      cutoff.setHours(0, 0, 0, 0);
       orders = orders.filter(o => {
         const parts = o.data.split('/');
         if (parts.length === 3) {
@@ -948,7 +957,7 @@ export function AtualizarDadosPage() {
             };
 
             // Compute date ranges based on global filterDias
-            const today = new Date();
+            const today = getNowBR();
             today.setHours(23, 59, 59, 999);
             const curEnd = new Date(today);
             const curStart = new Date(today);

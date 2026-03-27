@@ -238,14 +238,14 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
     setCategoryAttributes([]);
     try {
       const { data, error } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'get_category_attributes', category_id: catId },
+        body: { action: 'get_category_attributes', category_id: catId, account_id: accountId },
       });
       if (error || !data?.attributes) return;
       setCategoryAttributes(data.attributes);
       const newVals: Record<string, string> = {};
       data.attributes.forEach((a: any) => {
         if (a.id === 'family_name') newVals['family_name'] = editTitle.split(' ').slice(0, 3).join(' ');
-        if (a.id === 'BRAND') newVals['BRAND'] = 'Sem marca';
+        // BRAND left empty for user to fill
         if (a.id === 'MODEL') newVals['MODEL'] = sku || '';
       });
       setAttrValues(prev => ({ ...prev, ...newVals }));
@@ -771,7 +771,19 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                           {attr.name}
                           {attr.required && <span className="text-red-400">*</span>}
                         </label>
-                        {attr.values.length > 0 ? (
+                        {/* BRAND and fields without fixed values = free text input */}
+                        {attr.id === 'BRAND' || attr.values.length === 0 ? (
+                          <input
+                            value={attrValues[attr.id] || ''}
+                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
+                            placeholder={
+                              attr.id === 'BRAND'
+                                ? 'Digite a marca do produto ou "Sem marca"'
+                                : attr.hint || `Digite ${attr.name.toLowerCase()}...`
+                            }
+                            className="mt-0.5 w-full px-3 py-1.5 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
+                          />
+                        ) : (
                           <select
                             value={attrValues[attr.id] || ''}
                             onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
@@ -782,13 +794,6 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                               <option key={v.id} value={v.name}>{v.name}</option>
                             ))}
                           </select>
-                        ) : (
-                          <input
-                            value={attrValues[attr.id] || ''}
-                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.id]: e.target.value }))}
-                            placeholder={attr.hint || `Digite ${attr.name.toLowerCase()}...`}
-                            className="mt-0.5 w-full px-3 py-1.5 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-purple-500/50"
-                          />
                         )}
                       </div>
                     ))}

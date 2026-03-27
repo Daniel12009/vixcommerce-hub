@@ -161,7 +161,7 @@ async function listImages(token: string, folderId: string, sku: string): Promise
         const errText = await uploadRes.text();
         console.error(`Storage upload failed for ${f.name}: ${uploadRes.status} ${errText}`);
         // Fallback: use Drive public export URL instead of base64
-        results.push(`https://drive.google.com/uc?export=view&id=${f.id}`);
+        results.push(`https://drive.google.com/thumbnail?id=${f.id}&sz=w800`);
       }
     } catch (err) {
       console.error(`Image processing error for ${f.id}:`, err);
