@@ -320,7 +320,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           .map(([id, value]) => ({ id, value_name: String(value).trim() })),
       ];
       console.log('[PUBLISH] attributes:', JSON.stringify(itemPayload.attributes));
-      console.log('[PUBLISH] full payload keys:', Object.keys(itemPayload));
+      console.log('[PUBLISH] FULL PAYLOAD:', JSON.stringify(itemPayload, null, 2));
 
       const { data: result, error: fnError } = await supabase.functions.invoke('mercado-livre', {
         body: { action: 'create_item', new_item: itemPayload, account_id: accountId },
