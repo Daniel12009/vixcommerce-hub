@@ -322,11 +322,31 @@ export function AtualizarDadosPage() {
     const { vendasItems, adsItems, estoqueItems, financeiroItems, performanceItems } = useSheetsData();
     const [activeCard, setActiveCard] = useState<string | null>(null);
     const [chatInput, setChatInput] = useState('');
-    const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
+    const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; execute_result?: any; campaigns_data?: any }[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [briefing, setBriefing] = useState('');
     const [briefingLoading, setBriefingLoading] = useState(false);
     const [briefingDone, setBriefingDone] = useState(false);
+    const [mlContext, setMlContext] = useState<any>(null);
+    const [mlContextLoading, setMlContextLoading] = useState(false);
+
+    async function fetchMLContext(mode = 'all') {
+      setMlContextLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const { data, error } = await supabase.functions.invoke('ai-analyst-context', {
+          body: { mode },
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        });
+        if (!error && data) setMlContext(data);
+        return data;
+      } catch (e) {
+        console.warn('ML context fetch failed:', e);
+        return null;
+      } finally {
+        setMlContextLoading(false);
+      }
+    }
 
     function buildContextData(mode: string) {
       const resumeArray = (arr: any[] | null, fields: string[], limit = 30) =>
@@ -334,48 +354,66 @@ export function AtualizarDadosPage() {
           Object.fromEntries(fields.map(f => [f, item[f]]))
         );
 
-      if (mode === 'ads') return {
-        ads: resumeArray(adsItems, ['campanha', 'conta', 'investimento', 'receita', 'roas', 'acos', 'cliques', 'impressoes'], 40),
-      };
-      if (mode === 'estoque') return {
-        estoque: resumeArray(estoqueItems, ['skuPrincipal', 'nome', 'estoqueAtual', 'vmd', 'diasCobertura', 'necessidadeReposicao', 'conta'], 40),
-      };
-      if (mode === 'performance') return {
-        performance: resumeArray(performanceItems, ['sku', 'titulo', 'visitas', 'vendas', 'conversao', 'preco', 'conta'], 40),
-      };
-      if (mode === 'financeiro') return {
-        financeiro: resumeArray(financeiroItems, ['skuPrincipal', 'nome', 'receita', 'margemReal', 'margemPercent', 'custo', 'taxas'], 40),
-      };
-      return {
-        vendas_resumo: {
+      // Dados das planilhas
+      const sheetsContext: any = {};
+      if (mode === 'all' || mode === 'briefing' || mode === 'ads') {
+        sheetsContext.ads_planilha = resumeArray(adsItems, ['campanha', 'conta', 'investimento', 'receita', 'roas', 'acos', 'cliques', 'impressoes', 'idAnuncio'], 50);
+      }
+      if (mode === 'all' || mode === 'briefing' || mode === 'estoque') {
+        sheetsContext.estoque_planilha = resumeArray(estoqueItems, ['skuPrincipal', 'nome', 'estoqueAtual', 'vmd', 'diasCobertura', 'necessidadeReposicao', 'conta'], 40);
+      }
+      if (mode === 'all' || mode === 'briefing' || mode === 'financeiro') {
+        sheetsContext.financeiro = resumeArray(financeiroItems, ['skuPrincipal', 'nome', 'receita', 'margemReal', 'margemPercent', 'custo', 'taxas', 'unidadesVendidas'], 40);
+      }
+      if (mode === 'all' || mode === 'briefing' || mode === 'performance') {
+        sheetsContext.performance = resumeArray(performanceItems, ['sku', 'titulo', 'visitas', 'vendas', 'conversao', 'preco', 'conta'], 40);
+      }
+      if (mode === 'all' || mode === 'briefing') {
+        sheetsContext.vendas_resumo = {
           total_pedidos: vendasItems?.length || 0,
           faturamento_total: vendasItems?.reduce((s: number, v: any) => s + (v.valorTotal || 0), 0).toFixed(2),
-          top_skus: resumeArray(vendasItems, ['sku', 'produto', 'quantidade', 'valorTotal', 'margem'], 10),
+          top_skus: resumeArray(vendasItems, ['sku', 'produto', 'quantidade', 'valorTotal', 'margem', 'liquido', 'conta'], 15),
+        };
+      }
+
+      // Dados da API ML em tempo real (se disponíveis)
+      const mlLiveContext = mlContext ? {
+        estoque_ml_critico: mlContext.estoque_ml?.criticos?.slice(0, 20) || [],
+        estoque_ml_zerado: mlContext.estoque_ml?.zerados?.slice(0, 10) || [],
+        ads_live_hoje: {
+          data: mlContext.ads_live?.data_referencia,
+          gasto_total: mlContext.ads_live?.gasto_total_hoje?.toFixed(2),
+          receita_total: mlContext.ads_live?.receita_total_hoje?.toFixed(2),
+          roas_geral: mlContext.ads_live?.gasto_total_hoje > 0
+            ? (mlContext.ads_live.receita_total_hoje / mlContext.ads_live.gasto_total_hoje).toFixed(2)
+            : 0,
+          campanhas_roas_zero: mlContext.ads_live?.roas_zero?.slice(0, 15) || [],
+          top_performers: mlContext.ads_live?.top_performers?.slice(0, 10) || [],
         },
-        ads_criticos: (adsItems || []).filter((a: any) => a.roas < 2).slice(0, 10).map((a: any) => ({
-          campanha: a.campanha, roas: a.roas, investimento: a.investimento, conta: a.conta,
-        })),
-        estoque_critico: (estoqueItems || []).filter((e: any) => e.diasCobertura < 15).slice(0, 10).map((e: any) => ({
-          sku: e.skuPrincipal, nome: e.nome, diasCobertura: e.diasCobertura, vmd: e.vmd,
-        })),
-        financeiro_resumo: resumeArray(financeiroItems, ['skuPrincipal', 'receita', 'margemPercent'], 10),
-      };
+        fonte: 'API Mercado Livre — tempo real',
+      } : { fonte: 'dados_ml_nao_carregados' };
+
+      const clean = (obj: any) => JSON.parse(JSON.stringify(obj, (_, v) => v === undefined ? null : v));
+      return clean({ ...sheetsContext, ml_realtime: mlLiveContext });
     }
 
     async function callAnalyst(mode: string, question: string) {
       setAiLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        const history = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
         const { data, error } = await supabase.functions.invoke('ai-analyst', {
-          body: { mode, question, context_data: buildContextData(mode) },
-          headers: session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {},
+          body: { mode, question, context_data: buildContextData(mode), history },
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
         });
         if (error) throw new Error(error.message);
-        return data?.answer || 'Sem resposta.';
+        return {
+          answer: data?.answer || 'Sem resposta.',
+          execute_result: data?.execute_result || null,
+          campaigns_data: data?.campaigns_data || null,
+        };
       } catch (err: any) {
-        return `Erro: ${err.message}`;
+        return { answer: `Erro: ${err.message}`, execute_result: null, campaigns_data: null };
       } finally {
         setAiLoading(false);
       }
@@ -385,12 +423,11 @@ export function AtualizarDadosPage() {
       if (briefingDone) return;
       setBriefingLoading(true);
       try {
+        await fetchMLContext('all').catch(() => null);
         const { data: { session } } = await supabase.auth.getSession();
         const { data, error } = await supabase.functions.invoke('ai-analyst', {
           body: { mode: 'briefing', context_data: buildContextData('briefing') },
-          headers: session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {},
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
         });
         if (error) throw new Error(error.message);
         setBriefing(data?.answer || '');
@@ -406,9 +443,14 @@ export function AtualizarDadosPage() {
       if (!chatInput.trim() || !activeCard) return;
       const userMsg = chatInput.trim();
       setChatInput('');
-      setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
-      const answer = await callAnalyst(activeCard, userMsg);
-      setMessages(prev => [...prev, { role: 'ai', text: answer }]);
+      setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+      const result = await callAnalyst(activeCard, userMsg);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: result.answer,
+        execute_result: result.execute_result,
+        campaigns_data: result.campaigns_data,
+      }]);
     }
 
     const CARDS = [
@@ -442,6 +484,16 @@ export function AtualizarDadosPage() {
               {briefingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {briefingLoading ? 'Analisando...' : briefingDone ? '✓ Briefing gerado' : 'Gerar briefing do dia'}
             </button>
+            <button
+              onClick={() => fetchMLContext('all')}
+              disabled={mlContextLoading}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              {mlContextLoading
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando ML...</>
+                : <><RefreshCw className="w-3.5 h-3.5" /> Carregar dados ML</>
+              }
+            </button>
           </div>
 
           {briefingLoading && (
@@ -454,6 +506,17 @@ export function AtualizarDadosPage() {
           {briefing && (
             <div className="prose prose-sm max-w-none text-foreground [&_strong]:text-foreground [&_h2]:text-foreground [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_ul]:mt-1 [&_li]:text-sm [&_li]:text-muted-foreground">
               <ReactMarkdown>{briefing}</ReactMarkdown>
+            </div>
+          )}
+          {mlContext && (
+            <div className="flex items-center gap-2 text-xs text-emerald-400 px-1 mt-2">
+              <CheckCircle2 className="w-3 h-3" />
+              Dados ML ao vivo carregados — {mlContext.timestamp ? new Date(mlContext.timestamp).toLocaleTimeString('pt-BR') : ''}
+              {mlContext.ads_live?.gasto_total_hoje > 0 && (
+                <span className="text-muted-foreground ml-2">
+                  · ADS hoje: R$ {Number(mlContext.ads_live.gasto_total_hoje).toFixed(2)} investido
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -485,9 +548,9 @@ export function AtualizarDadosPage() {
                     onClick={async (e) => {
                       e.stopPropagation();
                       setActiveCard(card.id);
-                      setMessages(prev => [...prev, { role: 'user', text: p }]);
-                      const answer = await callAnalyst(card.id, p);
-                      setMessages(prev => [...prev, { role: 'ai', text: answer }]);
+                      setMessages(prev => [...prev, { role: 'user', content: p }]);
+                      const result = await callAnalyst(card.id, p);
+                      setMessages(prev => [...prev, { role: 'assistant', content: result.answer, execute_result: result.execute_result, campaigns_data: result.campaigns_data }]);
                     }}
                     className="text-[11px] px-2.5 py-1 rounded-full border border-border bg-muted/40 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
                   >
@@ -519,16 +582,48 @@ export function AtualizarDadosPage() {
               )}
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm ${
+                  <div className={`max-w-[88%] px-3 py-2 rounded-xl text-sm ${
                     msg.role === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-foreground'
                   }`}>
-                    {msg.role === 'ai' ? (
-                      <div className="prose prose-sm max-w-none [&_strong]:font-semibold [&_ul]:mt-1 [&_li]:text-sm [&_p]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2">
-                        <ReactMarkdown>{msg.text}</ReactMarkdown>
-                      </div>
-                    ) : msg.text}
+                    {msg.role === 'assistant' ? (
+                      <>
+                        <div className="prose prose-sm max-w-none [&_strong]:font-semibold [&_ul]:mt-1 [&_li]:text-sm [&_p]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-semibold">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                        {msg.execute_result && (
+                          <div className={`mt-2 px-3 py-2 rounded-lg text-xs font-medium ${
+                            msg.execute_result.ok
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {msg.execute_result.message}
+                          </div>
+                        )}
+                        {msg.campaigns_data?.campaigns?.length > 0 && (
+                          <div className="mt-2 space-y-1.5">
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase">
+                              Campanhas de {msg.campaigns_data.sku} — {msg.campaigns_data.conta}
+                            </p>
+                            {msg.campaigns_data.campaigns.map((camp: any, ci: number) => (
+                              <div key={ci} className="px-3 py-2 rounded-lg bg-background/50 border border-border text-xs">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-medium text-foreground truncate">{camp.name}</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    camp.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-muted text-muted-foreground'
+                                  }`}>{camp.status === 'active' ? 'Ativa' : 'Pausada'}</span>
+                                </div>
+                                <div className="flex gap-3 mt-1 text-muted-foreground">
+                                  <span>Budget: R$ {camp.budget}/dia</span>
+                                  <span>ROAS target: {camp.roas_target}x</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : msg.content}
                   </div>
                 </div>
               ))}
