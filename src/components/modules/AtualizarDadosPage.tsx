@@ -355,7 +355,7 @@ export function AtualizarDadosPage() {
         const liq = vendas.reduce((s: number, v: any) => s + (v.liquido || 0), 0);
         const margemPct = fat > 0 ? ((liq / fat) * 100) : 0;
         return (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <KpiCard title="Faturamento Total" value={formatBRL(fat)} icon={DollarSign} delay={0} />
             <KpiCard title="Total Pedidos" value={ped.toLocaleString('pt-BR')} icon={ShoppingCart} delay={50} />
             <KpiCard title="Margem %" value={`${margemPct.toFixed(1)}%`} icon={TrendingUp} delay={100} />
@@ -366,7 +366,7 @@ export function AtualizarDadosPage() {
       })()}
 
       <Tabs defaultValue="alertas" className="space-y-6">
-        <TabsList className="bg-card border border-border">
+        <TabsList className="bg-card border border-border overflow-x-auto flex-nowrap">
           <TabsTrigger value="alertas">🤖 Alertas</TabsTrigger>
           <TabsTrigger value="graficos">Gráficos</TabsTrigger>
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
@@ -389,7 +389,7 @@ export function AtualizarDadosPage() {
         {/* Tab: Alertas - AI Analysis */}
         <TabsContent value="alertas">
           <div className="space-y-6">
-            <div className="bg-gradient-to-br from-primary/10 via-card to-accent/10 border border-border rounded-2xl p-8 text-center animate-fade-in">
+            <div className="bg-gradient-to-br from-primary/10 via-card to-accent/10 border border-border rounded-2xl p-4 md:p-8 text-center animate-fade-in">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/20 mb-4">
                 <Bot className="w-8 h-8 text-primary" />
               </div>
@@ -428,7 +428,7 @@ export function AtualizarDadosPage() {
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground italic"><Loader2 className="w-4 h-4 animate-spin text-primary" /><span>Em breve: IA identificará tendências e oportunidades</span></div>
               </div>
             </div>
-            <div className="bg-card border border-dashed border-primary/30 rounded-xl p-6 text-center animate-fade-in" style={{ animationDelay: '500ms' }}>
+            <div className="bg-card border border-dashed border-primary/30 rounded-xl p-4 md:p-6 text-center animate-fade-in" style={{ animationDelay: '500ms' }}>
               <Bot className="w-10 h-10 text-primary/40 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground mb-1">Agente de IA em Desenvolvimento</p>
               <p className="text-xs text-muted-foreground max-w-md mx-auto">Em breve, um robô inteligente analisará automaticamente todos os seus dados e priorizará as ações mais urgentes.</p>

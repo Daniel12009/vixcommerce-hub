@@ -230,7 +230,7 @@ export function ExpedicaoTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
         <KpiCard title="Total Pendente" value={stats.total.toString()} icon={Layers} delay={0} />
         <KpiCard title="Atrasados" value={stats.atrasados.toString()} icon={AlertTriangle} delay={50} valueColor="text-[hsl(var(--vix-danger))]" />
         <KpiCard title="ML Flex (Hoje)" value={stats.flexPendentes.toString()} icon={Clock} delay={100} valueColor="text-[hsl(var(--vix-warning))]" />

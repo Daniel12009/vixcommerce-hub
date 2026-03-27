@@ -477,7 +477,7 @@ export function EnviosTab() {
   return (
     <div className="space-y-4">
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
         <KpiCard title="Total Envios" value={String(totalEnvios)} icon={Package} delay={0} />
         <KpiCard title="Pendentes" value={String(pendentes)} icon={Clock} delay={50} />
         <KpiCard title="Preparados" value={String(preparados)} icon={Check} delay={100} />

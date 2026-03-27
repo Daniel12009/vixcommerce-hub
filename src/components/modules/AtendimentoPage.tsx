@@ -119,13 +119,13 @@ export function AtendimentoPage() {
         </div>
 
         {/* Search */}
-        <div className="relative ml-auto">
+        <div className="relative w-full md:w-auto md:ml-auto">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar pergunta, produto..."
-            className="pl-8 pr-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs outline-none w-64"
+            className="pl-8 pr-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs outline-none w-full md:w-64"
           />
         </div>
 
@@ -145,15 +145,15 @@ export function AtendimentoPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-amber-400">{unansweredCount}</p>
+          <p className="text-xl md:text-2xl font-bold text-amber-400">{unansweredCount}</p>
           <p className="text-xs text-muted-foreground">Pendentes</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-emerald-400">{answeredCount}</p>
+          <p className="text-xl md:text-2xl font-bold text-emerald-400">{answeredCount}</p>
           <p className="text-xs text-muted-foreground">Respondidas</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-foreground">{filtered.length}</p>
+          <p className="text-xl md:text-2xl font-bold text-foreground">{filtered.length}</p>
           <p className="text-xs text-muted-foreground">Exibindo</p>
         </div>
       </div>

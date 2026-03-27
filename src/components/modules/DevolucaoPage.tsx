@@ -391,7 +391,7 @@ export function DevolucaoPage() {
       {activeTab === 'resumo' && (
         <div className="space-y-6">
           {/* KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             <KpiCard title="Total Devoluções" value={totalDevolucoes.toString()} subtitle={`${totalQtd} unidades`} icon={RotateCcw} trend="" />
             <KpiCard title="Valor Reembolsado" value={formatBRL(totalReembolso)} subtitle={`Ticket: ${totalDevolucoes > 0 ? formatBRL(totalReembolso / totalDevolucoes) : 'R$ 0'}`} icon={DollarSign} trend="" />
             <KpiCard title="Custo Mercadoria" value={formatBRL(totalCusto)} subtitle={`${vendaveis} vendáveis · ${naoVendaveis} não vendáveis`} icon={Package} trend="" />

@@ -245,7 +245,7 @@ export function DashboardPage() {
       <PageHeader title="Dashboard" subtitle="Vendas do dia em tempo real" />
 
       {/* Status + Filters Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-xl p-4 mb-6">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 bg-card border border-border rounded-xl p-3 md:p-4 mb-6">
         <button
           onClick={() => fetchOrders(false)}
           disabled={loading}

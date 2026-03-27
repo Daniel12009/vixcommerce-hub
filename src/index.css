@@ -105,3 +105,26 @@
     @apply text-[hsl(var(--vix-danger))] bg-[hsl(var(--vix-danger)/0.1)];
   }
 }
+
+/* Recharts mobile overflow safety */
+.recharts-wrapper,
+.recharts-surface {
+  max-width: 100% !important;
+}
+
+.recharts-responsive-container {
+  min-width: 0 !important;
+}
+
+/* Prevent charts from overflowing their card on mobile */
+@media (max-width: 768px) {
+  .recharts-responsive-container {
+    font-size: 10px;
+  }
+  .recharts-cartesian-axis-tick-value {
+    font-size: 9px !important;
+  }
+  .recharts-legend-item-text {
+    font-size: 10px !important;
+  }
+}

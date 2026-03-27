@@ -310,7 +310,7 @@ export function EstoquePage() {
           ) : (
             <>
               {/* KPI Row 1: Main metrics */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                 <KpiCard title="Total SKUs" value={String(totalSkus)} icon={Package} delay={0} />
                 <KpiCard title="Em Ruptura" value={String(skusRuptura)} icon={TrendingDown} delay={50} />
                 <KpiCard title="Críticos" value={String(skusCriticos)} icon={AlertTriangle} delay={100} />
@@ -518,7 +518,7 @@ export function EstoquePage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
                 <KpiCard title="SKUs em Transferência" value={String(transferItems.filter(i => i.emTransferencia > 0).length)} icon={ArrowUpDown} delay={0} />
                 <KpiCard title="SKUs com Entrada Pendente" value={String(transferItems.filter(i => i.entradaPendente > 0).length)} icon={Truck} delay={50} />
                 <KpiCard title="Total Itens em Movimento" value={formatNumber(transferItems.reduce((s, i) => s + i.emTransferencia + i.entradaPendente, 0))} icon={Package} delay={100} />
