@@ -1,0 +1,2 @@
+[functions.drive-photos]
+verify_jwt = false
