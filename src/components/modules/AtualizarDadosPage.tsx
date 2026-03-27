@@ -359,7 +359,9 @@ export function AtualizarDadosPage() {
         const { data: { session } } = await supabase.auth.getSession();
         const { data, error } = await supabase.functions.invoke('ai-analyst', {
           body: { mode, question, context_data: buildContextData(mode) },
-          headers: { Authorization: `Bearer ${session?.access_token}` },
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {},
         });
         if (error) throw new Error(error.message);
         return data?.answer || 'Sem resposta.';
@@ -377,7 +379,9 @@ export function AtualizarDadosPage() {
         const { data: { session } } = await supabase.auth.getSession();
         const { data, error } = await supabase.functions.invoke('ai-analyst', {
           body: { mode: 'briefing', context_data: buildContextData('briefing') },
-          headers: { Authorization: `Bearer ${session?.access_token}` },
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {},
         });
         if (error) throw new Error(error.message);
         setBriefing(data?.answer || '');
