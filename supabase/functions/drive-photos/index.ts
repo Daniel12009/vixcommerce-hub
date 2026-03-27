@@ -158,14 +158,31 @@ async function listImages(token: string, folderId: string, sku: string): Promise
         console.log(`Uploaded to storage: ${publicUrl}`);
         results.push(publicUrl);
       } else {
-        const errText = await uploadRes.text();
-        console.error(`Storage upload failed for ${f.name}: ${uploadRes.status} ${errText}`);
-        // Fallback: use Drive public export URL instead of base64
-        results.push(`https://drive.google.com/thumbnail?id=${f.id}&sz=w800`);
+        // Tentar upsert (arquivo pode já existir)
+        const upsertRes = await fetch(
+          `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${filePath}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+              'Content-Type': f.mimeType || 'image/jpeg',
+              'x-upsert': 'true',
+            },
+            body: bytes,
+          }
+        );
+        if (upsertRes.ok) {
+          console.log(`Upserted to storage: ${publicUrl}`);
+          results.push(publicUrl);
+        } else {
+          const errText = await upsertRes.text();
+          console.error(`Upload+upsert failed for ${f.name}: ${errText}`);
+          // Skip this photo — don't add broken URLs
+        }
       }
     } catch (err) {
       console.error(`Image processing error for ${f.id}:`, err);
-      results.push(`https://drive.google.com/uc?export=view&id=${f.id}`);
+      // Skip — don't add fallback URLs that won't render
     }
   }
   return results;
