@@ -403,6 +403,7 @@ export function PlanilhasConfigSection() {
                         <SelectItem value="devolucao">🔄 Devoluções</SelectItem>
                         <SelectItem value="marketplace-dia">📊 Marketplace (Rentabilidade)</SelectItem>
                         <SelectItem value="calculadora">🧮 Calculadora (CMV)</SelectItem>
+                        <SelectItem value="compras">🛒 Compras (S&OP)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
