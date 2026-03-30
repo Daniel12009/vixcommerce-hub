@@ -260,6 +260,24 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
           newVals[a.id] = normalizedSuggested[idUpper];
         } else if (normalizedSuggested[nameUpper]) {
           newVals[a.id] = normalizedSuggested[nameUpper];
+        } else {
+          const matchKey = Object.keys(normalizedSuggested).find(k => {
+            const cleanK = k.replace(/S$/, '');
+            const cleanName = nameUpper.replace(/S$/, '');
+            if (cleanName.includes(cleanK) && cleanK.length > 3) return true;
+            if (cleanK.includes(cleanName) && cleanName.length > 3) return true;
+            if (cleanK.includes('FURO') && cleanName.includes('FURO')) return true;
+            if (cleanK.includes('MONTAGEM') && cleanName.includes('MONTAGEM')) return true;
+            if (cleanK.includes('CONTROLE') && cleanName.includes('CONTROLE')) return true;
+            if (cleanK.includes('LUGAR') && cleanName.includes('COLOCAÇÃO')) return true;
+            if (cleanK.includes('EAN') && cleanName.includes('CÓDIGO UNIVERSAL')) return true;
+            if (cleanK.includes('GTIN') && cleanName.includes('CÓDIGO UNIVERSAL')) return true;
+            if (cleanK.includes('CHUVEIRO') && cleanName.includes('CHUVEIRO')) return true;
+            return false;
+          });
+          if (matchKey) {
+            newVals[a.id] = normalizedSuggested[matchKey];
+          }
         }
 
         if (a.id === 'family_name' && !newVals['family_name']) newVals['family_name'] = editTitle || '';
