@@ -8,6 +8,7 @@ export interface VixUser {
   setor: string;
   role: 'admin' | 'manager' | 'viewer';
   ativo: boolean;
+  allowed_modules?: string[];
 }
 
 interface AuthContextType {
@@ -18,8 +19,8 @@ interface AuthContextType {
   logout: () => void;
   allUsers: VixUser[];
   refreshUsers: () => Promise<void>;
-  createUser: (data: { username: string; password: string; nome: string; setor: string; role: string }) => Promise<{ success: boolean; error?: string }>;
-  updateUser: (id: string, data: Partial<{ nome: string; setor: string; role: string; ativo: boolean; password: string }>) => Promise<{ success: boolean; error?: string }>;
+  createUser: (data: { username: string; password: string; nome: string; setor: string; role: string; allowed_modules?: string[] }) => Promise<{ success: boolean; error?: string }>;
+  updateUser: (id: string, data: Partial<{ nome: string; setor: string; role: string; ativo: boolean; password: string; allowed_modules: string[] }>) => Promise<{ success: boolean; error?: string }>;
   deleteUser: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setor: data.setor,
         role: data.role as VixUser['role'],
         ativo: data.ativo,
+        allowed_modules: data.allowed_modules || [],
       };
 
       setUser(vixUser);
@@ -87,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await (supabase as any)
         .from('vix_users')
-        .select('id, username, nome, setor, role, ativo, created_at')
+        .select('id, username, nome, setor, role, ativo, allowed_modules, created_at')
         .order('created_at', { ascending: true });
 
       if (!error && data) {
@@ -98,12 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setor: u.setor,
           role: u.role,
           ativo: u.ativo,
+          allowed_modules: u.allowed_modules || [],
         })));
       }
     } catch {}
   }, []);
 
-  const createUser = useCallback(async (userData: { username: string; password: string; nome: string; setor: string; role: string }) => {
+  const createUser = useCallback(async (userData: { username: string; password: string; nome: string; setor: string; role: string; allowed_modules?: string[] }) => {
     try {
       const { error } = await (supabase as any)
         .from('vix_users')
@@ -113,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           nome: userData.nome,
           setor: userData.setor,
           role: userData.role,
+          allowed_modules: userData.allowed_modules || [],
         });
 
       if (error) {
@@ -128,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshUsers]);
 
-  const updateUser = useCallback(async (id: string, data: Partial<{ nome: string; setor: string; role: string; ativo: boolean; password: string }>) => {
+  const updateUser = useCallback(async (id: string, data: Partial<{ nome: string; setor: string; role: string; ativo: boolean; password: string; allowed_modules: string[] }>) => {
     try {
       const updateData: any = {};
       if (data.nome !== undefined) updateData.nome = data.nome;
@@ -136,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.role !== undefined) updateData.role = data.role;
       if (data.ativo !== undefined) updateData.ativo = data.ativo;
       if (data.password) updateData.password_hash = data.password;
+      if (data.allowed_modules !== undefined) updateData.allowed_modules = data.allowed_modules;
 
       const { error } = await (supabase as any)
         .from('vix_users')

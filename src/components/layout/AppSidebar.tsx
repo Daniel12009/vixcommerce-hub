@@ -63,7 +63,19 @@ export function AppSidebar({ activeModule, onModuleChange, isOpen, onClose }: Ap
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {modules.map((mod) => {
+          {modules.filter(mod => {
+            if (user?.role === 'admin') return true;
+            if (['dashboard', 'configuracoes'].includes(mod.id)) return true;
+            if (!user?.allowed_modules) return false;
+            
+            // Map sidebar keys to allowed_module keys
+            const sidebarToAllowed: Record<string, string> = {
+              'atualizar': 'performance',
+              'marketing': 'ads',
+            };
+            const checkId = sidebarToAllowed[mod.id] || mod.id;
+            return user.allowed_modules.includes(checkId);
+          }).map((mod) => {
             const isActive = activeModule === mod.id;
             const Icon = mod.icon;
             return (

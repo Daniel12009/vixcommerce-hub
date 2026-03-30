@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Menu } from 'lucide-react';
+import { Menu, Shield } from 'lucide-react';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { LoadingScreen } from '@/components/layout/LoadingScreen';
 import { LoginPage } from '@/components/auth/LoginPage';
@@ -23,7 +23,7 @@ import type { ModuleName } from '@/lib/types';
 function AppContent() {
   const [activeModule, setActiveModule] = useState<ModuleName>('dashboard');
   const { isLoaded } = useSheetsData();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [showSplash, setShowSplash] = useState(false);
   const wasAuthenticated = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -51,7 +51,36 @@ function AppContent() {
     return <LoadingScreen />;
   }
 
+  const checkAccess = (modId: string) => {
+    if (user?.role === 'admin') return true;
+    if (['dashboard', 'configuracoes', 'usuarios'].includes(modId)) return true;
+    const allowed = user?.allowed_modules || [];
+    const sidebarToAllowed: Record<string, string> = {
+      'atualizar': 'performance',
+      'marketing': 'ads',
+    };
+    const checkId = sidebarToAllowed[modId] || modId;
+    return allowed.includes(checkId);
+  };
+
   const renderModule = () => {
+    if (!checkAccess(activeModule)) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4 animate-in fade-in zoom-in duration-300">
+          <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
+            <Shield className="w-8 h-8 text-red-500" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Acesso Restrito</h2>
+            <p className="text-muted-foreground mt-1 max-w-sm mx-auto">Sua conta não tem permissão para visualizar este módulo. Solicite acesso a um administrador.</p>
+          </div>
+          <button onClick={() => setActiveModule('dashboard')} className="px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Voltar ao Início
+          </button>
+        </div>
+      );
+    }
+
     switch (activeModule) {
       case 'dashboard': return <DashboardPage />;
       case 'atualizar': return <AtualizarDadosPage />;
