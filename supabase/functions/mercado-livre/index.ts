@@ -502,6 +502,24 @@ Deno.serve(async (req) => {
         new_item.attributes = new_item.attributes.filter((a: any) => a.id !== 'family_name');
       }
 
+      // Convert shipping dimensions object → ML string format "HxWxL,Weight"
+      // ML expects: height x width x length in cm, weight in grams as string
+      if (new_item.shipping?.dimensions && typeof new_item.shipping.dimensions === 'object') {
+        const d = new_item.shipping.dimensions;
+        if (d.height && d.width && d.length && d.weight) {
+          // Frontend sends mm and grams, ML wants cm and grams in string format
+          const hCm = Math.round(d.height / 10) || d.height;
+          const wCm = Math.round(d.width / 10) || d.width;
+          const lCm = Math.round(d.length / 10) || d.length;
+          const weightG = d.weight;
+          new_item.shipping.dimensions = `${hCm}x${wCm}x${lCm},${weightG}`;
+          console.log('[CREATE] Shipping dimensions converted:', new_item.shipping.dimensions);
+        } else {
+          // Incomplete dimensions — remove to avoid errors
+          delete new_item.shipping.dimensions;
+        }
+      }
+
       console.log('[CREATE] family_name:', new_item.family_name);
       console.log('[CREATE] attributes:', JSON.stringify(new_item.attributes));
       console.log('[CREATE] payload:', JSON.stringify(new_item).slice(0, 800));
@@ -509,7 +527,7 @@ Deno.serve(async (req) => {
       // Smart retry loop — handles ML validation errors automatically
       let result: any;
       let attempts = 0;
-      const maxAttempts = 3;
+      const maxAttempts = 4;
 
       while (attempts < maxAttempts) {
         attempts++;
@@ -548,6 +566,17 @@ Deno.serve(async (req) => {
               }
               continue; // retry
             }
+          }
+
+          // Handle shipping dimension errors — strip dimensions and retry
+          if (errMsg.includes('shipping') && (errMsg.includes('dimensions') || errMsg.includes('Shipping configuration'))) {
+            console.log('[CREATE] Stripping shipping dimensions due to format error');
+            if (new_item.shipping) {
+              delete new_item.shipping.dimensions;
+              // If shipping is now empty, remove it entirely
+              if (Object.keys(new_item.shipping).length === 0) delete new_item.shipping;
+            }
+            continue; // retry
           }
 
           // Unknown error — don't retry
