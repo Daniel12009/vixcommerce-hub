@@ -67,6 +67,7 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterPlataforma, setFilterPlataforma] = useState('all');
   const [filterCanal, setFilterCanal] = useState<CanalFilter>('all');
+  const [filterConta, setFilterConta] = useState('all');
 
   const fetchOrders = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -160,19 +161,23 @@ export function DashboardPage() {
         return c === filterCanal;
       });
     }
+    if (filterConta !== 'all') {
+      items = items.filter(o => (o.conta || 'Sem Conta') === filterConta);
+    }
     return items;
-  }, [orders, filterPlataforma, filterCanal]);
+  }, [orders, filterPlataforma, filterCanal, filterConta]);
 
   const paidOrders = filteredOrders.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
 
-  // Unique platforms
+  // Unique platforms & accounts
   const plataformas = useMemo(() => [...new Set(orders.map(o => o.plataforma || '').filter(Boolean))], [orders]);
+  const contasUnicas = useMemo(() => [...new Set(orders.map(o => o.conta || 'Sem Conta'))].sort(), [orders]);
 
   // KPIs
   const totalPedidos = paidOrders.length;
-  const totalFaturamento = Math.round(paidOrders.reduce((s, o) => s + o.total_amount, 0));
+  const totalFaturamento = paidOrders.reduce((s, o) => s + o.total_amount, 0);
   const totalUnidades = paidOrders.reduce((s, o) => s + o.items.reduce((is, item) => is + item.quantity, 0), 0);
-  const ticketMedio = totalPedidos > 0 ? Math.round(totalFaturamento / totalPedidos) : 0;
+  const ticketMedio = totalPedidos > 0 ? (totalFaturamento / totalPedidos) : 0;
 
   // Faturamento por Plataforma
   const fatPorPlataforma = useMemo(() => {
@@ -184,7 +189,7 @@ export function DashboardPage() {
       cur.pedidos += 1;
       map.set(p, cur);
     });
-    return [...map.values()].map(x => ({ ...x, value: Math.round(x.value) })).sort((a, b) => b.value - a.value);
+    return [...map.values()].sort((a, b) => b.value - a.value);
   }, [paidOrders]);
 
   // Faturamento por Conta (Bar)
@@ -197,7 +202,7 @@ export function DashboardPage() {
       cur.pedidos += 1;
       map.set(c, cur);
     });
-    return [...map.values()].map(x => ({ ...x, faturamento: Math.round(x.faturamento) })).sort((a, b) => b.faturamento - a.faturamento);
+    return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
   }, [paidOrders]);
 
   // Vendas por Hora (Area)
@@ -218,7 +223,7 @@ export function DashboardPage() {
         cur.pedidos += 1;
       }
     });
-    horaMap.forEach(v => hours.push({ ...v, faturamento: Math.round(v.faturamento) }));
+    horaMap.forEach(v => hours.push(v));
     return hours;
   }, [paidOrders]);
 
@@ -234,7 +239,7 @@ export function DashboardPage() {
         map.set(key, cur);
       });
     });
-    return [...map.values()].map(x => ({ ...x, faturamento: Math.round(x.faturamento) })).sort((a, b) => b.vendas - a.vendas).slice(0, 10);
+    return [...map.values()].sort((a, b) => b.vendas - a.vendas).slice(0, 10);
   }, [paidOrders]);
 
   // Últimos pedidos
@@ -283,6 +288,13 @@ export function DashboardPage() {
             <option value="atacado_all">Atacado (Todos)</option>
             <option value="atacado_vf">Atacado VF</option>
             <option value="atacado_alexia">Atacado Alexia</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <select value={filterConta} onChange={(e) => setFilterConta(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+            <option value="all">Todas as Contas</option>
+            {contasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 

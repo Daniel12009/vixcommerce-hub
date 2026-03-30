@@ -242,11 +242,11 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       });
       if (error || !data?.attributes) return;
       setCategoryAttributes(data.attributes);
-      const newVals: Record<string, string> = {};
+      const newVals: Record<string, string> = { ...(draft?.copy?.suggested_attributes || {}) };
       data.attributes.forEach((a: any) => {
-        if (a.id === 'family_name') newVals['family_name'] = editTitle.split(' ').slice(0, 3).join(' ');
-        // BRAND left empty for user to fill
-        if (a.id === 'MODEL') newVals['MODEL'] = sku || '';
+        if (a.id === 'family_name' && !newVals['family_name']) newVals['family_name'] = editTitle || '';
+        // BRAND left empty for user to fill unless AI suggested
+        if (a.id === 'MODEL' && !newVals['MODEL']) newVals['MODEL'] = sku || '';
       });
       setAttrValues(prev => ({ ...prev, ...newVals }));
     } catch { /* ignore */ } finally {
@@ -313,7 +313,7 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       // ALWAYS add attributes — family_name, BRAND and ITEM_CONDITION are required
       // NOTE: family_name will be extracted to body root level by the edge function
       itemPayload.attributes = [
-        { id: 'family_name', value_name: attrValues['family_name']?.trim() || (editTitleSeo || editTitle || '').split(' ').slice(0, 3).join(' ') },
+        { id: 'family_name', value_name: attrValues['family_name']?.trim() || editTitleSeo || editTitle || '' },
         { id: 'BRAND', value_name: attrValues['BRAND']?.trim() || 'Sem marca' },
         { id: 'ITEM_CONDITION', value_name: 'Novo' },
         // Other attributes filled by user

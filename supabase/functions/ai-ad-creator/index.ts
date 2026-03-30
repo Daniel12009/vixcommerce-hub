@@ -134,8 +134,9 @@ Limite: 1 posicionamento, preço em R$, 3-4 diferenciais.`,
     const [copyResult, complianceResult] = await Promise.all([
       callClaude(
         `Você é copywriter especialista em Mercado Livre Brasil. Retorne APENAS JSON válido:
-{"title":string,"title_seo":string,"description":string,"highlights":[string]}
+{"title":string,"title_seo":string,"description":string,"highlights":[string],"suggested_attributes":{"ATRIBUTO":"valor"}}
 REGRAS: título max 60 chars, title_seo max 60 chars com keywords, descrição 200-500 palavras, exatamente 5 highlights com emoji.
+Em "suggested_attributes", inclua atributos técnicos inferidos (ex: "BRAND", "MODEL", "Material", "Linha", "Cor", "Tipo de Produto"). Extraia o máximo possível do nome e descrição.
 Proibido: CAIXA ALTA excessiva, caracteres especiais no título, preços no título.
 Se dimensões estiverem disponíveis, mencione-as na descrição.`,
         `Produto:\n${productContext}
@@ -156,7 +157,7 @@ IMPORTANTE: A categoria real detectada pela API do ML é: ID=${mlCategory.id} No
     ]);
 
     let copy: any = {};
-    try { copy = parseJSON(copyResult); } catch { copy = { title: product_name.slice(0, 60), title_seo: product_name.slice(0, 60), description: '', highlights: [] }; }
+    try { copy = parseJSON(copyResult); } catch { copy = { title: product_name.slice(0, 60), title_seo: product_name.slice(0, 60), description: '', highlights: [], suggested_attributes: {} }; }
 
     let compliance: any = {};
     try { compliance = parseJSON(complianceResult); } catch { compliance = { approved: true, issues: [], category_suggestion: '', category_id_hint: '', warranty_suggestion: '12 meses' }; }
@@ -183,6 +184,7 @@ IMPORTANTE: A categoria real detectada pela API do ML é: ID=${mlCategory.id} No
         title_seo: { value: copy.title_seo || '', status: 'done', aiGenerated: true },
         description: { value: copy.description || '', status: 'done', aiGenerated: true },
         highlights: { value: copy.highlights || [], status: 'done', aiGenerated: true },
+        suggested_attributes: copy.suggested_attributes || {},
       },
       seo: {
         status: 'done',
