@@ -55,12 +55,7 @@ function AppContent() {
     if (user?.role === 'admin') return true;
     if (['dashboard', 'configuracoes', 'usuarios'].includes(modId)) return true;
     const allowed = user?.allowed_modules || [];
-    const sidebarToAllowed: Record<string, string> = {
-      'atualizar': 'performance',
-      'marketing': 'ads',
-    };
-    const checkId = sidebarToAllowed[modId] || modId;
-    return allowed.includes(checkId);
+    return allowed.includes(modId);
   };
 
   const renderModule = () => {

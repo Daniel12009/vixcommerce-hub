@@ -68,13 +68,7 @@ export function AppSidebar({ activeModule, onModuleChange, isOpen, onClose }: Ap
             if (['dashboard', 'configuracoes'].includes(mod.id)) return true;
             if (!user?.allowed_modules) return false;
             
-            // Map sidebar keys to allowed_module keys
-            const sidebarToAllowed: Record<string, string> = {
-              'atualizar': 'performance',
-              'marketing': 'ads',
-            };
-            const checkId = sidebarToAllowed[mod.id] || mod.id;
-            return user.allowed_modules.includes(checkId);
+            return user.allowed_modules.includes(mod.id);
           }).map((mod) => {
             const isActive = activeModule === mod.id;
             const Icon = mod.icon;

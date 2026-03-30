@@ -15,17 +15,15 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 const MODULOS_DISPONIVEIS = [
+  { id: 'atualizar', label: '📈 Performance' },
   { id: 'estoque', label: '📦 Estoque' },
-  { id: 'estoque-full', label: '📦 Estoque Full (ML)' },
-  { id: 'estoque-tiny', label: '🏠 Estoque Tiny' },
-  { id: 'vendas', label: '🛒 Vendas / Pedidos' },
+  { id: 'devolucao', label: '🔄 Devolução' },
   { id: 'financeiro', label: '💰 Financeiro' },
-  { id: 'compras', label: '🛒 ComprasS&OP' },
-  { id: 'performance', label: '📊 Anúncios' },
-  { id: 'ads', label: '📈 ADS' },
-  { id: 'devolucao', label: '🔄 Devoluções' },
-  { id: 'marketplace-dia', label: '📊 Rentabilidade' },
-  { id: 'calculadora', label: '🧮 Calculadora CMV' }
+  { id: 'cadastro', label: '📄 Ficha Técnica' },
+  { id: 'marketing', label: '📢 Ads / Marketing' },
+  { id: 'atendimento', label: '💬 Atendimento' },
+  { id: 'metas', label: '🎯 Metas' },
+  { id: 'compras', label: '🛒 Compras S&OP' }
 ];
 
 export function UserManagementPage({ onBack }: { onBack: () => void }) {
