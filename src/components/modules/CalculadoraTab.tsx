@@ -2,12 +2,7 @@ import { useState, useMemo } from 'react';
 import { Calculator, Search, Loader2, TrendingUp, TrendingDown, Percent, Package, DollarSign, Truck } from 'lucide-react';
 import { formatBRL } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-
-// CMV source sheet
-const CMV_SPREADSHEET_ID = '1BsBp7VvBG5Zps0YKckahzuKjbMO2q1itsVxMXmxP41E';
-const CMV_ABA = 'Custos';
 
 // Marketplace channels with their default commission rates
 const CHANNELS = [
@@ -69,67 +64,44 @@ export function CalculadoraTab() {
 
   const cmv = cmvSource === 'auto' && cmvFromSheet !== null ? cmvFromSheet : cmvManual;
 
-  // Search SKU — fetch CMV from Google Sheets "Custos" tab
-  async function handleSearch() {
+  // Search SKU — lookup CMV from context (cmvItems from Planilhas import)
+  function handleSearch() {
     if (!skuInput.trim()) return;
     setLoading(true);
     const sku = skuInput.trim().toUpperCase();
     setActiveSku(sku);
     setCmvFromSheet(null);
 
-    try {
-      // Fetch Custos tab from Google Sheets
-      const { data, error } = await supabase.functions.invoke('google-sheets', {
-        body: { action: 'read', spreadsheetId: CMV_SPREADSHEET_ID, range: `${CMV_ABA}!A:B` },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      const rows: string[][] = data.values || [];
-      // Find matching SKU (col A), CMV is col B
-      const match = rows.find(row =>
-        row[0]?.trim().toUpperCase() === sku
-      );
-      if (match && match[1]) {
-        const val = parseFloat(match[1].replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.'));
-        if (!isNaN(val) && val > 0) {
-          setCmvFromSheet(val);
-          setCmvSource('auto');
-          toast.success(`CMV encontrado: ${formatBRL(val)}`);
-        } else {
-          setCmvSource('manual');
-          toast.info('SKU encontrado mas CMV inválido — insira manualmente');
-        }
-      } else {
-        // Fallback: try financeiroItems
-        const finMatch = sheetsData.financeiroItems?.find(
-          f => f.skuPrincipal?.toUpperCase() === sku
-        );
-        if (finMatch?.custo && finMatch.custo > 0) {
-          setCmvFromSheet(finMatch.custo);
-          setCmvSource('auto');
-          toast.success(`CMV do financeiro: ${formatBRL(finMatch.custo)}`);
-        } else {
-          setCmvSource('manual');
-          toast.info('SKU não encontrado na planilha Custos — insira CMV manualmente');
-        }
-      }
-    } catch (err) {
-      console.warn('[Calculadora] CMV fetch failed:', err);
-      // Fallback to financeiroItems
-      const finMatch = sheetsData.financeiroItems?.find(
-        f => f.skuPrincipal?.toUpperCase() === sku
-      );
-      if (finMatch?.custo && finMatch.custo > 0) {
-        setCmvFromSheet(finMatch.custo);
-        setCmvSource('auto');
-      } else {
-        setCmvSource('manual');
-        toast.warning('Não foi possível buscar CMV — insira manualmente');
-      }
-    } finally {
+    // 1) Try cmvItems (from Calculadora module in Planilhas config)
+    const cmvMatch = sheetsData.cmvItems?.find(r => r.sku === sku);
+    if (cmvMatch && cmvMatch.cmv > 0) {
+      setCmvFromSheet(cmvMatch.cmv);
+      setCmvSource('auto');
+      toast.success(`CMV encontrado: ${formatBRL(cmvMatch.cmv)}`);
       setLoading(false);
+      return;
     }
+
+    // 2) Fallback: try financeiroItems
+    const finMatch = sheetsData.financeiroItems?.find(
+      f => f.skuPrincipal?.toUpperCase() === sku
+    );
+    if (finMatch?.custo && finMatch.custo > 0) {
+      setCmvFromSheet(finMatch.custo);
+      setCmvSource('auto');
+      toast.success(`CMV do financeiro: ${formatBRL(finMatch.custo)}`);
+      setLoading(false);
+      return;
+    }
+
+    // 3) Not found — manual
+    setCmvSource('manual');
+    if (!sheetsData.cmvItems || sheetsData.cmvItems.length === 0) {
+      toast.info('Dados CMV não importados. Vá em Configurações → Planilhas e adicione a planilha de Custos com módulo 🧮 Calculadora (CMV)');
+    } else {
+      toast.info(`SKU "${sku}" não encontrado — insira CMV manualmente`);
+    }
+    setLoading(false);
   }
 
   // Calculate margins for each channel

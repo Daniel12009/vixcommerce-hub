@@ -13,6 +13,7 @@ interface SheetsData {
   adsItems: AdsImportItem[] | null;
   devolucaoItems: DevolucaoItem[] | null;
   marketplaceDiaItems: MarketplaceDiaItem[] | null;
+  cmvItems: { sku: string; cmv: number }[] | null;
   isLoaded: boolean;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setEstoqueFullFromSheet: (rows: Record<string, string>[]) => void;
@@ -23,6 +24,7 @@ interface SheetsData {
   setAdsFromSheet: (rows: Record<string, string>[]) => void;
   setDevolucaoFromSheet: (rows: Record<string, string>[]) => void;
   setMarketplaceDiaFromSheet: (rows: Record<string, string>[]) => void;
+  setCmvFromSheet: (rows: Record<string, string>[]) => void;
   clearEstoque: () => void;
   clearEstoqueFull: () => void;
   clearEstoqueTiny: () => void;
@@ -32,6 +34,7 @@ interface SheetsData {
   clearAds: () => void;
   clearDevolucao: () => void;
   clearMarketplaceDia: () => void;
+  clearCmv: () => void;
   refreshModule: (modulo: ModuloDestino) => Promise<number>;
   refreshingModule: string | null;
 }
@@ -61,6 +64,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
   const [devolucaoItems, setDevolucaoItems] = useState<DevolucaoItem[] | null>(null);
   const [marketplaceDiaItems, setMarketplaceDiaItems] = useState<MarketplaceDiaItem[] | null>(null);
+  const [cmvItems, setCmvItems] = useState<{ sku: string; cmv: number }[] | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [refreshingModule, setRefreshingModule] = useState<string | null>(null);
 
@@ -300,6 +304,22 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       }));
     setMarketplaceDiaItems(items);
   }, []);
+
+  const setCmvFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const num = (v: string | undefined) => {
+      if (!v) return 0;
+      const cleaned = v.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+      return parseFloat(cleaned) || 0;
+    };
+    const items = rows
+      .filter(r => r.sku)
+      .map(r => ({
+        sku: r.sku.trim().toUpperCase(),
+        cmv: num(r.cmv),
+      }))
+      .filter(r => r.cmv > 0);
+    setCmvItems(items);
+  }, []);
   useEffect(() => {
     // ━━━ PHASE 0: Instant load from localStorage (synchronous) ━━━
     const KEYS_MAP: [string, (d: any) => void][] = [
@@ -310,6 +330,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       ['ads_data', setAdsFromSheet],
       ['devolucao_data', setDevolucaoFromSheet],
       ['marketplace_dia_data', setMarketplaceDiaFromSheet],
+      ['cmv_data', setCmvFromSheet],
     ];
 
     let hasLocalData = false;
@@ -376,13 +397,14 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
           else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
           else if (mod === 'marketplace-dia') { setMarketplaceDiaFromSheet(parsed); saveToCloud('marketplace_dia_data', parsed); }
+          else if (mod === 'calculadora') { setCmvFromSheet(parsed); saveToCloud('cmv_data', parsed); }
         }
       } catch (err) {
         console.warn('[AutoImport] Background sheets import failed:', err);
       }
     };
     backgroundRefresh();
-  }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet, setMarketplaceDiaFromSheet]);
+  }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet, setMarketplaceDiaFromSheet, setCmvFromSheet]);
 
   return (
     <SheetsDataContext.Provider value={{
@@ -395,6 +417,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       adsItems,
       devolucaoItems,
       marketplaceDiaItems,
+      cmvItems,
       isLoaded,
       setEstoqueFromSheet,
       setEstoqueFullFromSheet,
@@ -405,6 +428,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       setAdsFromSheet,
       setDevolucaoFromSheet,
       setMarketplaceDiaFromSheet,
+      setCmvFromSheet,
       clearEstoque: () => setEstoqueItems(null),
       clearEstoqueFull: () => setEstoqueFullItems(null),
       clearEstoqueTiny: () => setEstoqueTinyItems(null),
@@ -414,6 +438,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       clearAds: () => setAdsItems(null),
       clearDevolucao: () => setDevolucaoItems(null),
       clearMarketplaceDia: () => setMarketplaceDiaItems(null),
+      clearCmv: () => setCmvItems(null),
       refreshModule: async (modulo: ModuloDestino) => {
         setRefreshingModule(modulo);
         try {
@@ -438,6 +463,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
             else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
             else if (mod === 'marketplace-dia') { setMarketplaceDiaFromSheet(parsed); saveToCloud('marketplace_dia_data', parsed); }
+            else if (mod === 'calculadora') { setCmvFromSheet(parsed); saveToCloud('cmv_data', parsed); }
           }
           return totalImported;
         } catch (err) {

@@ -47,6 +47,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   ads: 'Performance ADS',
   devolucao: 'Devoluções',
   'marketplace-dia': 'Marketplace',
+  calculadora: 'Calculadora',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
@@ -59,6 +60,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   ads: 'bg-[hsl(142,76%,36%,0.1)] text-[hsl(142,76%,36%)]',
   devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
   'marketplace-dia': 'bg-[hsl(270,70%,55%,0.1)] text-[hsl(270,70%,55%)]',
+  calculadora: 'bg-[hsl(220,70%,55%,0.1)] text-[hsl(220,70%,55%)]',
 };
 
 // Vendas Table Columns state
