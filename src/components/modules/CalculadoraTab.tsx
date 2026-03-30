@@ -6,14 +6,14 @@ import { toast } from 'sonner';
 
 // Marketplace channels with their default commission rates
 const CHANNELS = [
-  { id: 'ml_classico', name: 'ML Clássico', comissao: 14, frete: 0, icon: '🟡' },
-  { id: 'ml_premium', name: 'ML Premium', comissao: 19, frete: 0, icon: '🟡' },
-  { id: 'amazon_seller', name: 'Amazon Seller', comissao: 15, frete: 0, icon: '🟠' },
-  { id: 'amazon_fba', name: 'Amazon FBA', comissao: 25, frete: 0, icon: '🟠' },
-  { id: 'shopee', name: 'Shopee', comissao: 20, frete: 0, icon: '🔴' },
+  { id: 'ml_classico', name: 'ML Clássico', comissao: 14, frete: 5.38, icon: '🟡' },
+  { id: 'ml_premium', name: 'ML Premium', comissao: 19, frete: 6.25, icon: '🟡' },
+  { id: 'amazon_seller', name: 'Amazon Seller', comissao: 15, frete: 6.00, icon: '🟠' },
+  { id: 'amazon_fba', name: 'Amazon FBA', comissao: 25, frete: 22.95, icon: '🟠' },
+  { id: 'shopee', name: 'Shopee', comissao: 20, frete: 6.00, icon: '🔴' },
   { id: 'shein', name: 'Shein', comissao: 20, frete: 0, icon: '⚫' },
-  { id: 'leroy', name: 'Leroy Merlin', comissao: 15, frete: 0, icon: '🟢' },
-  { id: 'tiktok', name: 'Tik Tok Shop', comissao: 10, frete: 0, icon: '⬛' },
+  { id: 'leroy', name: 'Leroy Merlin', comissao: 15, frete: 5.35, icon: '🟢' },
+  { id: 'tiktok', name: 'Tik Tok Shop', comissao: 10, frete: 4.00, icon: '⬛' },
   { id: 'olist', name: 'Olist', comissao: 15, frete: 0, icon: '🟣' },
   { id: 'aliexpress', name: 'Ali Express', comissao: 12, frete: 0, icon: '🔶' },
   { id: 'temu', name: 'Temu', comissao: 15, frete: 0, icon: '🟧' },
