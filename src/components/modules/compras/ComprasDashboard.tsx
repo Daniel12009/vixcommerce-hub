@@ -1,8 +1,12 @@
 import { useMemo } from 'react';
 import { Card } from '@/components/ui/card';
-import { AlertTriangle, TrendingUp, PackageSearch, DollarSign, Box } from 'lucide-react';
+import { AlertTriangle, TrendingUp, PackageSearch, DollarSign, Box, Target, Combine, BarChart3 } from 'lucide-react';
 import type { EstimativaCompraItem } from '@/lib/types';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, CartesianGrid, XAxis, YAxis, BarChart, Bar } from 'recharts';
+import { 
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, 
+  CartesianGrid, XAxis, YAxis, BarChart, Bar, Legend,
+  ScatterChart, Scatter, ZAxis, AreaChart, Area 
+} from 'recharts';
 
 interface ComprasDashboardProps {
   data: EstimativaCompraItem[];
@@ -38,7 +42,7 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
 
   const formatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  // Pegar os itens mais críticos: Curva A e com ruptura próxima (ordem crescente de dias)
+  // Pegar os itens mais críticos: Curva A/B e com ruptura próxima
   const itensCriticos = useMemo(() => {
     return [...data]
       .filter(i => {
@@ -52,6 +56,61 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
       })
       .slice(0, 10);
   }, [data]);
+
+  // NOVOS DADOS PARA GRÁFICOS AVANÇADOS
+
+  // 1. Rentabilidade por Categoria (Top 8)
+  const dadosCategoria = useMemo(() => {
+    const map = new Map<string, { categoria: string; investimento: number; lucroEsperado: number; cbm: number }>();
+    data.forEach(d => {
+      const cat = d.categoria?.trim() || 'Sem Categoria';
+      const inv = d.custoTotalPedido || 0;
+      const lucro = (d.cbmTotal || 0) * (d.lucroPorCBM || 0);
+      const cb = d.cbmTotal || 0;
+      
+      if (!map.has(cat)) map.set(cat, { categoria: cat, investimento: 0, lucroEsperado: 0, cbm: 0 });
+      const old = map.get(cat)!;
+      old.investimento += inv;
+      old.lucroEsperado += lucro;
+      old.cbm += cb;
+    });
+    return Array.from(map.values())
+      .sort((a,b) => b.investimento - a.investimento)
+      .slice(0, 8);
+  }, [data]);
+
+  // 2. Scatter CBM Eficiência (Top 50 por investimento)
+  const dadosScatterCBM = useMemo(() => {
+    return data
+      .filter(d => d.cbmTotal > 0 && d.custoTotalPedido > 0)
+      .map(d => ({
+        sku: d.sku,
+        cbmTotal: Number(d.cbmTotal.toFixed(2)),
+        lucroCBM: Number((d.lucroPorCBM || 0).toFixed(2)),
+        investimento: Math.round(d.custoTotalPedido),
+        categoria: d.categoria
+      }))
+      .sort((a,b) => b.investimento - a.investimento)
+      .slice(0, 50);
+  }, [data]);
+
+  // 3. Demanda S&OP (Jan-Abr)
+  const dadosProjecaoSOP = useMemo(() => {
+    let jan = 0, fev = 0, mar = 0, abr = 0;
+    data.forEach(d => {
+      jan += typeof d.janSOP === 'number' ? d.janSOP : 0;
+      fev += typeof d.fevSOP === 'number' ? d.fevSOP : 0;
+      mar += typeof d.marSOP === 'number' ? d.marSOP : 0;
+      abr += typeof d.abrSOP === 'number' ? d.abrSOP : 0;
+    });
+    return [
+      { mes: 'Janeiro', demanda: jan },
+      { mes: 'Fevereiro', demanda: fev },
+      { mes: 'Março', demanda: mar },
+      { mes: 'Abril', demanda: abr },
+    ];
+  }, [data]);
+
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -123,9 +182,9 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
         </Card>
       </div>
 
+      {/* DASHBOARD MEIO: Tabela de Críticos e Gráfico ABC */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
-        {/* Gráfico Principal Lateral */}
         <div className="xl:col-span-1 flex flex-col gap-6">
           <Card className="p-6 flex-1 border-none shadow-md bg-card/50 backdrop-blur-sm">
             <h3 className="text-sm font-bold text-foreground mb-1 outline-none uppercase tracking-wider">Investimento Inteligente</h3>
@@ -201,7 +260,7 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <span className="font-semibold text-foreground">{item.mediaVendaDiaria.toFixed(1)}</span>
+                        <span className="font-semibold text-foreground">{item.mediaVendaDiaria?.toFixed(1) || '0'}</span>
                         <span className="text-[10px] text-muted-foreground ml-1 block">un/dia</span>
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -245,6 +304,110 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
           </Card>
         </div>
 
+      </div>
+
+      {/* DASHBOARD BOTTOM: NOVOS GRÁFICOS ANALÍTICOS */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+        
+        {/* Gráfico de Rentabilidade por Categoria */}
+        <Card className="p-6 border-none shadow-md bg-card/50 backdrop-blur-sm">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-foreground mb-1 outline-none uppercase tracking-wider flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-emerald-500" /> Investimento vs Lucro Projetado
+              </h3>
+              <p className="text-xs text-muted-foreground">Top Categorias (R$)</p>
+            </div>
+          </div>
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dadosCategoria} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="categoria" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <RechartsTooltip 
+                  formatter={(value: number, name: string) => [formatter.format(value), name === 'investimento' ? 'Investimento' : 'Lucro Esperado']}
+                  contentStyle={{ backgroundColor: 'rgba(15,23,42,0.9)', border: 'none', borderRadius: '8px', color: '#fff' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                <Bar dataKey="investimento" name="Investimento" fill="#3B82F6" radius={[4,4,0,0]} barSize={20} />
+                <Bar dataKey="lucroEsperado" name="Lucro Esperado" fill="#10B981" radius={[4,4,0,0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        {/* Gráfico Scatter de CBM */}
+        <Card className="p-6 border-none shadow-md bg-card/50 backdrop-blur-sm">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-foreground mb-1 outline-none uppercase tracking-wider flex items-center gap-2">
+                <Target className="w-4 h-4 text-amber-500" /> Eficiência de Importação (CBM)
+              </h3>
+              <p className="text-xs text-muted-foreground">Volume(m³) vs Rentabilidade(R$/m³) - Top 50 SKUs</p>
+            </div>
+          </div>
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis type="number" dataKey="cbmTotal" name="CBM" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `${v}m³`} />
+                <YAxis type="number" dataKey="lucroCBM" name="Lucro/CBM" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `R$${v}`} />
+                <ZAxis type="number" dataKey="investimento" range={[60, 400]} name="Investimento (R$)" />
+                <RechartsTooltip 
+                  cursor={{ strokeDasharray: '3 3' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow-xl text-xs space-y-1">
+                          <p className="font-bold text-white mb-2">{d.sku}</p>
+                          <p className="text-slate-300">Volume: <span className="font-semibold text-amber-400">{d.cbmTotal} m³</span></p>
+                          <p className="text-slate-300">Lucratividade: <span className="font-semibold text-emerald-400">{formatter.format(d.lucroCBM)}/m³</span></p>
+                          <p className="text-slate-300">Investimento: <span className="font-semibold text-blue-400">{formatter.format(d.investimento)}</span></p>
+                        </div>
+                      )
+                    }
+                    return null;
+                  }}
+                />
+                <Scatter data={dadosScatterCBM} fill="#F59E0B" fillOpacity={0.6} stroke="#D97706" />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+      </div>
+
+      <div className="grid grid-cols-1 mt-6">
+        <Card className="p-6 border-none shadow-md bg-card/50 backdrop-blur-sm">
+          <div className="mb-6">
+            <h3 className="text-sm font-bold text-foreground mb-1 outline-none uppercase tracking-wider flex items-center gap-2">
+              <Combine className="w-4 h-4 text-purple-500" /> Projeção de Demanda S&OP
+            </h3>
+            <p className="text-xs text-muted-foreground">Volume agregado de previsão estatística de vendas (Unidades)</p>
+          </div>
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dadosProjecaoSOP} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorDemanda" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <RechartsTooltip 
+                  formatter={(value: number) => [`${value} unidades`, 'Projeção S&OP']}
+                  contentStyle={{ backgroundColor: 'rgba(15,23,42,0.9)', border: 'none', borderRadius: '8px', color: '#fff' }}
+                />
+                <Area type="monotone" dataKey="demanda" stroke="#8B5CF6" strokeWidth={3} fillOpacity={1} fill="url(#colorDemanda)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
       </div>
     </div>
   );
