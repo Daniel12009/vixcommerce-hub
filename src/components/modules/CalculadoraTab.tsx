@@ -2,6 +2,12 @@ import { useState, useMemo } from 'react';
 import { Calculator, Search, Loader2, TrendingUp, TrendingDown, Percent, Package, DollarSign, Truck } from 'lucide-react';
 import { formatBRL } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+// CMV source sheet
+const CMV_SPREADSHEET_ID = '1BsBp7VvBG5Zps0YKckahzuKjbMO2q1itsVxMXmxP41E';
+const CMV_ABA = 'Custos';
 
 // Marketplace channels with their default commission rates
 const CHANNELS = [
@@ -46,6 +52,7 @@ export function CalculadoraTab() {
   const [skuInput, setSkuInput] = useState('');
   const [activeSku, setActiveSku] = useState('');
   const [cmvManual, setCmvManual] = useState<number>(0);
+  const [cmvFromSheet, setCmvFromSheet] = useState<number | null>(null);
   const [cmvSource, setCmvSource] = useState<'auto' | 'manual'>('auto');
   const [loading, setLoading] = useState(false);
 
@@ -60,31 +67,69 @@ export function CalculadoraTab() {
     CHANNELS.map(c => ({ ...c, precoVenda: 0, frete: 0 }))
   );
 
-  // Try to find CMV from financeiroItems
-  const cmvFromSheet = useMemo(() => {
-    if (!activeSku || !sheetsData.financeiroItems) return null;
-    const match = sheetsData.financeiroItems.find(
-      f => f.skuPrincipal?.toLowerCase() === activeSku.toLowerCase()
-    );
-    return match?.custo ?? null;
-  }, [activeSku, sheetsData.financeiroItems]);
-
   const cmv = cmvSource === 'auto' && cmvFromSheet !== null ? cmvFromSheet : cmvManual;
 
-  // Search SKU
-  function handleSearch() {
+  // Search SKU — fetch CMV from Google Sheets "Custos" tab
+  async function handleSearch() {
     if (!skuInput.trim()) return;
     setLoading(true);
-    setActiveSku(skuInput.trim().toUpperCase());
-    // Check if we found CMV from sheets
-    setTimeout(() => {
-      setLoading(false);
-      if (cmvFromSheet !== null) {
+    const sku = skuInput.trim().toUpperCase();
+    setActiveSku(sku);
+    setCmvFromSheet(null);
+
+    try {
+      // Fetch Custos tab from Google Sheets
+      const { data, error } = await supabase.functions.invoke('google-sheets', {
+        body: { action: 'read', spreadsheetId: CMV_SPREADSHEET_ID, range: `${CMV_ABA}!A:B` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const rows: string[][] = data.values || [];
+      // Find matching SKU (col A), CMV is col B
+      const match = rows.find(row =>
+        row[0]?.trim().toUpperCase() === sku
+      );
+      if (match && match[1]) {
+        const val = parseFloat(match[1].replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.'));
+        if (!isNaN(val) && val > 0) {
+          setCmvFromSheet(val);
+          setCmvSource('auto');
+          toast.success(`CMV encontrado: ${formatBRL(val)}`);
+        } else {
+          setCmvSource('manual');
+          toast.info('SKU encontrado mas CMV inválido — insira manualmente');
+        }
+      } else {
+        // Fallback: try financeiroItems
+        const finMatch = sheetsData.financeiroItems?.find(
+          f => f.skuPrincipal?.toUpperCase() === sku
+        );
+        if (finMatch?.custo && finMatch.custo > 0) {
+          setCmvFromSheet(finMatch.custo);
+          setCmvSource('auto');
+          toast.success(`CMV do financeiro: ${formatBRL(finMatch.custo)}`);
+        } else {
+          setCmvSource('manual');
+          toast.info('SKU não encontrado na planilha Custos — insira CMV manualmente');
+        }
+      }
+    } catch (err) {
+      console.warn('[Calculadora] CMV fetch failed:', err);
+      // Fallback to financeiroItems
+      const finMatch = sheetsData.financeiroItems?.find(
+        f => f.skuPrincipal?.toUpperCase() === sku
+      );
+      if (finMatch?.custo && finMatch.custo > 0) {
+        setCmvFromSheet(finMatch.custo);
         setCmvSource('auto');
       } else {
         setCmvSource('manual');
+        toast.warning('Não foi possível buscar CMV — insira manualmente');
       }
-    }, 300);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Calculate margins for each channel
