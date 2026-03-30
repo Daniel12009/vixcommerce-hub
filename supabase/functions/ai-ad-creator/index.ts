@@ -37,8 +37,18 @@ async function callClaude(systemPrompt: string, userContent: string, maxTokens =
 }
 
 function parseJSON(text: string): any {
-  const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(clean);
+  try {
+    const clean = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(clean);
+  } catch (e) {
+    // Try to extract just the JSON object if there's surrounding text
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      try { return JSON.parse(match[0]); } catch { /* ignore and throw original */ }
+    }
+    console.error('JSON Parse Error. Raw text:', text.substring(0, 200) + '...');
+    throw e;
+  }
 }
 
 async function predictCategory(productName: string): Promise<{ id: string; name: string; path: string[] }> {
@@ -143,7 +153,7 @@ Se dimensões estiverem disponíveis, mencione-as na descrição.`,
 Posicionamento: ${strategy.positioning}
 Diferenciais: ${strategy.key_differentials?.join(', ') || ''}
 Keywords: ${seo.primary_keywords?.join(', ') || ''}, ${seo.secondary_keywords?.join(', ') || ''}`,
-        1200
+        2000
       ),
       callClaude(
         `Você valida anúncios do Mercado Livre Brasil. Retorne APENAS JSON válido:

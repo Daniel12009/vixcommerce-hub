@@ -242,8 +242,26 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       });
       if (error || !data?.attributes) return;
       setCategoryAttributes(data.attributes);
-      const newVals: Record<string, string> = { ...(draft?.copy?.suggested_attributes || {}) };
+      const rawSuggested = draft?.copy?.suggested_attributes || {};
+      const newVals: Record<string, string> = { ...rawSuggested };
+      
+      // Normalize to handle AI returning "Material" when ML wants "MATERIAL"
+      const normalizedSuggested: Record<string, string> = {};
+      Object.entries(rawSuggested).forEach(([k, v]) => {
+        normalizedSuggested[k.toUpperCase()] = String(v);
+      });
+
       data.attributes.forEach((a: any) => {
+        const idUpper = a.id.toUpperCase();
+        const nameUpper = a.name.toUpperCase();
+        
+        // Attempt to match by ML ID or by ML Name
+        if (normalizedSuggested[idUpper]) {
+          newVals[a.id] = normalizedSuggested[idUpper];
+        } else if (normalizedSuggested[nameUpper]) {
+          newVals[a.id] = normalizedSuggested[nameUpper];
+        }
+
         if (a.id === 'family_name' && !newVals['family_name']) newVals['family_name'] = editTitle || '';
         // BRAND left empty for user to fill unless AI suggested
         if (a.id === 'MODEL' && !newVals['MODEL']) newVals['MODEL'] = sku || '';
