@@ -505,7 +505,33 @@ Deno.serve(async (req) => {
       console.log('[CREATE] family_name:', new_item.family_name);
       console.log('[CREATE] attributes:', JSON.stringify(new_item.attributes));
       console.log('[CREATE] payload:', JSON.stringify(new_item).slice(0, 800));
-      const result = await mlFetchWrite(account, '/items', 'POST', new_item);
+
+      // Attempt 1: full payload
+      let result: any;
+      try {
+        result = await mlFetchWrite(account, '/items', 'POST', new_item);
+      } catch (err: any) {
+        const errMsg = err.message || '';
+        // If ML says certain fields are invalid (User Products categories), strip them and retry
+        if (errMsg.includes('body.invalid_fields')) {
+          const invalidFields: string[] = [];
+          if (errMsg.includes('title')) invalidFields.push('title');
+          if (errMsg.includes('condition')) invalidFields.push('condition');
+          
+          if (invalidFields.length > 0) {
+            console.log(`[CREATE] Retrying without invalid fields: ${invalidFields.join(', ')}`);
+            for (const f of invalidFields) {
+              delete new_item[f];
+            }
+            result = await mlFetchWrite(account, '/items', 'POST', new_item);
+          } else {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+
       console.log('[CREATE_ITEM] ML response:', JSON.stringify(result).slice(0, 1000));
       // Return full result including ML error details
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
