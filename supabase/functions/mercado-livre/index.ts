@@ -506,28 +506,51 @@ Deno.serve(async (req) => {
       console.log('[CREATE] attributes:', JSON.stringify(new_item.attributes));
       console.log('[CREATE] payload:', JSON.stringify(new_item).slice(0, 800));
 
-      // Attempt 1: full payload
+      // Smart retry loop — handles ML validation errors automatically
       let result: any;
-      try {
-        result = await mlFetchWrite(account, '/items', 'POST', new_item);
-      } catch (err: any) {
-        const errMsg = err.message || '';
-        // If ML says certain fields are invalid (User Products categories), strip them and retry
-        if (errMsg.includes('body.invalid_fields')) {
-          const invalidFields: string[] = [];
-          if (errMsg.includes('title')) invalidFields.push('title');
-          if (errMsg.includes('condition')) invalidFields.push('condition');
-          
-          if (invalidFields.length > 0) {
-            console.log(`[CREATE] Retrying without invalid fields: ${invalidFields.join(', ')}`);
-            for (const f of invalidFields) {
-              delete new_item[f];
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          result = await mlFetchWrite(account, '/items', 'POST', new_item);
+          break; // success
+        } catch (err: any) {
+          const errMsg = err.message || '';
+          console.log(`[CREATE] Attempt ${attempts} failed: ${errMsg.slice(0, 300)}`);
+
+          // Handle body.invalid_fields — User Products categories don't accept title/condition
+          if (errMsg.includes('body.invalid_fields')) {
+            const invalidFields: string[] = [];
+            if (errMsg.includes('title')) invalidFields.push('title');
+            if (errMsg.includes('condition')) invalidFields.push('condition');
+            if (invalidFields.length > 0) {
+              console.log(`[CREATE] Stripping invalid fields: ${invalidFields.join(', ')}`);
+              for (const f of invalidFields) delete new_item[f];
+              continue; // retry
             }
-            result = await mlFetchWrite(account, '/items', 'POST', new_item);
-          } else {
-            throw err;
           }
-        } else {
+
+          // Handle missing_conditional_required — required attributes like GTIN
+          if (errMsg.includes('missing_conditional_required') || errMsg.includes('attributes') && errMsg.includes('required')) {
+            // Extract attribute IDs from error: "The attributes [GTIN] are required..."
+            const attrMatch = errMsg.match(/attributes\s*\[([^\]]+)\]/);
+            if (attrMatch) {
+              const missingAttrs = attrMatch[1].split(',').map((a: string) => a.trim());
+              if (!new_item.attributes) new_item.attributes = [];
+              for (const attrId of missingAttrs) {
+                // Only add if not already present
+                if (!new_item.attributes.find((a: any) => a.id === attrId)) {
+                  console.log(`[CREATE] Auto-adding required attribute: ${attrId} = "Não se aplica"`);
+                  new_item.attributes.push({ id: attrId, value_name: 'Não se aplica' });
+                }
+              }
+              continue; // retry
+            }
+          }
+
+          // Unknown error — don't retry
           throw err;
         }
       }
