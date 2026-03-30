@@ -310,15 +310,20 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
         };
       }
 
-      // ALWAYS add attributes — family_name and BRAND are required for all physical ML categories
+      // ALWAYS add attributes — family_name, BRAND and ITEM_CONDITION are required
+      // NOTE: family_name will be extracted to body root level by the edge function
       itemPayload.attributes = [
         { id: 'family_name', value_name: attrValues['family_name']?.trim() || (editTitleSeo || editTitle || '').split(' ').slice(0, 3).join(' ') },
         { id: 'BRAND', value_name: attrValues['BRAND']?.trim() || 'Sem marca' },
+        { id: 'ITEM_CONDITION', value_name: 'Novo' },
         // Other attributes filled by user
         ...Object.entries(attrValues || {})
-          .filter(([id, val]) => id !== 'BRAND' && id !== 'family_name' && val?.trim())
+          .filter(([id, val]) => id !== 'BRAND' && id !== 'family_name' && id !== 'ITEM_CONDITION' && val?.trim())
           .map(([id, value]) => ({ id, value_name: String(value).trim() })),
       ];
+
+      // Channels — required per ML API (replaces deprecated exclusive_channel)
+      itemPayload.channels = ['marketplace'];
       console.log('[PUBLISH] attributes:', JSON.stringify(itemPayload.attributes));
       console.log('[PUBLISH] FULL PAYLOAD:', JSON.stringify(itemPayload, null, 2));
 
