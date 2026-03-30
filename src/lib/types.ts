@@ -129,7 +129,7 @@ export interface DevolucaoItem {
   retornoDevolucao: string;
 }
 
-export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar' | 'devolucao' | 'usuarios' | 'configuracoes' | 'atendimento' | 'metas';
+export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar' | 'devolucao' | 'usuarios' | 'configuracoes' | 'atendimento' | 'metas' | 'compras';
 
 export type MarketplaceId = 'ml1' | 'ml2' | 'ml3' | 'ml4' | 'tiny' | 'shopee' | 'amazon';
 
@@ -142,6 +142,28 @@ export interface MarketplaceAccount {
   ultimaSync?: string;
   totalPedidos?: number;
   faturamento?: number;
+}
+
+export interface EstimativaCompraItem {
+  id: string;
+  sku: string;
+  categoria: string;
+  custoProduto: number;
+  margemAtual: number;
+  curvaABC: string;
+  mediaVendaDiaria: number;
+  onHand: number;
+  diasParaRuptura: string | number;
+  pedidoSugerido: number;
+  lucroPorCBM: number;
+  cbmTotal: number;
+  custoTotalPedido: number;
+  statusProjecao: string;
+  tendenciaMeses: Record<string, number>;
+  historicoVendasGeral?: number; 
+  margemDez24?: number;
+  margemJan25?: number;
+  margemFev25?: number;
 }
 
 export interface Order {

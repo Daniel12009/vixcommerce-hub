@@ -1,4 +1,4 @@
-import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings, RotateCcw, LogOut, MessageCircle, Target, X } from 'lucide-react';
+import { BarChart3, Package, DollarSign, FileText, Megaphone, Activity, Settings, RotateCcw, LogOut, MessageCircle, Target, X, ShoppingBag } from 'lucide-react';
 import type { ModuleName } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -19,6 +19,7 @@ const modules = [
   { id: 'marketing' as ModuleName, label: 'Ads / Marketing', icon: Megaphone },
   { id: 'atendimento' as ModuleName, label: 'Atendimento', icon: MessageCircle },
   { id: 'metas' as ModuleName, label: 'Metas', icon: Target },
+  { id: 'compras' as ModuleName, label: 'Compras S&OP', icon: ShoppingBag },
   { id: 'configuracoes' as ModuleName, label: 'Configurações', icon: Settings },
 ];
 

@@ -29,6 +29,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   devolucao: 'Devoluções',
   'marketplace-dia': 'Marketplace (Rentabilidade)',
   calculadora: 'Calculadora (CMV)',
+  compras: 'Compras (S&OP)',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
@@ -42,6 +43,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
   'marketplace-dia': 'bg-[hsl(270,70%,55%,0.1)] text-[hsl(270,70%,55%)]',
   calculadora: 'bg-[hsl(220,70%,55%,0.1)] text-[hsl(220,70%,55%)]',
+  compras: 'bg-[hsl(180,70%,55%,0.1)] text-[hsl(180,70%,55%)]',
 };
 
 export function PlanilhasConfigSection() {

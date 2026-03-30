@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora';
+export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora' | 'compras';
 
 export interface SheetConfig {
   id: string;
@@ -163,6 +163,29 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'sku', label: 'SKU', obrigatorio: true },
     { key: 'cmv', label: 'CMV', obrigatorio: true },
   ],
+  compras: [
+    { key: 'sku', label: 'SKU', obrigatorio: true },
+    { key: 'categoria', label: 'Categoria' },
+    { key: 'custoProduto', label: 'custo do produto' },
+    { key: 'margemAtual', label: 'Margem\nOut', obrigatorio: true },
+    { key: 'curvaABC', label: 'ABC' },
+    { key: 'mediaVendaDiaria', label: 'media dia compra Atual' },
+    { key: 'onHand', label: 'OnHand' },
+    { key: 'diasParaRuptura', label: 'quantos dias para dar merda' },
+    { key: 'pedidoSugerido', label: 'Pedido Final' },
+    { key: 'lucroPorCBM', label: 'Lucratividade por CBM' },
+    { key: 'cbmTotal', label: 'CBM TOTAL' },
+    { key: 'custoTotalPedido', label: 'CUSTO TOTAL PEDIDO FINAL' },
+    { key: 'statusProjecao', label: 'vs proj 04/12' },
+    { key: 'janSOP', label: 'Jan_S&OP' },
+    { key: 'fevSOP', label: 'Fev_S&OP' },
+    { key: 'marSOP', label: 'Mar_S&OP' },
+    { key: 'abrSOP', label: 'Abr_S&OP' },
+    { key: 'vendasHistoricoGeral', label: 'Vendas 2024' },
+    { key: 'margemDez24', label: 'margem dez 2024' },
+    { key: 'margemJan25', label: 'Margem Jan' },
+    { key: 'margemFev25', label: 'Margem Fev' },
+  ]
 };
 
 const STORAGE_KEY = 'vix_sheet_configs';

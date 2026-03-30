@@ -15,6 +15,7 @@ import { ConfiguracoesPage } from '@/components/modules/ConfiguracoesPage';
 import { WelcomeModal } from '@/components/layout/WelcomeModal';
 import { AtendimentoPage } from '@/components/modules/AtendimentoPage';
 import { MetasPage } from '@/components/modules/MetasPage';
+import { ComprasPage } from '@/components/modules/compras/ComprasPage';
 import { SheetsDataProvider, useSheetsData } from '@/contexts/SheetsDataContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import type { ModuleName } from '@/lib/types';
@@ -62,6 +63,7 @@ function AppContent() {
       case 'configuracoes': return <ConfiguracoesPage />;
       case 'atendimento': return <AtendimentoPage />;
       case 'metas': return <MetasPage />;
+      case 'compras': return <ComprasPage />;
       case 'usuarios': return <UserManagementPage onBack={() => setActiveModule('configuracoes')} />;
     }
   };
