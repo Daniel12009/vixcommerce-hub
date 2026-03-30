@@ -99,6 +99,10 @@ export function MarketplaceTab() {
   const prevAdsTotal = prevItems.reduce((s, i) => s + i.ads, 0);
   const prevPctAds = prevFaturamento > 0 ? (prevAdsTotal / prevFaturamento) * 100 : 0;
 
+  // Margem % do período
+  const margemPct = totalFaturamento > 0 ? (totalLucro / totalFaturamento) * 100 : 0;
+  const prevMargemPct = prevFaturamento > 0 ? (prevLucro / prevFaturamento) * 100 : 0;
+
   // Table: aggregate by Origem
   const origemTable = useMemo(() => {
     const mapCur = new Map<string, { origem: string; faturamentoBruto: number; lucroLiquidoDia: number; ads: number; pedidos: number }>();
@@ -238,7 +242,7 @@ export function MarketplaceTab() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="relative overflow-hidden bg-card border border-border rounded-2xl p-5">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-indigo-500/10 to-transparent rounded-bl-full" />
           <DollarSign className="w-5 h-5 text-indigo-400 mb-2" />
@@ -254,15 +258,22 @@ export function MarketplaceTab() {
           {hasPrev && <div className="mt-1"><DeltaArrow current={totalLucro} previous={prevLucro} /></div>}
         </div>
         <div className="relative overflow-hidden bg-card border border-border rounded-2xl p-5">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-cyan-500/10 to-transparent rounded-bl-full" />
+          <Percent className="w-5 h-5 text-cyan-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Margem</p>
+          <p className={`text-xl font-bold mt-1 ${margemPct >= 15 ? 'text-emerald-400' : margemPct >= 5 ? 'text-amber-400' : 'text-red-400'}`}>{margemPct.toFixed(1)}%</p>
+          {hasPrev && <div className="mt-1"><DeltaArrow current={margemPct} previous={prevMargemPct} /></div>}
+        </div>
+        <div className="relative overflow-hidden bg-card border border-border rounded-2xl p-5">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-amber-500/10 to-transparent rounded-bl-full" />
-          <Percent className="w-5 h-5 text-amber-400 mb-2" />
+          <Target className="w-5 h-5 text-amber-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">% ADS Médio</p>
           <p className="text-xl font-bold text-foreground mt-1">{avgPctAds.toFixed(1)}%</p>
           {hasPrev && <div className="mt-1"><DeltaArrow current={avgPctAds} previous={prevPctAds} invert /></div>}
         </div>
         <div className="relative overflow-hidden bg-card border border-border rounded-2xl p-5">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-purple-500/10 to-transparent rounded-bl-full" />
-          <Target className="w-5 h-5 text-purple-400 mb-2" />
+          <BarChart2 className="w-5 h-5 text-purple-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">ROAS Médio</p>
           <p className="text-xl font-bold text-foreground mt-1">{avgRoas.toFixed(1)}x</p>
         </div>
@@ -337,9 +348,36 @@ export function MarketplaceTab() {
         </div>
       </div>
 
-      {/* Charts */}
+      {/* Charts — right after KPIs */}
       <div className="grid grid-cols-1 gap-6">
-        {/* Chart 1: %ADS per day per account */}
+        {/* Chart: Faturamento Bruto (R$) + Margem % */}
+        {fatMargemPerDay.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-4 md:p-6">
+            <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              💰 Faturamento Bruto × Margem Dia
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={fatMargemPerDay}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={(v: number) => v > 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit="%" />
+                <Tooltip
+                  formatter={(v: number, name: string) => {
+                    if (name === 'Faturamento Bruto') return formatBRL(v);
+                    return `${v}%`;
+                  }}
+                  labelFormatter={(label: string) => `Data: ${label}`}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="faturamento" fill="#6366f1" name="Faturamento Bruto" radius={[4, 4, 0, 0]} opacity={0.8} />
+                <Line yAxisId="right" type="monotone" dataKey="pctLucro" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: '#22c55e' }} name="Margem %" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Chart: %ADS per day per account */}
         {adsPerDayByAccount.length > 0 && (
           <div className="bg-card border border-border rounded-2xl p-4 md:p-6">
             <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -364,30 +402,6 @@ export function MarketplaceTab() {
                   />
                 ))}
               </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Chart 2: Faturamento Bruto + % Lucro Líquido */}
-        {fatMargemPerDay.length > 0 && (
-          <div className="bg-card border border-border rounded-2xl p-4 md:p-6">
-            <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-              💰 Faturamento Bruto × % Lucro Líquido Dia
-            </h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={fatMargemPerDay}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={(v: number) => v > 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit="%" />
-                <Tooltip
-                  formatter={(v: number, name: string) => name === 'faturamento' ? formatBRL(v) : `${v}%`}
-                  labelFormatter={(label: string) => `Data: ${label}`}
-                />
-                <Legend />
-                <Bar yAxisId="left" dataKey="faturamento" fill="#6366f1" name="Faturamento Bruto" radius={[4, 4, 0, 0]} opacity={0.8} />
-                <Line yAxisId="right" type="monotone" dataKey="pctLucro" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 4, fill: '#f59e0b' }} name="% Lucro Líquido" />
-              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
