@@ -371,7 +371,7 @@ export function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number, name: string) => name === 'faturamento' ? formatBRL(v) : v} />
+                  <Tooltip formatter={(v: number, name: string) => String(name).toLowerCase() === 'faturamento' ? formatBRL(v) : v} />
                   <Area type="monotone" dataKey="faturamento" stroke="#6366f1" fill="url(#fatGrad)" strokeWidth={2} name="Faturamento" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -409,7 +409,7 @@ export function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis type="number" tick={{ fontSize: 10 }} />
                   <YAxis dataKey="sku" type="category" tick={{ fontSize: 9 }} width={80} />
-                  <Tooltip formatter={(v: number, name: string) => name === 'faturamento' ? formatBRL(v) : v} />
+                  <Tooltip formatter={(v: number, name: string) => String(name).toLowerCase() === 'faturamento' ? formatBRL(v) : v} />
                   <Legend />
                   <Bar dataKey="vendas" fill="#22c55e" name="Qtd" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="faturamento" fill="#6366f1" name="Faturamento" radius={[0, 4, 4, 0]} />

@@ -12,6 +12,7 @@ import { AtualizarDadosPage } from '@/components/modules/AtualizarDadosPage';
 import { DevolucaoPage } from '@/components/modules/DevolucaoPage';
 import { UserManagementPage } from '@/components/auth/UserManagementPage';
 import { ConfiguracoesPage } from '@/components/modules/ConfiguracoesPage';
+import { WelcomeModal } from '@/components/layout/WelcomeModal';
 import { AtendimentoPage } from '@/components/modules/AtendimentoPage';
 import { MetasPage } from '@/components/modules/MetasPage';
 import { SheetsDataProvider, useSheetsData } from '@/contexts/SheetsDataContext';
@@ -67,6 +68,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background">
+      <WelcomeModal />
       <AppSidebar
         activeModule={activeModule}
         onModuleChange={setActiveModule}
