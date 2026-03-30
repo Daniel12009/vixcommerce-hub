@@ -98,10 +98,10 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
   const dadosProjecaoSOP = useMemo(() => {
     let jan = 0, fev = 0, mar = 0, abr = 0;
     data.forEach(d => {
-      jan += typeof d.janSOP === 'number' ? d.janSOP : 0;
-      fev += typeof d.fevSOP === 'number' ? d.fevSOP : 0;
-      mar += typeof d.marSOP === 'number' ? d.marSOP : 0;
-      abr += typeof d.abrSOP === 'number' ? d.abrSOP : 0;
+      jan += typeof d.tendenciaMeses?.jan === 'number' ? d.tendenciaMeses.jan : 0;
+      fev += typeof d.tendenciaMeses?.fev === 'number' ? d.tendenciaMeses.fev : 0;
+      mar += typeof d.tendenciaMeses?.mar === 'number' ? d.tendenciaMeses.mar : 0;
+      abr += typeof d.tendenciaMeses?.abr === 'number' ? d.tendenciaMeses.abr : 0;
     });
     return [
       { mes: 'Janeiro', demanda: jan },
@@ -324,14 +324,15 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
               <BarChart data={dadosCategoria} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis dataKey="categoria" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="left" tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} tick={{ fill: '#3B82F6', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} tick={{ fill: '#10B981', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <RechartsTooltip 
                   formatter={(value: number, name: string) => [formatter.format(value), name === 'investimento' ? 'Investimento' : 'Lucro Esperado']}
                   contentStyle={{ backgroundColor: 'rgba(15,23,42,0.9)', border: 'none', borderRadius: '8px', color: '#fff' }}
                 />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Bar dataKey="investimento" name="Investimento" fill="#3B82F6" radius={[4,4,0,0]} barSize={20} />
-                <Bar dataKey="lucroEsperado" name="Lucro Esperado" fill="#10B981" radius={[4,4,0,0]} barSize={20} />
+                <Bar yAxisId="left" dataKey="investimento" name="Investimento" fill="#3B82F6" radius={[4,4,0,0]} barSize={20} />
+                <Bar yAxisId="right" dataKey="lucroEsperado" name="Lucro Esperado" fill="#10B981" radius={[4,4,0,0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>
