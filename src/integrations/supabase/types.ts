@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_data: {
+        Row: {
+          created_at: string | null
+          data_key: string
+          data_value: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_key: string
+          data_value?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data_key?: string
+          data_value?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       envios_full: {
         Row: {
           caixas: number | null
@@ -319,6 +340,57 @@ export type Database = {
           updated_at?: string
           url?: string
           valores_fixos?: Json | null
+        }
+        Relationships: []
+      }
+      sync_checkpoints: {
+        Row: {
+          key: string
+          last_sync_at: string | null
+          last_sync_date: string
+          total_records: number | null
+        }
+        Insert: {
+          key: string
+          last_sync_at?: string | null
+          last_sync_date: string
+          total_records?: number | null
+        }
+        Update: {
+          key?: string
+          last_sync_at?: string | null
+          last_sync_date?: string
+          total_records?: number | null
+        }
+        Relationships: []
+      }
+      vendas_cache: {
+        Row: {
+          conta: string | null
+          created_at: string | null
+          data: string | null
+          id: string
+          payload: Json | null
+          sku: string | null
+          valor_total: number | null
+        }
+        Insert: {
+          conta?: string | null
+          created_at?: string | null
+          data?: string | null
+          id: string
+          payload?: Json | null
+          sku?: string | null
+          valor_total?: number | null
+        }
+        Update: {
+          conta?: string | null
+          created_at?: string | null
+          data?: string | null
+          id?: string
+          payload?: Json | null
+          sku?: string | null
+          valor_total?: number | null
         }
         Relationships: []
       }
