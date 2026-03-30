@@ -161,10 +161,15 @@ GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NE
       </div>
 
       {result && (
-        <div className="prose prose-sm md:prose-base prose-invert prose-indigo max-w-none 
-          bg-slate-950/50 rounded-xl p-6 border border-slate-800/50 
-          prose-headings:text-indigo-300 prose-a:text-indigo-400 
-          prose-th:bg-indigo-950/50 prose-th:p-3 prose-td:p-3 prose-tr:border-slate-800
+        <div className="prose prose-sm md:prose-base max-w-none 
+          bg-white dark:bg-slate-900/60 rounded-xl p-6 border border-indigo-200/60 dark:border-slate-700/50 shadow-sm
+          prose-headings:text-indigo-700 dark:prose-headings:text-indigo-300 
+          prose-a:text-indigo-600 dark:prose-a:text-indigo-400 
+          prose-strong:text-foreground
+          prose-th:bg-indigo-50 dark:prose-th:bg-indigo-950/50 prose-th:p-2.5 prose-th:text-xs prose-th:font-bold prose-th:text-indigo-800 dark:prose-th:text-indigo-200
+          prose-td:p-2.5 prose-td:text-sm 
+          prose-tr:border-indigo-100 dark:prose-tr:border-slate-700
+          prose-table:border prose-table:border-indigo-200 dark:prose-table:border-slate-700 prose-table:rounded-lg prose-table:overflow-hidden
           relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {result}
