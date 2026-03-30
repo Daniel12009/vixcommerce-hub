@@ -27,6 +27,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   performance: 'Performance Anúncios',
   ads: 'Performance ADS',
   devolucao: 'Devoluções',
+  'marketplace-dia': 'Marketplace (Rentabilidade)',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
@@ -38,6 +39,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
   ads: 'bg-[hsl(142,76%,36%,0.1)] text-[hsl(142,76%,36%)]',
   devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
+  'marketplace-dia': 'bg-[hsl(270,70%,55%,0.1)] text-[hsl(270,70%,55%)]',
 };
 
 export function PlanilhasConfigSection() {
@@ -395,6 +397,7 @@ export function PlanilhasConfigSection() {
                         <SelectItem value="performance">📊 Performance Anúncios</SelectItem>
                         <SelectItem value="ads">📈 Performance ADS</SelectItem>
                         <SelectItem value="devolucao">🔄 Devoluções</SelectItem>
+                        <SelectItem value="marketplace-dia">📊 Marketplace (Rentabilidade)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

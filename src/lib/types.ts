@@ -229,3 +229,23 @@ export interface AdsImportItem {
   impressoes: number;
   ultAtualizacao: string;
 }
+
+export interface MarketplaceDiaItem {
+  data: string;
+  numeroPedidos: number;
+  ticketMedio: number;
+  faturamentoBruto: number;
+  ads: number;
+  comissao: number;
+  frete: number;
+  embalagem: number;
+  impostos: number;
+  cmv: number;
+  custoReal: number;
+  lucroLiquidoDia: number;
+  origem: string;
+  pctCmv: number;
+  pctAds: number;
+  pctMc: number;
+  roas: number;
+}

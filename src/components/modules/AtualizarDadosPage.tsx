@@ -15,6 +15,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { GraficosTab } from './GraficosTab';
 import { PerformanceAdsTab } from './PerformanceAdsTab';
 import { StatusAnunciosTab } from './StatusAnunciosTab';
+import { CalculadoraTab } from './CalculadoraTab';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -45,6 +46,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   performance: 'Performance Anúncios',
   ads: 'Performance ADS',
   devolucao: 'Devoluções',
+  'marketplace-dia': 'Marketplace',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
@@ -56,6 +58,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
   ads: 'bg-[hsl(142,76%,36%,0.1)] text-[hsl(142,76%,36%)]',
   devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
+  'marketplace-dia': 'bg-[hsl(270,70%,55%,0.1)] text-[hsl(270,70%,55%)]',
 };
 
 // Vendas Table Columns state
@@ -750,16 +753,12 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="ads">Performance Anúncios</TabsTrigger>
           <TabsTrigger value="status-anuncios">Status Anúncios</TabsTrigger>
           <TabsTrigger value="perf-ads">Performance ADS</TabsTrigger>
-          <TabsTrigger value="planilhas">Planilhas Google</TabsTrigger>
+          <TabsTrigger value="calculadora">🧮 Calculadora</TabsTrigger>
         </TabsList>
 
         {/* Tab: Planilhas — moved to Configurações */}
-        <TabsContent value="planilhas">
-          <div className="bg-card border border-border rounded-xl p-8 text-center">
-            <FileSpreadsheet className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-40" />
-            <h3 className="text-foreground font-semibold mb-2">Configuração de Planilhas</h3>
-            <p className="text-sm text-muted-foreground">Gerencie suas planilhas Google em <strong>Configurações → Planilhas</strong> no menu lateral.</p>
-          </div>
+        <TabsContent value="calculadora">
+          <CalculadoraTab />
         </TabsContent>
 
 

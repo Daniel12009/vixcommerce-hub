@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao';
+export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia';
 
 export interface SheetConfig {
   id: string;
@@ -140,6 +140,25 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'colaborador', label: 'COLABORADOR' },
     { key: 'retornoDevolucao', label: 'RETORNO DA DEVOLUÇÃO' },
   ],
+  'marketplace-dia': [
+    { key: 'data', label: 'DATA', obrigatorio: true },
+    { key: 'numeroPedidos', label: 'Número de pedidos no dia' },
+    { key: 'ticketMedio', label: 'Ticket médio' },
+    { key: 'faturamentoBruto', label: 'Faturamento Bruto', obrigatorio: true },
+    { key: 'ads', label: 'Ads' },
+    { key: 'comissao', label: 'Comissão' },
+    { key: 'frete', label: 'Frete' },
+    { key: 'embalagem', label: 'Embalagem' },
+    { key: 'impostos', label: 'Impostos' },
+    { key: 'cmv', label: 'CMV' },
+    { key: 'custoReal', label: 'Custo real' },
+    { key: 'lucroLiquidoDia', label: 'Lucro Líquido do dia', obrigatorio: true },
+    { key: 'origem', label: 'Origem', obrigatorio: true },
+    { key: 'pctCmv', label: '%CMV' },
+    { key: 'pctAds', label: '% ADS' },
+    { key: 'pctMc', label: '%MC' },
+    { key: 'roas', label: 'ROAS' },
+  ],
 };
 
 const STORAGE_KEY = 'vix_sheet_configs';
@@ -252,6 +271,7 @@ const DEVOLUCAO_DEFAULT: SheetConfig = {
     retornoDevolucao: 'RETORNO DA DEVOLUÇÃO',
   },
 };
+
 
 /**
  * Import a single sheet config from Google Sheets via Supabase edge function.

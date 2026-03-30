@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ShoppingCart, DollarSign, Receipt, Package, RefreshCw, Globe, Clock, TrendingUp, Filter } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
+import { MarketplaceTab } from './MarketplaceTab';
 
 const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#14b8a6', '#8b5cf6'];
 const PLATFORM_COLORS: Record<string, string> = {
@@ -242,7 +244,15 @@ export function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Dashboard" subtitle="Vendas do dia em tempo real" />
+      <PageHeader title="Dashboard" subtitle="Vendas e performance marketplace" />
+
+      <Tabs defaultValue="vendas" className="space-y-6">
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger value="vendas">💰 Vendas ao vivo</TabsTrigger>
+          <TabsTrigger value="marketplace">📊 Marketplace</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="vendas">
 
       {/* Status + Filters Bar */}
       <div className="flex flex-wrap items-center gap-2 md:gap-3 bg-card border border-border rounded-xl p-3 md:p-4 mb-6">
@@ -451,6 +461,13 @@ export function DashboardPage() {
           </div>
         </>
       )}
+
+        </TabsContent>
+
+        <TabsContent value="marketplace">
+          <MarketplaceTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

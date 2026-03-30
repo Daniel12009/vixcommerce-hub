@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem, DevolucaoItem } from '@/lib/types';
+import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem, DevolucaoItem, MarketplaceDiaItem } from '@/lib/types';
 import { loadFromCloud, saveToCloud, syncVendasIncremental } from '@/lib/persistence';
 import type { ModuloDestino } from '@/lib/sheets-store';
 
@@ -12,6 +12,7 @@ interface SheetsData {
   performanceItems: PerformanceItem[] | null;
   adsItems: AdsImportItem[] | null;
   devolucaoItems: DevolucaoItem[] | null;
+  marketplaceDiaItems: MarketplaceDiaItem[] | null;
   isLoaded: boolean;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setEstoqueFullFromSheet: (rows: Record<string, string>[]) => void;
@@ -21,6 +22,7 @@ interface SheetsData {
   setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   setAdsFromSheet: (rows: Record<string, string>[]) => void;
   setDevolucaoFromSheet: (rows: Record<string, string>[]) => void;
+  setMarketplaceDiaFromSheet: (rows: Record<string, string>[]) => void;
   clearEstoque: () => void;
   clearEstoqueFull: () => void;
   clearEstoqueTiny: () => void;
@@ -29,6 +31,7 @@ interface SheetsData {
   clearPerformance: () => void;
   clearAds: () => void;
   clearDevolucao: () => void;
+  clearMarketplaceDia: () => void;
   refreshModule: (modulo: ModuloDestino) => Promise<number>;
   refreshingModule: string | null;
 }
@@ -57,6 +60,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [performanceItems, setPerformanceItems] = useState<PerformanceItem[] | null>(null);
   const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
   const [devolucaoItems, setDevolucaoItems] = useState<DevolucaoItem[] | null>(null);
+  const [marketplaceDiaItems, setMarketplaceDiaItems] = useState<MarketplaceDiaItem[] | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [refreshingModule, setRefreshingModule] = useState<string | null>(null);
 
@@ -271,6 +275,31 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       }));
     setDevolucaoItems(items);
   }, []);
+
+  const setMarketplaceDiaFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: MarketplaceDiaItem[] = rows
+      .filter(r => r.data && r.origem)
+      .map(r => ({
+        data: r.data || '',
+        numeroPedidos: num(r.numeroPedidos),
+        ticketMedio: num(r.ticketMedio),
+        faturamentoBruto: num(r.faturamentoBruto),
+        ads: num(r.ads),
+        comissao: num(r.comissao),
+        frete: num(r.frete),
+        embalagem: num(r.embalagem),
+        impostos: num(r.impostos),
+        cmv: num(r.cmv),
+        custoReal: num(r.custoReal),
+        lucroLiquidoDia: num(r.lucroLiquidoDia),
+        origem: r.origem || '',
+        pctCmv: num(r.pctCmv),
+        pctAds: num(r.pctAds),
+        pctMc: num(r.pctMc),
+        roas: num(r.roas),
+      }));
+    setMarketplaceDiaItems(items);
+  }, []);
   useEffect(() => {
     // ━━━ PHASE 0: Instant load from localStorage (synchronous) ━━━
     const KEYS_MAP: [string, (d: any) => void][] = [
@@ -280,6 +309,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       ['estoque_tiny_data', setEstoqueTinyFromSheet],
       ['ads_data', setAdsFromSheet],
       ['devolucao_data', setDevolucaoFromSheet],
+      ['marketplace_dia_data', setMarketplaceDiaFromSheet],
     ];
 
     let hasLocalData = false;
@@ -345,13 +375,14 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           }
           else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
           else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
+          else if (mod === 'marketplace-dia') { setMarketplaceDiaFromSheet(parsed); saveToCloud('marketplace_dia_data', parsed); }
         }
       } catch (err) {
         console.warn('[AutoImport] Background sheets import failed:', err);
       }
     };
     backgroundRefresh();
-  }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet]);
+  }, [setVendasFromSheet, setPerformanceFromSheet, setEstoqueFullFromSheet, setEstoqueTinyFromSheet, setAdsFromSheet, setDevolucaoFromSheet, setMarketplaceDiaFromSheet]);
 
   return (
     <SheetsDataContext.Provider value={{
@@ -363,6 +394,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       performanceItems,
       adsItems,
       devolucaoItems,
+      marketplaceDiaItems,
       isLoaded,
       setEstoqueFromSheet,
       setEstoqueFullFromSheet,
@@ -372,6 +404,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       setPerformanceFromSheet,
       setAdsFromSheet,
       setDevolucaoFromSheet,
+      setMarketplaceDiaFromSheet,
       clearEstoque: () => setEstoqueItems(null),
       clearEstoqueFull: () => setEstoqueFullItems(null),
       clearEstoqueTiny: () => setEstoqueTinyItems(null),
@@ -380,6 +413,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       clearPerformance: () => setPerformanceItems(null),
       clearAds: () => setAdsItems(null),
       clearDevolucao: () => setDevolucaoItems(null),
+      clearMarketplaceDia: () => setMarketplaceDiaItems(null),
       refreshModule: async (modulo: ModuloDestino) => {
         setRefreshingModule(modulo);
         try {
@@ -403,6 +437,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             }
             else if (mod === 'ads') { setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
             else if (mod === 'devolucao') { setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
+            else if (mod === 'marketplace-dia') { setMarketplaceDiaFromSheet(parsed); saveToCloud('marketplace_dia_data', parsed); }
           }
           return totalImported;
         } catch (err) {
