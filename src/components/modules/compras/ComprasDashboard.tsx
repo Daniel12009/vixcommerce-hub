@@ -7,13 +7,14 @@ import {
   CartesianGrid, XAxis, YAxis, BarChart, Bar, Legend,
   ScatterChart, Scatter, ZAxis, AreaChart, Area 
 } from 'recharts';
-import { ComprasAIChat } from './ComprasAIChat';
+import { ComprasAIChat, type PurchaseOrder } from './ComprasAIChat';
 
 interface ComprasDashboardProps {
   data: EstimativaCompraItem[];
+  onOrderGenerated?: (order: PurchaseOrder) => void;
 }
 
-export function ComprasDashboard({ data }: ComprasDashboardProps) {
+export function ComprasDashboard({ data, onOrderGenerated }: ComprasDashboardProps) {
 
   // Mapeamento e cálculos macro
   const metrics = useMemo(() => {
@@ -117,7 +118,7 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
     <div className="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
       {/* AI Knapsack Optimizer at the top */}
-      <ComprasAIChat />
+      <ComprasAIChat onOrderGenerated={onOrderGenerated} />
 
       {/* Premium KPIs - Gradient & Shadow effects */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">

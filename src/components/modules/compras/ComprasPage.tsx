@@ -1,22 +1,29 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
-import { Package, LineChart, MessageSquare, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react';
+import { Package, LineChart, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { ComprasDashboard } from './ComprasDashboard';
-// import { ComprasComparativo } from './ComprasComparativo'; // We will create this later
+import { ComprasPedidos, addOrderToHistory } from './ComprasPedidos';
+import type { PurchaseOrder } from './ComprasAIChat';
 
-type TabType = 'dashboard' | 'comparativo';
+type TabType = 'dashboard' | 'pedidos';
 
 export function ComprasPage() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const { comprasItems, refreshingModule, refreshModule } = useSheetsData();
+  const [pedidosKey, setPedidosKey] = useState(0);
 
   const isRefreshing = refreshingModule === 'compras';
 
   const handleRefresh = () => {
     refreshModule('compras');
   };
+
+  const handleOrderGenerated = useCallback((order: PurchaseOrder) => {
+    addOrderToHistory(order);
+    setPedidosKey(k => k + 1); // force refresh of Pedidos list
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -38,15 +45,15 @@ export function ComprasPage() {
             Dashboard
           </button>
           <button
-            onClick={() => setActiveTab('comparativo')}
+            onClick={() => setActiveTab('pedidos')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'comparativo'
+              activeTab === 'pedidos'
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
-            Comparativo & AI
+            <FileSpreadsheet className="w-4 h-4" />
+            Pedidos
           </button>
         </div>
 
@@ -72,16 +79,8 @@ export function ComprasPage() {
         </Card>
       ) : (
         <div className="mt-6">
-          {activeTab === 'dashboard' && <ComprasDashboard data={comprasItems} />}
-          {activeTab === 'comparativo' && (
-            <Card className="p-8 flex flex-col items-center justify-center text-center">
-              <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
-              <h2 className="text-xl font-bold mb-2">Assistente AI em Desenvolvimento</h2>
-              <p className="text-muted-foreground max-w-md">
-                A aba de comparativo e assistente AI para pedidos será implementada na próxima fase.
-              </p>
-            </Card>
-          )}
+          {activeTab === 'dashboard' && <ComprasDashboard data={comprasItems} onOrderGenerated={handleOrderGenerated} />}
+          {activeTab === 'pedidos' && <ComprasPedidos key={pedidosKey} />}
         </div>
       )}
     </div>
