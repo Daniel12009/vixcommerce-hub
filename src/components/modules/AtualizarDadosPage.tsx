@@ -90,7 +90,7 @@ export function AtualizarDadosPage() {
   const [filterConta, setFilterConta] = useState<string>('all');
   const [filterOrigem, setFilterOrigem] = useState<string>('all');
   const [filterSku, setFilterSku] = useState<string>('');
-  const [filterDias, setFilterDias] = useState<number>(90);
+  const [filterDias, setFilterDias] = useState<number>(30);
   const [filterDataInicio, setFilterDataInicio] = useState<string>('');
   const [filterDataFim, setFilterDataFim] = useState<string>('');
   const [pedidosPage, setPedidosPage] = useState(0);
@@ -100,7 +100,7 @@ export function AtualizarDadosPage() {
   const [perfPage, setPerfPage] = useState(0);
   const [perfSortField, setPerfSortField] = useState<string>('vendas');
   const [perfSortDir, setPerfSortDir] = useState<'asc' | 'desc'>('desc');
-  const [vendasSortField, setVendasSortField] = useState<string>('');
+  const [vendasSortField, setVendasSortField] = useState<string>('data');
   const [vendasSortDir, setVendasSortDir] = useState<'asc' | 'desc'>('desc');
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
@@ -789,12 +789,19 @@ export function AtualizarDadosPage() {
             const displayList = useImported ? vendasList : mockList;
 
             // Sort displayList
-            const sortableVendasCols = ['quantidade', 'valorTotal', 'impostos', 'comissao', 'cmv', 'liquido', 'margem', 'devolucao'];
+            const sortableVendasCols = ['data', 'quantidade', 'valorTotal', 'impostos', 'comissao', 'cmv', 'liquido', 'margem', 'devolucao'];
             const sortedDisplayList = vendasSortField && sortableVendasCols.includes(vendasSortField)
               ? [...displayList].sort((a: any, b: any) => {
-                const va = typeof a[vendasSortField] === 'string' ? parseFloat(a[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (a[vendasSortField] || 0);
-                const vb = typeof b[vendasSortField] === 'string' ? parseFloat(b[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (b[vendasSortField] || 0);
-                return vendasSortDir === 'desc' ? vb - va : va - vb;
+                  if (vendasSortField === 'data') {
+                    const pa = (a.data || '').split('/');
+                    const pb = (b.data || '').split('/');
+                    const da = pa.length === 3 ? new Date(+pa[2] < 100 ? 2000 + +pa[2] : +pa[2], +pa[1] - 1, +pa[0]).getTime() : 0;
+                    const db = pb.length === 3 ? new Date(+pb[2] < 100 ? 2000 + +pb[2] : +pb[2], +pb[1] - 1, +pb[0]).getTime() : 0;
+                    return vendasSortDir === 'desc' ? db - da : da - db;
+                  }
+                  const va = typeof a[vendasSortField] === 'string' ? parseFloat(a[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (a[vendasSortField] || 0);
+                  const vb = typeof b[vendasSortField] === 'string' ? parseFloat(b[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (b[vendasSortField] || 0);
+                  return vendasSortDir === 'desc' ? vb - va : va - vb;
               })
               : displayList;
 
