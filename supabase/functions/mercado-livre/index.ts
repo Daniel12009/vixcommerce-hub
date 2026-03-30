@@ -1056,18 +1056,21 @@ Deno.serve(async (req) => {
       const account = accounts[0];
 
       const allAttrs = await mlFetch(account, `/categories/${catId}/attributes`);
-      const required = (Array.isArray(allAttrs) ? allAttrs : [])
-        .filter((a: any) => a.tags?.required || a.tags?.catalog_required)
-        .map((a: any) => ({
+      const list = Array.isArray(allAttrs) ? allAttrs : [];
+      
+      const requiredList = list.filter((a: any) => a.tags?.required || a.tags?.catalog_required);
+      const optionalList = list.filter((a: any) => !(a.tags?.required || a.tags?.catalog_required) && !a.tags?.hidden).slice(0, 12);
+
+      const combined = [...requiredList, ...optionalList].map((a: any) => ({
           id: a.id,
           name: a.name,
           type: a.value_type,
-          required: !!a.tags?.required,
+          required: !!(a.tags?.required || a.tags?.catalog_required),
           values: (a.values || []).slice(0, 80).map((v: any) => ({ id: v.id, name: v.name })),
           hint: a.hint || '',
-        }));
+      }));
 
-      return new Response(JSON.stringify({ attributes: required }), {
+      return new Response(JSON.stringify({ attributes: combined }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
