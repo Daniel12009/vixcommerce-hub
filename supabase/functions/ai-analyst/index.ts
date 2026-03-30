@@ -56,13 +56,13 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { mode, question, context_data, history } = await req.json();
+    const { mode, question, context_data, history, system_prompt } = await req.json();
 
     // Buscar contas ML ativas
     const accounts = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
     const contasList = (accounts || []).map((a: any) => `${a.nome} (id: ${a.id})`).join(', ');
 
-    const SYSTEM = `Você é um analista e assistente executivo de e-commerce brasileiro especializado em Mercado Livre.
+    const defaultSystem = `Você é um analista e assistente executivo de e-commerce brasileiro especializado em Mercado Livre.
 
 CONTAS ATIVAS: ${contasList}
 
@@ -101,6 +101,8 @@ Nunca invente IDs. Se não tiver o campaign_id ou item_id, use FETCH primeiro.
 
 Formate respostas em markdown. **Negrito** para alertas urgentes. Seja direto e específico.
 Sempre indique se está usando dados da planilha ou da API ML para cada afirmação importante.`;
+
+    const SYSTEM = system_prompt || defaultSystem;
 
     // Construir histórico de mensagens
     const msgHistory: any[] = [];

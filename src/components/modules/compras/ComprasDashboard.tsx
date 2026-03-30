@@ -7,6 +7,7 @@ import {
   CartesianGrid, XAxis, YAxis, BarChart, Bar, Legend,
   ScatterChart, Scatter, ZAxis, AreaChart, Area 
 } from 'recharts';
+import { ComprasAIChat } from './ComprasAIChat';
 
 interface ComprasDashboardProps {
   data: EstimativaCompraItem[];
@@ -115,6 +116,9 @@ export function ComprasDashboard({ data }: ComprasDashboardProps) {
   return (
     <div className="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
+      {/* AI Knapsack Optimizer at the top */}
+      <ComprasAIChat />
+
       {/* Premium KPIs - Gradient & Shadow effects */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
         <Card className="relative overflow-hidden group hover:shadow-lg transition-all border-none bg-gradient-to-br from-indigo-500/10 via-background to-background">
