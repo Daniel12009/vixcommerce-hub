@@ -279,6 +279,65 @@ export function MarketplaceTab() {
         </div>
       </div>
 
+      {/* Charts — right after KPIs */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* Chart: Faturamento Bruto (R$) + Margem % */}
+        {fatMargemPerDay.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-4 md:p-6">
+            <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              💰 Faturamento Bruto × Margem Dia
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={fatMargemPerDay}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={(v: number) => v > 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit="%" />
+                <Tooltip
+                  formatter={(v: number, name: string) => {
+                    if (name === 'Faturamento Bruto') return formatBRL(v);
+                    return `${v}%`;
+                  }}
+                  labelFormatter={(label: string) => `Data: ${label}`}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="faturamento" fill="#6366f1" name="Faturamento Bruto" radius={[4, 4, 0, 0]} opacity={0.8} />
+                <Line yAxisId="right" type="monotone" dataKey="pctLucro" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: '#22c55e' }} name="Margem %" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Chart: %ADS per day per account */}
+        {adsPerDayByAccount.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-4 md:p-6">
+            <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              📈 % ADS por Dia por Conta
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={adsPerDayByAccount}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} unit="%" />
+                <Tooltip formatter={(v: number) => `${v}%`} />
+                <Legend />
+                {origens.map((origem, i) => (
+                  <Line
+                    key={origem}
+                    type="monotone"
+                    dataKey={origem}
+                    stroke={ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]}
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    name={origem.length > 30 ? origem.slice(0, 27) + '...' : origem}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
       {/* Table by Origem */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
@@ -346,65 +405,6 @@ export function MarketplaceTab() {
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Charts — right after KPIs */}
-      <div className="grid grid-cols-1 gap-6">
-        {/* Chart: Faturamento Bruto (R$) + Margem % */}
-        {fatMargemPerDay.length > 0 && (
-          <div className="bg-card border border-border rounded-2xl p-4 md:p-6">
-            <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-              💰 Faturamento Bruto × Margem Dia
-            </h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={fatMargemPerDay}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={(v: number) => v > 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit="%" />
-                <Tooltip
-                  formatter={(v: number, name: string) => {
-                    if (name === 'Faturamento Bruto') return formatBRL(v);
-                    return `${v}%`;
-                  }}
-                  labelFormatter={(label: string) => `Data: ${label}`}
-                />
-                <Legend />
-                <Bar yAxisId="left" dataKey="faturamento" fill="#6366f1" name="Faturamento Bruto" radius={[4, 4, 0, 0]} opacity={0.8} />
-                <Line yAxisId="right" type="monotone" dataKey="pctLucro" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: '#22c55e' }} name="Margem %" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Chart: %ADS per day per account */}
-        {adsPerDayByAccount.length > 0 && (
-          <div className="bg-card border border-border rounded-2xl p-4 md:p-6">
-            <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-              📈 % ADS por Dia por Conta
-            </h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={adsPerDayByAccount}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} unit="%" />
-                <Tooltip formatter={(v: number) => `${v}%`} />
-                <Legend />
-                {origens.map((origem, i) => (
-                  <Line
-                    key={origem}
-                    type="monotone"
-                    dataKey={origem}
-                    stroke={ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]}
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    name={origem.length > 30 ? origem.slice(0, 27) + '...' : origem}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
       </div>
     </div>
   );
