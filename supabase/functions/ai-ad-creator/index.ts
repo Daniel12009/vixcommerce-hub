@@ -146,8 +146,9 @@ Limite: 1 posicionamento, preço em R$, 3-4 diferenciais.`,
         `Você é copywriter especialista em Mercado Livre Brasil. Retorne APENAS JSON válido:
 {"title":string,"title_seo":string,"description":string,"highlights":[string],"suggested_attributes":{"ATRIBUTO":"valor"}}
 REGRAS: título max 60 chars, title_seo max 60 chars com keywords, descrição 200-500 palavras, exatamente 5 highlights com emoji.
-Em "suggested_attributes", inclua atributos técnicos inferidos (ex: "BRAND", "MODEL", "Material", "Linha", "Cor", "Tipo de Produto"). Extraia o máximo possível do nome e descrição.
-Proibido: CAIXA ALTA excessiva, caracteres especiais no título, preços no título.
+Em "suggested_attributes", inclua atributos técnicos inferidos. É OBRIGATÓRIO gerar "Modelo Detalhado" e "Linha" e preenchê-los estrategicamente com palavras-chave (SEO) muito buscadas. O VALOR de CADA atributo tem o LIMITE ESTRITO de 60 caracteres.
+Demais atributos (Ex: "Material", "Montagem", "Furos") extraia da descrição.
+Proibido: CAIXA ALTA excessiva nos atributos, caracteres especiais no título.
 Se dimensões estiverem disponíveis, mencione-as na descrição.`,
         `Produto:\n${productContext}
 Posicionamento: ${strategy.positioning}
