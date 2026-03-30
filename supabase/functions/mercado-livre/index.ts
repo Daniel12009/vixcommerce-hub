@@ -490,7 +490,21 @@ Deno.serve(async (req) => {
       if (!accounts?.length) throw new Error('No ML account found');
 
       const account = accounts[0];
-      console.log('[CREATE] payload:', JSON.stringify(new_item).slice(0, 500));
+
+      // ML requires family_name at body root level, NOT inside attributes
+      // Extract it from attributes array and move to top-level
+      if (new_item.attributes && Array.isArray(new_item.attributes)) {
+        const fnAttr = new_item.attributes.find((a: any) => a.id === 'family_name');
+        if (fnAttr && fnAttr.value_name && !new_item.family_name) {
+          new_item.family_name = fnAttr.value_name;
+        }
+        // Remove family_name from attributes array to avoid conflict
+        new_item.attributes = new_item.attributes.filter((a: any) => a.id !== 'family_name');
+      }
+
+      console.log('[CREATE] family_name:', new_item.family_name);
+      console.log('[CREATE] attributes:', JSON.stringify(new_item.attributes));
+      console.log('[CREATE] payload:', JSON.stringify(new_item).slice(0, 800));
       const result = await mlFetchWrite(account, '/items', 'POST', new_item);
       console.log('[CREATE_ITEM] ML response:', JSON.stringify(result).slice(0, 1000));
       // Return full result including ML error details
