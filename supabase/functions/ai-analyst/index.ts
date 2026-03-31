@@ -309,9 +309,24 @@ Continue a resposta com esses dados.`;
   } catch (error: any) {
     const message = error.message || String(error);
     console.error('ai-analyst error:', message);
+
+    let modelsList = '';
+    if (message.includes('not_found_error')) {
+      try {
+        const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+        const resModels = await fetch('https://api.anthropic.com/v1/models', {
+          headers: { 'x-api-key': apiKey!, 'anthropic-version': '2023-06-01' }
+        });
+        const modelsData = await resModels.json();
+        modelsList = '\n\nModelos Disponíveis (copie para mim!):\n' + (modelsData.data ? modelsData.data.map((m: any) => m.id).join('\n') : 'Não autorizado a listar modelos');
+      } catch (em) {
+        modelsList = '\n\n[Falha ao buscar lista de modelos permitidos]';
+      }
+    }
+
     // Return 200 so supabase-js actually parses the JSON body instead of throwing generic non-2xx
     return new Response(JSON.stringify({ 
-      answer: `🚀 DIAGNÓSTICO DE ERRO NO SERVIDOR:\n\n${message}\n\nCopie essa mensagem para o assistente.`,
+      answer: `🚀 DIAGNÓSTICO DE ERRO NO SERVIDOR:\n\n${message}${modelsList}\n\nCopie essa mensagem inteira para o assistente!`,
       error: message, 
       exception: true 
     }), {
