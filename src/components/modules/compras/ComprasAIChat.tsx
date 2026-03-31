@@ -462,18 +462,24 @@ O campo "price" é o custo unitário em USD. O campo "cbm" é o CBM total para a
         compras: comprasItems?.map(d => ({
           sku: d.sku,
           cat: d.categoria,
+          abc: d.curvaABC,
           custo: d.custoProduto,
+          margem: d.margemJanFev || d.margemAtual,    // margem mais recente
           vmd: d.mediaVendaDiaria,
+          vmd_recente: d.vmdRecente,                   // AVG Jan/Fev26
+          bias: d.bias || 1,
           estoque: d.onHand,
           dias_rupu: d.diasParaRuptura,
+          parar: d.pararDeTrazer,                      // regra exclusão D
+          check: d.checkDemanda,                       // regra exclusão Q
+          transito_bm: d.containerBM,                  // container 15/04
           pedido_user: d.pedidoSugerido,
-          cbm_tot_user: d.cbmTotal,
+          cbm_unit: d.cbmTotal > 0 && d.pedidoSugerido > 0
+            ? d.cbmTotal / d.pedidoSugerido            // CBM por unidade
+            : 0,
           lucro_cbm: d.lucroPorCBM,
-          custo_tot_user: d.custoTotalPedido,
-          jan: d.tendenciaMeses?.jan,
-          fev: d.tendenciaMeses?.fev,
-          // Injecting FULL raw spreadsheet row matching exactly the prompt columns (D, Q, BM, etc)
-          ...((d as any).raw || {})
+          status: d.statusProjecao,
+          abr_sop: d.tendenciaMeses?.abr,
         })) || [],
       };
 

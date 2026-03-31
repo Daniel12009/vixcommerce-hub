@@ -353,6 +353,12 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         margemDez24: num(r.margemDez24),
         margemJan25: num(r.margemJan25),
         margemFev25: num(r.margemFev25),
+        margemJanFev: num(r['Margem\nJan/Fev'] || r.margemJanFev || r['Margem Jan/Fev'] || r['margemJanFev']),
+        vmdRecente: num(r['AVG venda \nJan/Fev26'] || r['AVG venda Jan/Fev26'] || r.abrSOP || r.vmdRecente),
+        bias: num(r['BIAS'] || r.bias),
+        pararDeTrazer: r['O que vou parar de trazer'] || r.pararDeTrazer || '',
+        checkDemanda: r['Check demanda'] || r.checkDemanda || '',
+        containerBM: num(r['Ctnr 15/04/26'] || r['Ctnr 15/04/26'] || r.containerBM),
         raw: { ...r } // Store complete raw row for AI prompt matching
       }));
     setComprasItems(items);

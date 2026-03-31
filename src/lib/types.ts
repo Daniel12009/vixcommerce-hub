@@ -150,8 +150,11 @@ export interface EstimativaCompraItem {
   categoria: string;
   custoProduto: number;
   margemAtual: number;
+  margemJanFev: number;       // ADD — margem mais recente
   curvaABC: string;
   mediaVendaDiaria: number;
+  vmdRecente: number;          // ADD — AVG venda Jan/Fev26
+  bias: number;                // ADD — BIAS (coluna R)
   onHand: number;
   diasParaRuptura: string | number;
   pedidoSugerido: number;
@@ -159,6 +162,9 @@ export interface EstimativaCompraItem {
   cbmTotal: number;
   custoTotalPedido: number;
   statusProjecao: string;
+  pararDeTrazer: string;       // ADD — col D (exclusão)
+  checkDemanda: string;        // ADD — col Q (exclusão)
+  containerBM: number;         // ADD — Ctnr 15/04/26 (trânsito)
   tendenciaMeses: Record<string, number>;
   historicoVendasGeral?: number; 
   margemDez24?: number;
