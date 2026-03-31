@@ -375,9 +375,6 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const systemPrompt = `Você é um especialista em planejamento de demanda, S&OP e otimização de compras com restrição logística (CBM).
-
-// ─── PROMPT V3 — Agente de Otimização de Compras (S&OP + CBM) ───
       const systemPrompt = `Você é um especialista em planejamento de demanda, S&OP e otimização de compras com restrição logística (CBM). Gere os 7 outputs abaixo de forma auditável e objetiva.
 
 ## FONTE DE DADOS
