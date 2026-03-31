@@ -158,78 +158,125 @@ function parseAIToPurchaseOrder(
   cbmLimit: number,
   daysHorizon: number
 ): PurchaseOrder {
-  // Extract SKUs and quantities from the AI-recommended table
-  const lines: PurchaseOrderLine[] = [];
+  let lines: PurchaseOrderLine[] = [];
   let no = 1;
 
-  // Try to match table rows that contain SKU codes (FC-XX pattern)
-  const tableRowRegex = /\|\s*(FC-\d+|KIT-?\w+|\d{4})\s*\|/gi;
-  const allMatches = markdownResult.matchAll(tableRowRegex);
+  // Strategy 1: Look for a ```json block with purchase_order array
+  const jsonMatch = markdownResult.match(/```json\s*\n([\s\S]*?)\n```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      const poArray = parsed.purchase_order || parsed.pedido || parsed;
+      if (Array.isArray(poArray)) {
+        for (const item of poArray) {
+          const sku = (item.sku || '').toUpperCase();
+          const qty = Number(item.qty || item.quantidade || 0);
+          if (!sku || qty <= 0) continue;
 
-  const processedSkus = new Set<string>();
-  for (const match of allMatches) {
-    const sku = match[1].toUpperCase();
-    if (processedSkus.has(sku)) continue;
-    processedSkus.add(sku);
+          const compraItem = comprasItems?.find(c => c.sku?.toUpperCase() === sku);
+          const price = Number(item.price || item.preco || compraItem?.custoProduto || 0);
+          const cbmUnit = Number(item.cbm_unit || 0) ||
+            (compraItem?.cbmTotal && compraItem?.pedidoSugerido
+              ? compraItem.cbmTotal / Math.max(compraItem.pedidoSugerido, 1)
+              : 0);
+          const cbm = Number(item.cbm || 0) || qty * cbmUnit;
 
-    // Find the full row in markdown
-    const lineStart = markdownResult.lastIndexOf('\n', match.index) + 1;
-    const lineEnd = markdownResult.indexOf('\n', match.index!);
-    const fullLine = markdownResult.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
-    const cells = fullLine.split('|').map(c => c.trim()).filter(Boolean);
-
-    // Find matching compras item for price/cbm data
-    const compraItem = comprasItems?.find(c => c.sku?.toUpperCase() === sku);
-
-    // Try to extract qty from cells (look for numeric values)
-    const numbers = cells.map(c => {
-      const n = parseFloat(c.replace(/[^\d.,]/g, '').replace(',', '.'));
-      return isNaN(n) ? 0 : n;
-    }).filter(n => n > 0);
-
-    const qty = numbers.find(n => n >= 10 && n <= 50000) || compraItem?.pedidoSugerido || 0;
-    if (qty <= 0) continue;
-
-    const price = compraItem?.custoProduto || 0;
-    const packing = 1;
-    const ctn = Math.ceil(qty / packing);
-    const cbmPerCtn = compraItem?.cbmTotal && compraItem?.pedidoSugerido
-      ? compraItem.cbmTotal / Math.max(compraItem.pedidoSugerido, 1) * packing
-      : 0.087;
-    const cbm = ctn * cbmPerCtn;
-    const amount = qty * price;
-
-    lines.push({
-      no: no++,
-      sku,
-      description: compraItem?.categoria || '',
-      packing,
-      qty,
-      price: Math.round(price * 100) / 100,
-      ctn,
-      cbmCtn: Math.round(cbmPerCtn * 1000) / 1000,
-      cbm: Math.round(cbm * 100) / 100,
-      amount: Math.round(amount * 100) / 100,
-    });
+          lines.push({
+            no: no++,
+            sku,
+            description: item.description || item.categoria || compraItem?.categoria || '',
+            packing: Number(item.packing || 1),
+            qty,
+            price: Math.round(price * 100) / 100,
+            ctn: Number(item.ctn || Math.ceil(qty)),
+            cbmCtn: Math.round(cbmUnit * 10000) / 10000,
+            cbm: Math.round(cbm * 100) / 100,
+            amount: Math.round(qty * price * 100) / 100,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse JSON PO block:', e);
+    }
   }
 
-  // If parsing found nothing, fallback: use comprasItems directly
-  if (lines.length === 0 && comprasItems?.length) {
-    for (const item of comprasItems) {
-      if (!item.pedidoSugerido || item.pedidoSugerido <= 0) continue;
+  // Strategy 2: Regex — look specifically in the "Plano Otimizado" section
+  if (lines.length === 0) {
+    // Find the optimized plan section
+    const optimizedSection = markdownResult.match(
+      /(?:Plano Otimizado|Recomenda[çc][ãa]o|Nossa Sugest[ãa]o|Otimiza[çc][ãa]o Knapsack)[^\n]*\n([\s\S]*?)(?:\n#{1,3}\s|\n\*{2}[^*]|\n---|\n$)/i
+    );
+    const searchText = optimizedSection ? optimizedSection[1] : markdownResult;
+
+    // Match rows in pipe-delimited tables
+    const skuPattern = /\|\s*(FC-\d+\w*|KIT-?\w+|\d{4,})\s*\|/gi;
+    const processedSkus = new Set<string>();
+
+    for (const match of searchText.matchAll(skuPattern)) {
+      const sku = match[1].toUpperCase();
+      if (processedSkus.has(sku)) continue;
+      processedSkus.add(sku);
+
+      // Get the full table row
+      const lineStart = searchText.lastIndexOf('\n', match.index!) + 1;
+      const lineEnd = searchText.indexOf('\n', match.index!);
+      const fullLine = searchText.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+      const cells = fullLine.split('|').map(c => c.trim()).filter(Boolean);
+
+      const compraItem = comprasItems?.find(c => c.sku?.toUpperCase() === sku);
+
+      // Extract numbers from cells, try to find qty (second number-like value, or first large one)
+      const cellNumbers = cells.map(c => {
+        const cleaned = c.replace(/[R$%🔥⚠️💰📦✅❌\s]/g, '').replace(/\./g, '').replace(',', '.');
+        const n = parseFloat(cleaned);
+        return isNaN(n) ? 0 : n;
+      });
+
+      // Qty is typically the first large number (>=10) after the SKU
+      const skuCellIndex = cells.findIndex(c => c.toUpperCase().includes(sku));
+      const numbersAfterSku = cellNumbers.slice(skuCellIndex + 1).filter(n => n >= 1);
+      const qty = numbersAfterSku.find(n => n >= 10 && n <= 50000) || 0;
+      if (qty <= 0) continue;
+
+      const price = compraItem?.custoProduto || 0;
+      const cbmPerUnit = compraItem?.cbmTotal && compraItem?.pedidoSugerido
+        ? compraItem.cbmTotal / Math.max(compraItem.pedidoSugerido, 1)
+        : 0;
+      const cbm = qty * cbmPerUnit;
+
       lines.push({
         no: no++,
-        sku: item.sku,
-        description: item.categoria || '',
+        sku,
+        description: compraItem?.categoria || '',
         packing: 1,
-        qty: item.pedidoSugerido,
-        price: item.custoProduto || 0,
-        ctn: item.pedidoSugerido,
-        cbmCtn: item.cbmTotal && item.pedidoSugerido ? item.cbmTotal / item.pedidoSugerido : 0,
-        cbm: item.cbmTotal || 0,
-        amount: (item.pedidoSugerido || 0) * (item.custoProduto || 0),
+        qty,
+        price: Math.round(price * 100) / 100,
+        ctn: Math.ceil(qty),
+        cbmCtn: Math.round(cbmPerUnit * 10000) / 10000,
+        cbm: Math.round(cbm * 100) / 100,
+        amount: Math.round(qty * price * 100) / 100,
       });
     }
+  }
+
+  // Enforce CBM limit — sort by lucro/CBM descending, then cap
+  if (lines.length > 0) {
+    let runningCbm = 0;
+    const capped: PurchaseOrderLine[] = [];
+    // Sort by amount/cbm ratio (best efficiency first)
+    lines.sort((a, b) => {
+      const ratioA = a.cbm > 0 ? a.amount / a.cbm : 0;
+      const ratioB = b.cbm > 0 ? b.amount / b.cbm : 0;
+      return ratioB - ratioA;
+    });
+    for (const line of lines) {
+      if (runningCbm + line.cbm <= cbmLimit) {
+        runningCbm += line.cbm;
+        line.no = capped.length + 1;
+        capped.push(line);
+      }
+    }
+    lines = capped;
   }
 
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
@@ -315,8 +362,21 @@ Apresente a tabela final de recomendação e consolidação (CBM utilizado, Lucr
 
 A tabela de "Plano Otimizado Recomendado" DEVE conter a coluna SKU com o código exato (ex: FC-138, FC-71, etc.) e QTD recomendada.
 
+REGRA FUNDAMENTAL: O total de CBM do plano otimizado NÃO PODE ultrapassar ${cbmLimit} CBMs. Inclua apenas os SKUs que cabem no container.
+
 8. Camada Estratégica
 Onde há trade-offs, riscos e sugestões.
+
+9. OBRIGATÓRIO — Bloco JSON para Pedido de Compra
+NO FINAL DO RELATÓRIO, adicione um bloco de código JSON (entre \`\`\`json e \`\`\`) com EXATAMENTE os SKUs recomendados para compra. O formato DEVE ser:
+\`\`\`json
+{"purchase_order": [
+  {"sku": "FC-138", "qty": 2700, "description": "Torneira", "price": 1.63, "cbm": 7.65},
+  {"sku": "FC-02", "qty": 1140, "description": "Torneira", "price": 2.46, "cbm": 1.48}
+]}
+\`\`\`
+Use os dados reais do contexto. O campo "price" é o custo unitário em USD. Inclua APENAS os SKUs que entraram no plano otimizado respeitando o limite de ${cbmLimit} CBMs.
+
 GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NEGRITO ONDE APLICÁVEL. Formate como um relatório executivo requintado.`;
 
       const context_data = {
