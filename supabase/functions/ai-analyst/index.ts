@@ -22,7 +22,11 @@ async function callClaude(system: string, messages: any[]): Promise<string> {
       messages,
     }),
   });
-  if (!res.ok) throw new Error(`Claude error: ${res.status}`);
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Claude error HTTP ${res.status}: ${errText}`);
+  }
   const data = await res.json();
   return data.content?.[0]?.text || '';
 }
@@ -58,9 +62,14 @@ Deno.serve(async (req) => {
   try {
     const { mode, question, context_data, history, system_prompt } = await req.json();
 
-    // Buscar contas ML ativas
-    const accounts = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
-    const contasList = (accounts || []).map((a: any) => `${a.nome} (id: ${a.id})`).join(', ');
+    // Buscar contas ML ativas de forma segura
+    let contasList = '';
+    try {
+      const accounts = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
+      contasList = (Array.isArray(accounts) ? accounts : []).map((a: any) => `${a.nome} (id: ${a.id})`).join(', ');
+    } catch (e: any) {
+      console.warn('Falha ao buscar ml_accounts:', e.message);
+    }
 
     const defaultSystem = `Você é um analista e assistente executivo de e-commerce brasileiro especializado em Mercado Livre.
 
@@ -297,11 +306,12 @@ Continue a resposta com esses dados.`;
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+  } catch (error: any) {
+    const message = error.message || String(error);
     console.error('ai-analyst error:', message);
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+    // Return 200 so supabase-js actually parses the JSON body instead of throwing generic non-2xx
+    return new Response(JSON.stringify({ error: message, exception: true }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

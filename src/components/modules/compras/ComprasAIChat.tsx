@@ -467,6 +467,7 @@ O campo "price" é o custo unitário em USD. O campo "cbm" é o CBM total para a
       });
 
       if (error) throw new Error(error.message);
+      if (data?.exception || data?.error) throw new Error(data.error || 'Ocorreu um erro interno na IA.');
 
       const answer = data?.answer || 'Sem reposta do assistente.';
       setResult(answer);
