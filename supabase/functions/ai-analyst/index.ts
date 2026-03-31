@@ -310,7 +310,11 @@ Continue a resposta com esses dados.`;
     const message = error.message || String(error);
     console.error('ai-analyst error:', message);
     // Return 200 so supabase-js actually parses the JSON body instead of throwing generic non-2xx
-    return new Response(JSON.stringify({ error: message, exception: true }), {
+    return new Response(JSON.stringify({ 
+      answer: `🚀 DIAGNÓSTICO DE ERRO NO SERVIDOR:\n\n${message}\n\nCopie essa mensagem para o assistente.`,
+      error: message, 
+      exception: true 
+    }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
