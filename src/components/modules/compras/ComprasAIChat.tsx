@@ -156,132 +156,88 @@ function downloadXML(order: PurchaseOrder) {
   URL.revokeObjectURL(url);
 }
 
-/* ───────── Parse AI structured output to PO lines ───────── */
-function parseAIToPurchaseOrder(
-  markdownResult: string,
+/* ───────── Build PO algorithmically (Knapsack) from comprasItems ───────── */
+function buildPurchaseOrder(
   comprasItems: any[],
   cbmLimit: number,
-  daysHorizon: number
+  daysHorizon: number,
+  markdownReport: string
 ): PurchaseOrder {
-  let lines: PurchaseOrderLine[] = [];
+  if (!comprasItems?.length) {
+    return emptyOrder(cbmLimit, daysHorizon, markdownReport);
+  }
+
+  // Calculate CBM per unit for each item
+  const items = comprasItems
+    .filter(d => d.sku && d.mediaVendaDiaria > 0)
+    .map(d => {
+      const cbmPerUnit = d.cbmTotal && d.pedidoSugerido && d.pedidoSugerido > 0
+        ? d.cbmTotal / d.pedidoSugerido
+        : 0;
+      const demanda = Math.ceil(d.mediaVendaDiaria * daysHorizon);
+      const diasRuptura = typeof d.diasParaRuptura === 'number' ? d.diasParaRuptura : 999;
+      const isCritical = diasRuptura < daysHorizon;
+      const lucroCBM = d.lucroPorCBM || 0;
+
+      return {
+        sku: d.sku,
+        categoria: d.categoria || '',
+        custoProduto: d.custoProduto || 0,
+        vmd: d.mediaVendaDiaria,
+        demanda,
+        onHand: d.onHand || 0,
+        diasRuptura,
+        isCritical,
+        lucroCBM,
+        cbmPerUnit,
+        // Qty to order = demand - current stock (min 0)
+        qtyNeeded: Math.max(demanda - (d.onHand || 0), 0),
+        pedidoUser: d.pedidoSugerido || 0,
+      };
+    })
+    .filter(d => d.qtyNeeded > 0 && d.cbmPerUnit > 0);
+
+  // Phase 1: Critical SKUs first (ruptura < horizon)
+  const criticals = items.filter(d => d.isCritical).sort((a, b) => b.lucroCBM - a.lucroCBM);
+  // Phase 2: Non-critical sorted by lucro/CBM descending
+  const nonCriticals = items.filter(d => !d.isCritical).sort((a, b) => b.lucroCBM - a.lucroCBM);
+
+  const ordered = [...criticals, ...nonCriticals];
+  let runningCbm = 0;
+  const lines: PurchaseOrderLine[] = [];
   let no = 1;
 
-  // Strategy 1: Look for a ```json block with purchase_order array
-  const jsonMatch = markdownResult.match(/```json\s*\n([\s\S]*?)\n```/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[1]);
-      const poArray = parsed.purchase_order || parsed.pedido || parsed;
-      if (Array.isArray(poArray)) {
-        for (const item of poArray) {
-          const sku = (item.sku || '').toUpperCase();
-          const qty = Number(item.qty || item.quantidade || 0);
-          if (!sku || qty <= 0) continue;
+  for (const item of ordered) {
+    // How much CBM would the full order take?
+    let qty = item.qtyNeeded;
+    let cbm = qty * item.cbmPerUnit;
 
-          const compraItem = comprasItems?.find(c => c.sku?.toUpperCase() === sku);
-          const price = Number(item.price || item.preco || compraItem?.custoProduto || 0);
-          const cbmUnit = Number(item.cbm_unit || 0) ||
-            (compraItem?.cbmTotal && compraItem?.pedidoSugerido
-              ? compraItem.cbmTotal / Math.max(compraItem.pedidoSugerido, 1)
-              : 0);
-          const cbm = Number(item.cbm || 0) || qty * cbmUnit;
-
-          lines.push({
-            no: no++,
-            sku,
-            description: item.description || item.categoria || compraItem?.categoria || '',
-            packing: Number(item.packing || 1),
-            qty,
-            price: Math.round(price * 100) / 100,
-            ctn: Number(item.ctn || Math.ceil(qty)),
-            cbmCtn: Math.round(cbmUnit * 10000) / 10000,
-            cbm: Math.round(cbm * 100) / 100,
-            amount: Math.round(qty * price * 100) / 100,
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to parse JSON PO block:', e);
-    }
-  }
-
-  // Strategy 2: Regex — look specifically in the "Plano Otimizado" section
-  if (lines.length === 0) {
-    // Find the optimized plan section
-    const optimizedSection = markdownResult.match(
-      /(?:Plano Otimizado|Recomenda[çc][ãa]o|Nossa Sugest[ãa]o|Otimiza[çc][ãa]o Knapsack)[^\n]*\n([\s\S]*?)(?:\n#{1,3}\s|\n\*{2}[^*]|\n---|\n$)/i
-    );
-    const searchText = optimizedSection ? optimizedSection[1] : markdownResult;
-
-    // Match rows in pipe-delimited tables
-    const skuPattern = /\|\s*(FC-\d+\w*|KIT-?\w+|\d{4,})\s*\|/gi;
-    const processedSkus = new Set<string>();
-
-    for (const match of searchText.matchAll(skuPattern)) {
-      const sku = match[1].toUpperCase();
-      if (processedSkus.has(sku)) continue;
-      processedSkus.add(sku);
-
-      // Get the full table row
-      const lineStart = searchText.lastIndexOf('\n', match.index!) + 1;
-      const lineEnd = searchText.indexOf('\n', match.index!);
-      const fullLine = searchText.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
-      const cells = fullLine.split('|').map(c => c.trim()).filter(Boolean);
-
-      const compraItem = comprasItems?.find(c => c.sku?.toUpperCase() === sku);
-
-      // Extract numbers from cells, try to find qty (second number-like value, or first large one)
-      const cellNumbers = cells.map(c => {
-        const cleaned = c.replace(/[R$%🔥⚠️💰📦✅❌\s]/g, '').replace(/\./g, '').replace(',', '.');
-        const n = parseFloat(cleaned);
-        return isNaN(n) ? 0 : n;
-      });
-
-      // Qty is typically the first large number (>=10) after the SKU
-      const skuCellIndex = cells.findIndex(c => c.toUpperCase().includes(sku));
-      const numbersAfterSku = cellNumbers.slice(skuCellIndex + 1).filter(n => n >= 1);
-      const qty = numbersAfterSku.find(n => n >= 10 && n <= 50000) || 0;
+    // If it doesn't fit, reduce qty to fit remaining space
+    if (runningCbm + cbm > cbmLimit) {
+      const remainingCbm = cbmLimit - runningCbm;
+      if (remainingCbm < 0.01) break; // No space left
+      qty = Math.floor(remainingCbm / item.cbmPerUnit);
       if (qty <= 0) continue;
-
-      const price = compraItem?.custoProduto || 0;
-      const cbmPerUnit = compraItem?.cbmTotal && compraItem?.pedidoSugerido
-        ? compraItem.cbmTotal / Math.max(compraItem.pedidoSugerido, 1)
-        : 0;
-      const cbm = qty * cbmPerUnit;
-
-      lines.push({
-        no: no++,
-        sku,
-        description: compraItem?.categoria || '',
-        packing: 1,
-        qty,
-        price: Math.round(price * 100) / 100,
-        ctn: Math.ceil(qty),
-        cbmCtn: Math.round(cbmPerUnit * 10000) / 10000,
-        cbm: Math.round(cbm * 100) / 100,
-        amount: Math.round(qty * price * 100) / 100,
-      });
+      cbm = qty * item.cbmPerUnit;
     }
-  }
 
-  // Enforce CBM limit — sort by lucro/CBM descending, then cap
-  if (lines.length > 0) {
-    let runningCbm = 0;
-    const capped: PurchaseOrderLine[] = [];
-    // Sort by amount/cbm ratio (best efficiency first)
-    lines.sort((a, b) => {
-      const ratioA = a.cbm > 0 ? a.amount / a.cbm : 0;
-      const ratioB = b.cbm > 0 ? b.amount / b.cbm : 0;
-      return ratioB - ratioA;
+    runningCbm += cbm;
+    const amount = qty * item.custoProduto;
+
+    lines.push({
+      no: no++,
+      sku: item.sku,
+      description: item.categoria,
+      packing: 1,
+      qty,
+      price: Math.round(item.custoProduto * 100) / 100,
+      ctn: qty,
+      cbmCtn: Math.round(item.cbmPerUnit * 10000) / 10000,
+      cbm: Math.round(cbm * 100) / 100,
+      amount: Math.round(amount * 100) / 100,
     });
-    for (const line of lines) {
-      if (runningCbm + line.cbm <= cbmLimit) {
-        runningCbm += line.cbm;
-        line.no = capped.length + 1;
-        capped.push(line);
-      }
-    }
-    lines = capped;
+
+    if (runningCbm >= cbmLimit - 0.01) break;
   }
 
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
@@ -300,7 +256,22 @@ function parseAIToPurchaseOrder(
     totalAmount,
     cbmLimit,
     daysHorizon,
-    markdownReport: markdownResult,
+    markdownReport,
+  };
+}
+
+function emptyOrder(cbmLimit: number, daysHorizon: number, report: string): PurchaseOrder {
+  const now = new Date();
+  return {
+    id: crypto.randomUUID(),
+    date: `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`,
+    lines: [],
+    totalQty: 0,
+    totalCbm: 0,
+    totalAmount: 0,
+    cbmLimit,
+    daysHorizon,
+    markdownReport: report,
   };
 }
 
@@ -416,8 +387,8 @@ GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NE
       const answer = data?.answer || 'Sem reposta do assistente.';
       setResult(answer);
 
-      // Parse structured order from AI response
-      const order = parseAIToPurchaseOrder(answer, comprasItems || [], cbmLimit, daysHorizon);
+      // Build purchase order algorithmically (Knapsack) from comprasItems data
+      const order = buildPurchaseOrder(comprasItems || [], cbmLimit, daysHorizon, answer);
       setCurrentOrder(order);
 
       // Fetch photos for each SKU in the PO (in parallel)
