@@ -475,8 +475,23 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
         setAgentSteps(prev => prev.map(s => s.id === stepId ? { ...s, status } : s));
       };
 
-      // Mostrar agentes como running em sequência (simulação visual)
-      updateStep('agent1', 'running');
+      // Simulação Visual Autêntica (Já que Agentes 1 a 4 são Nativos e rodam em 0s)
+      setTimeout(() => {
+        setAgentSteps(AGENT_STEPS.map((s, i) => {
+          if (i < 4) return { ...s, status: 'done' }; // 1 a 4 instantâneos
+          if (i === 4) return { ...s, status: 'running' }; // Knapsack processando
+          return { ...s, status: 'pending' };
+        }));
+      }, 1000);
+
+      // Após ~35s, o Knapsack (Agent 5) termina e o Claude começa o Relatório (Agent 6)
+      const agent6Timer = setTimeout(() => {
+        setAgentSteps(prev => prev.map((s, i) => {
+          if (i === 4) return { ...s, status: 'done' };
+          if (i === 5) return { ...s, status: 'running' };
+          return s;
+        }));
+      }, 35000);
       
       const { data, error } = await supabase.functions.invoke('sop-optimizer', {
         body: {
@@ -486,6 +501,8 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
         },
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
+
+      clearTimeout(agent6Timer);
 
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
