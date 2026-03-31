@@ -7,12 +7,12 @@ const corsHeaders = {
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
-// ── Retry-aware Claude caller ────────────────────────────────────────────────
+// ── Retry-aware Claude caller (only for agent6 report) ──────────────────────
 async function callClaude(system: string, user: string, maxTokens = 2000): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
 
-  const delays = [2000, 5000, 12000]; // retry after 2s, 5s, 12s
+  const delays = [3000, 8000, 20000, 45000];
   let lastErr = '';
 
   for (let attempt = 0; attempt <= delays.length; attempt++) {
@@ -39,8 +39,7 @@ async function callClaude(system: string, user: string, maxTokens = 2000): Promi
     const body = await res.text();
     lastErr = `Claude error ${res.status}: ${body}`;
 
-    // Only retry on 529 (overloaded) or 529-like transient errors
-    if (res.status !== 529 && res.status !== 529 || attempt >= delays.length) {
+    if (res.status !== 529 || attempt >= delays.length) {
       throw new Error(lastErr);
     }
 
@@ -49,16 +48,6 @@ async function callClaude(system: string, user: string, maxTokens = 2000): Promi
   }
 
   throw new Error(lastErr);
-}
-
-// ── JSON extractor ────────────────────────────────────────────────────────────
-function parseJSON(text: string): any {
-  const clean = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
-  try { return JSON.parse(clean); } catch {
-    const m = clean.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-    if (m) return JSON.parse(m[1]);
-    throw new Error('Falha total ao extrair JSON da IA: ' + clean.slice(0, 300));
-  }
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -71,7 +60,7 @@ function num(v: any): number {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// AGENTE 1 — FILTROS (100% nativo, sem IA)
+// AGENTE 1 — FILTROS (100% nativo)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function agent1_filtros(skus: any[]): any[] {
   return skus.map(s => {
@@ -87,7 +76,7 @@ function agent1_filtros(skus: any[]): any[] {
       motivo_exclusao = 'Parar de trazer';
     } else if (check.includes('não comprar') || check.includes('nao comprar')) {
       motivo_exclusao = 'Check: Não comprar';
-    } else if (custo === 0 && vmd === 0 && estoque === 0 && !s.historico_mensal && !s.total_180d) {
+    } else if (custo === 0 && vmd === 0 && estoque === 0) {
       motivo_exclusao = 'Sem dados';
     }
 
@@ -96,7 +85,7 @@ function agent1_filtros(skus: any[]): any[] {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// AGENTE 2 — DEMANDA & VMD (100% nativo, sem IA)
+// AGENTE 2 — DEMANDA & VMD (100% nativo)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function agent2_demanda(elegiveis: any[], skusMap: Record<string, any>, daysHorizon: number): any[] {
   return elegiveis
@@ -111,7 +100,6 @@ function agent2_demanda(elegiveis: any[], skusMap: Record<string, any>, daysHori
       const transito = num(s.transito_bm);
       const dias_seg = num(s.dias_seg) || 15;
 
-      // VMD ajustada
       let vmd_ajustada: number;
       let vmd_fonte: string;
 
@@ -135,11 +123,10 @@ function agent2_demanda(elegiveis: any[], skusMap: Record<string, any>, daysHori
       const dias_cobertura = vmd_ajustada > 0 ? Math.round(disponivel / vmd_ajustada) : 999;
       const status = dias_cobertura < 30 ? 'critico' : dias_cobertura < 90 ? 'risco' : 'ok';
 
-      // Tendência simples via histórico mensal
       let tendencia = 'estavel';
       const hm = s.historico_mensal || s.tendenciaMeses;
       if (hm && typeof hm === 'object') {
-        const vals = Object.values(hm).map((v: any) => num(v)).filter(v => v > 0);
+        const vals = Object.values(hm).map((v: any) => num(v)).filter((v: number) => v > 0);
         if (vals.length >= 6) {
           const half = Math.floor(vals.length / 2);
           const first = vals.slice(0, half).reduce((a: number, b: number) => a + b, 0) / half;
@@ -167,13 +154,13 @@ function agent2_demanda(elegiveis: any[], skusMap: Record<string, any>, daysHori
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// AGENTE 3 — CBM POR UNIDADE (100% nativo, sem IA)
+// AGENTE 3 — CBM POR UNIDADE (100% nativo)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function agent3_cbm(elegiveis: any[], skusMap: Record<string, any>): Record<string, number> {
   const cbmMap: Record<string, number> = {};
   for (const e of elegiveis.filter(e => !e.motivo_exclusao)) {
     const s = skusMap[e.sku] || {};
-    if (s.cbm_unit && num(s.cbm_unit) > 0) {
+    if (num(s.cbm_unit) > 0) {
       cbmMap[e.sku] = num(s.cbm_unit);
     } else if (num(s.cbm_tot_user) > 0 && num(s.pedido_user) > 0) {
       cbmMap[e.sku] = num(s.cbm_tot_user) / num(s.pedido_user);
@@ -187,7 +174,7 @@ function agent3_cbm(elegiveis: any[], skusMap: Record<string, any>): Record<stri
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// AGENTE 4 — MÉTRICAS DE OTIMIZAÇÃO (100% nativo, sem IA)
+// AGENTE 4 — MÉTRICAS DE OTIMIZAÇÃO (100% nativo)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function agent4_metricas(demandas: any[], cbmMap: Record<string, number>, skusMap: Record<string, any>): any[] {
   const lucros = demandas.map(d => {
@@ -195,7 +182,7 @@ function agent4_metricas(demandas: any[], cbmMap: Record<string, number>, skusMa
     const custo = num(s.custo || s.custoProduto);
     const margem_raw = num(s.margem || s.margemAtual);
     const margem = margem_raw > 1 ? margem_raw / 100 : margem_raw;
-    const taxa_dev = num(s.taxa_dev || s.margemAtual) / 100 || 0;
+    const taxa_dev = num(s.taxa_dev) / 100 || 0;
     const cbm_unit = cbmMap[d.sku] || 0;
 
     const preco_venda = margem < 1 && margem > 0 ? custo / (1 - margem) : custo;
@@ -205,7 +192,6 @@ function agent4_metricas(demandas: any[], cbmMap: Record<string, number>, skusMa
     return { sku: d.sku, lucro_unitario, lucro_cbm, status: d.status, cbm_unit, necessidade: d.necessidade_minima };
   });
 
-  // Top 25% cutoff for lucro_cbm
   const sorted = [...lucros].sort((a, b) => b.lucro_cbm - a.lucro_cbm);
   const top25 = sorted[Math.floor(sorted.length * 0.25)]?.lucro_cbm ?? 0;
 
@@ -222,46 +208,91 @@ function agent4_metricas(demandas: any[], cbmMap: Record<string, number>, skusMa
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// AGENTE 5 — KNAPSACK (Claude com retry)
+// AGENTE 5 — KNAPSACK (100% nativo — greedy por lucro/CBM)
+// Fase 1: Críticos → Fase 2: Oportunidade → Fase 3: Top-off ≥95%
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function agent5_knapsack(demandas: any[], metricas: any[], cbmLimit: number): Promise<any> {
-  const system = `MUITO IMPORTANTE: Você é o otimizador Knapsack para compras de container.
-Retorne APENAS um objeto JSON válido. NÃO ESCREVA NENHUM TEXTO ANTES OU DEPOIS, NENHUMA SAUDAÇÃO E NENHUMA EXPLICAÇÃO. A primeira letra da sua resposta deve ser '{' e a última '}'.
-ALGORITMO OBRIGATÓRIO:
-1. Fase Críticos: Para SKUs com status="critico", aloque necessidade_minima. Ordene por lucro_cbm desc.
-2. Fase Oportunidade: Com CBM restante, aloque MAIS unidades dos SKUs com maior lucro_cbm.
-   - Para cada SKU ordenado por lucro_cbm desc: qty_extra = floor(cbm_restante_proporcional / cbm_unit)
-   - Máximo 25% do CBM total por SKU único
-3. REGRA INVIOLÁVEL: CBM_TOTAL final deve estar entre ${(cbmLimit * 0.95).toFixed(1)} e ${cbmLimit} CBMs.
-   - Se sobrar espaço, adicione mais unidades dos top SKUs ATÉ atingir 95%
-   - NUNCA ultrapassar ${cbmLimit} CBMs
+function agent5_knapsack(demandas: any[], metricas: any[], cbmLimit: number): any {
+  const items = demandas
+    .map(d => {
+      const m = metricas.find(x => x.sku === d.sku) || {} as any;
+      return {
+        sku: d.sku,
+        necessidade_minima: d.necessidade_minima || 0,
+        status: d.status,
+        lucro_cbm: m.lucro_cbm || 0,
+        cbm_unit: m.cbm_unit || 0,
+      };
+    })
+    .filter(d => d.cbm_unit > 0);
 
-Formato de saída:
-{
-  "alocacao": [
-    {"sku":"FC-138","qty_critico":1659,"qty_extra":800,"qty_total":2459,"cbm_total":6.97,"fase":"critico+oportunidade"}
-  ],
-  "excluidos_espaco": [],
-  "cbm_utilizado": 67.8,
-  "cbm_disponivel": ${cbmLimit},
-  "pct_utilizacao": 98.3
-}`;
+  const byLucroCbm = [...items].sort((a, b) => b.lucro_cbm - a.lucro_cbm);
+  const maxPerSku = cbmLimit * 0.25;
+  let cbmUsed = 0;
 
-  const merged = demandas.map(d => {
-    const m = metricas.find(x => x.sku === d.sku) || {};
-    return {
-      sku: d.sku,
-      necessidade_minima: d.necessidade_minima,
-      status: d.status,
-      lucro_cbm: m.lucro_cbm || 0,
-      cbm_unit: m.cbm_unit || 0,
-      classificacao: m.classificacao || 'oportunidade',
-    };
-  }).filter(d => d.cbm_unit > 0);
+  const alloc: Record<string, { qty_critico: number; qty_extra: number; cbm: number }> = {};
+  for (const s of items) alloc[s.sku] = { qty_critico: 0, qty_extra: 0, cbm: 0 };
 
-  const user = `CBM disponível: ${cbmLimit}\nSKUs para otimizar:\n${JSON.stringify(merged)}`;
-  const result = await callClaude(system, user, 4000);
-  return parseJSON(result);
+  // ── FASE 1: Críticos ──
+  for (const s of byLucroCbm.filter(s => s.status === 'critico')) {
+    if (s.necessidade_minima <= 0 || s.cbm_unit <= 0) continue;
+    const maxQty = Math.floor(maxPerSku / s.cbm_unit);
+    const qty = Math.min(s.necessidade_minima, maxQty);
+    const cbmNeeded = qty * s.cbm_unit;
+    if (cbmUsed + cbmNeeded > cbmLimit) {
+      const possible = Math.floor((cbmLimit - cbmUsed) / s.cbm_unit);
+      alloc[s.sku].qty_critico = possible;
+      alloc[s.sku].cbm += possible * s.cbm_unit;
+      cbmUsed += possible * s.cbm_unit;
+    } else {
+      alloc[s.sku].qty_critico = qty;
+      alloc[s.sku].cbm += cbmNeeded;
+      cbmUsed += cbmNeeded;
+    }
+  }
+
+  // ── FASE 2: Oportunidade greedy ──
+  for (const s of byLucroCbm) {
+    if (cbmUsed >= cbmLimit || s.cbm_unit <= 0) continue;
+    const slotLeft = Math.min(cbmLimit - cbmUsed, maxPerSku - alloc[s.sku].cbm);
+    if (slotLeft <= 0) continue;
+    const qtyExtra = Math.floor(slotLeft / s.cbm_unit);
+    if (qtyExtra <= 0) continue;
+    alloc[s.sku].qty_extra += qtyExtra;
+    alloc[s.sku].cbm += qtyExtra * s.cbm_unit;
+    cbmUsed += qtyExtra * s.cbm_unit;
+  }
+
+  // ── FASE 3: Top-off to 95% ──
+  const target95 = cbmLimit * 0.95;
+  for (const s of byLucroCbm) {
+    if (cbmUsed >= target95 || s.cbm_unit <= 0) continue;
+    const qtyTopOff = Math.floor((cbmLimit - cbmUsed) / s.cbm_unit);
+    if (qtyTopOff <= 0) continue;
+    alloc[s.sku].qty_extra += qtyTopOff;
+    alloc[s.sku].cbm += qtyTopOff * s.cbm_unit;
+    cbmUsed += qtyTopOff * s.cbm_unit;
+  }
+
+  const alocacao = byLucroCbm
+    .filter(s => (alloc[s.sku].qty_critico + alloc[s.sku].qty_extra) > 0)
+    .map(s => ({
+      sku: s.sku,
+      qty_critico: alloc[s.sku].qty_critico,
+      qty_extra: alloc[s.sku].qty_extra,
+      qty_total: alloc[s.sku].qty_critico + alloc[s.sku].qty_extra,
+      cbm_total: Math.round(alloc[s.sku].cbm * 1000) / 1000,
+      fase: alloc[s.sku].qty_critico > 0 && alloc[s.sku].qty_extra > 0
+        ? 'critico+oportunidade'
+        : alloc[s.sku].qty_critico > 0 ? 'critico' : 'oportunidade',
+    }));
+
+  return {
+    alocacao,
+    excluidos_espaco: byLucroCbm.filter(s => (alloc[s.sku].qty_critico + alloc[s.sku].qty_extra) === 0).map(s => s.sku),
+    cbm_utilizado: Math.round(cbmUsed * 100) / 100,
+    cbm_disponivel: cbmLimit,
+    pct_utilizacao: Math.round((cbmUsed / cbmLimit) * 1000) / 10,
+  };
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -296,7 +327,7 @@ Use dados reais fornecidos. Seja objetivo e direto.`;
       qtd_ia: a.qty_total,
       cbm: a.cbm_total,
       custo_unit: s.custo || s.custoProduto || 0,
-      lucro_cbm: m.lucro_cbm || 0,
+      lucro_cbm: (m as any).lucro_cbm || 0,
       fase: a.fase,
     };
   }) || [];
@@ -317,53 +348,48 @@ ${JSON.stringify(demandas.slice(0, 30))}`;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // HANDLER PRINCIPAL
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const { skus, cbm_limit = 69, days_horizon = 30 } = await req.json();
     if (!skus?.length) throw new Error('skus array is required');
 
-    // Build lookup map
     const skusMap: Record<string, any> = {};
-    for (const s of skus) {
-      const key = String(s.sku || '').toUpperCase();
-      skusMap[key] = s;
-    }
+    for (const s of skus) skusMap[String(s.sku || '').toUpperCase()] = s;
 
     const steps: string[] = [];
     const log = (msg: string) => { steps.push(msg); console.log('[SOP]', msg); };
 
-    // ── AGENTE 1: Filtros (nativo) ──
+    // ── Agente 1 (nativo) ──
     log('agent1:filtros');
     const filtros = agent1_filtros(skus);
     const elegiveis = filtros.filter(f => !f.motivo_exclusao);
     const excluidos = filtros.filter(f => f.motivo_exclusao);
     log(`agent1:done — ${elegiveis.length} elegíveis, ${excluidos.length} excluídos`);
 
-    // ── AGENTES 2 + 3 em paralelo (nativos) ──
+    // ── Agentes 2 + 3 (nativos) ──
     log('agent2:demanda + agent3:cbm');
     const demandas = agent2_demanda(filtros, skusMap, days_horizon);
     const cbmMap = agent3_cbm(filtros, skusMap);
-    log(`agent2:done — ${demandas.length} SKUs com demanda calculada`);
-    log('agent3:done — CBM por unidade calculado');
+    log(`agent2:done — ${demandas.length} SKUs`);
+    log('agent3:done');
 
-    // ── AGENTE 4: Métricas (nativo) ──
+    // ── Agente 4 (nativo) ──
     log('agent4:metricas');
     const metricas = agent4_metricas(demandas, cbmMap, skusMap);
-    log(`agent4:done — ${metricas.length} SKUs com lucro/CBM`);
+    log(`agent4:done — ${metricas.length} SKUs`);
 
-    // ── AGENTE 5: Knapsack (Claude com retry) ──
+    // ── Agente 5 (nativo — Knapsack greedy) ──
     log('agent5:knapsack');
-    const knapsack = await agent5_knapsack(demandas, metricas, cbm_limit);
-    log(`agent5:done — ${knapsack.alocacao?.length || 0} SKUs alocados, ${knapsack.cbm_utilizado?.toFixed(1)} CBM`);
+    const knapsack = agent5_knapsack(demandas, metricas, cbm_limit);
+    log(`agent5:done — ${knapsack.alocacao?.length || 0} SKUs, ${knapsack.cbm_utilizado} CBM (${knapsack.pct_utilizacao}%)`);
 
-    // ── AGENTE 6: Relatório (Claude com retry) ──
+    // ── Agente 6 (Claude — relatório estratégico) ──
     log('agent6:relatorio');
     const relatorio = await agent6_estrategia(knapsack, demandas, metricas, skusMap);
     log('agent6:done');
 
-    // Build purchase order JSON
     const purchase_order = (knapsack.alocacao || []).map((a: any) => {
       const s = skusMap[a.sku] || {};
       const cbmUnit = cbmMap[a.sku] || 0;
