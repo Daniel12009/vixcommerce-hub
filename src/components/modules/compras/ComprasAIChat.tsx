@@ -661,10 +661,10 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
             {agentSteps.map((step, idx) => (
               <div key={step.id} className="flex items-center gap-1.5">
                 {idx > 0 && <div className="w-4 h-px bg-border hidden sm:block" />}
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  step.status === 'done'    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' :
-                  step.status === 'running' ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 animate-pulse' :
-                  step.status === 'error'   ? 'bg-red-500/15 text-red-400 border border-red-500/20' :
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  step.status === 'done'    ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/20' :
+                  step.status === 'running' ? 'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-500/30 animate-pulse' :
+                  step.status === 'error'   ? 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-500/20' :
                   'bg-muted/50 text-muted-foreground border border-border'
                 }`}>
                   {step.status === 'done'    && <span>✓</span>}
