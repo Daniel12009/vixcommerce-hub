@@ -410,13 +410,18 @@ Excluir completamente o SKU da compra se:
 - Lucro Unitário = Preço Estimado * Margem * (1 - Taxa_Devolução)
 - Lucro por CBM = Lucro Unitário / CBM_por_unidade
 
-## OTIMIZAÇÃO KNAPSACK (CRÍTICO)
+## OTIMIZAÇÃO KNASPACK (CRÍTICO)
 1. Fase 1: Críticos. Aloque Quantidade Mínima para cada crítico até esgotar o CBM.
 2. Fase 2: Com o CBM restante, aloque o MÁXIMO POSSÍVEL para os SKUs com maior Lucro/CBM.
 3. REGRA OBRIGATÓRIA: O total de CBM DEVE utilizar pelo menos 95% da capacidade (${Math.round(cbmLimit * 0.95)} CBMs mínimo) e no máximo ${cbmLimit} CBMs. Se sobrar espaço, adicione mais unidades dos produtos com maior lucro/CBM.
 
-## OUTPUTS OBRIGATÓRIOS (NO FORMATO MARKDOWN COM TABELAS)
-Gere os seguintes 7 outputs formatais:
+## OUTPUTS OBRIGATÓRIOS (USAR SINTAXE MARKDOWN ESTRITA PARA TABELAS)
+OBRIGATÓRIO: Todas as tabelas do seu relatório DEVEM usar a sintaxe oficial de tabelas em Markdown (com pipes "|"). NUNCA use apenas espaços ou tabulações. Exemplo exigido:
+| Coluna A | Coluna B |
+| -------- | -------- |
+| Valor 1  | Valor 2  |
+
+Gere os seguintes 7 outputs formatados com títulos em negrito e tabelas Markdown verdadeiras:
 1. OUTPUT 1: Tabela por SKU (Qtd Sugerida, CBM, Custo, Lucro)
 2. OUTPUT 2: Visão da Demanda Estimada (VMD, Tendência, Cobertura, Status)
 3. OUTPUT 3: Comparação com Pedido Base do Usuário
