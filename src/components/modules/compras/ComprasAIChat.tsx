@@ -5,6 +5,7 @@ import { Brain, Settings2, Loader2, Maximize, Download, Mail, ClipboardCopy, Che
 import { supabase } from '@/integrations/supabase/client';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { KnapsackReport } from './KnapsackReport';
+import { SopChat } from './SopChat';
 import { toast } from 'sonner';
 import type { VendaItem } from '@/lib/types';
 
@@ -412,6 +413,14 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
 
   // Multi-Agent states
   const [agentSteps, setAgentSteps] = useState<{id: string; label: string; status: 'pending'|'running'|'done'|'error'}[]>([]);
+
+  // SopChat data — saved after successful analysis
+  const [sopData, setSopData] = useState<{
+    knapsack: any;
+    demandas: any[];
+    metricas: any[];
+    skusPayload: any[];
+  } | null>(null);
   
   const AGENT_STEPS = [
     { id: 'agent1', label: 'Filtros & Exclusões' },
@@ -513,6 +522,14 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
       const answer = data?.answer || '';
       setResult(answer);
 
+      // Save raw data for the SopChat review panel
+      setSopData({
+        knapsack: data.knapsack,
+        demandas: data.demandas || [],
+        metricas: data.metricas || [],
+        skusPayload,
+      });
+
       // Construir purchase order a partir do JSON retornado pela Edge Function
       if (data?.purchase_order?.length > 0) {
         const lines = data.purchase_order.map((item: any, idx: number) => ({
@@ -547,6 +564,92 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
     } catch (err: any) {
       setAgentSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' } : s));
       setResult('❌ Erro: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── handleRerun: re-roda o knapsack nativo com parâmetros do chat ────────
+  const handleRerun = async (params: any) => {
+    if (!sopData?.skusPayload) return;
+    setLoading(true);
+    setAgentSteps(AGENT_STEPS.map(s => ({ ...s, status: 'pending' })));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const filtros = params.filtros_extras || {};
+      let skusParaEnviar = [...sopData.skusPayload];
+
+      if (filtros.skus_forcar_excluir?.length > 0) {
+        const excluir = filtros.skus_forcar_excluir.map((s: string) => s.toUpperCase());
+        skusParaEnviar = skusParaEnviar.map(s =>
+          excluir.includes(s.sku.toUpperCase()) ? { ...s, parar: 'Não vou mais trazer' } : s
+        );
+      }
+      if (filtros.skus_forcar_incluir?.length > 0) {
+        const incluir = filtros.skus_forcar_incluir.map((s: string) => s.toUpperCase());
+        skusParaEnviar = skusParaEnviar.map(s =>
+          incluir.includes(s.sku.toUpperCase()) ? { ...s, check: '', parar: '', forcar_incluir: true } : s
+        );
+      }
+      if (filtros.apenas_criticos) {
+        const criticos = new Set(sopData.demandas.filter((d: any) => d.status === 'critico').map((d: any) => d.sku));
+        skusParaEnviar = skusParaEnviar.map(s =>
+          !criticos.has(s.sku) ? { ...s, check: 'Não comprar' } : s
+        );
+      }
+      if (filtros.abc_excluir?.length > 0) {
+        const abcEx = filtros.abc_excluir.map((s: string) => s.toUpperCase());
+        skusParaEnviar = skusParaEnviar.map(s =>
+          abcEx.includes((s.abc || '').toUpperCase()) ? { ...s, parar: 'Não vou mais trazer' } : s
+        );
+      }
+
+      setTimeout(() => {
+        setAgentSteps(AGENT_STEPS.map((s, i) => ({
+          ...s, status: i < 4 ? 'done' : i === 4 ? 'running' : 'pending',
+        })));
+      }, 800);
+      const agent6Timer = setTimeout(() => {
+        setAgentSteps(prev => prev.map((s, i) => ({
+          ...s, status: i === 4 ? 'done' : i === 5 ? 'running' : s.status,
+        })));
+      }, 3000);
+
+      const { data, error } = await supabase.functions.invoke('sop-optimizer', {
+        body: { skus: skusParaEnviar, cbm_limit: params.cbm_limit || cbmLimit, days_horizon: params.days_horizon || daysHorizon },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+      clearTimeout(agent6Timer);
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      setAgentSteps(AGENT_STEPS.map(s => ({ ...s, status: 'done' })));
+      setResult(data.answer || '');
+      setSopData(prev => prev ? { ...prev, knapsack: data.knapsack, demandas: data.demandas || [], metricas: data.metricas || [] } : null);
+
+      if (data?.purchase_order?.length > 0) {
+        const lines = data.purchase_order.map((item: any, idx: number) => ({
+          no: idx + 1, sku: item.sku, description: item.description || '',
+          packing: 1, qty: item.qty, price: Math.round(item.price * 100) / 100,
+          ctn: item.qty, cbmCtn: item.cbm_unit || 0, cbm: item.cbm,
+          amount: Math.round(item.qty * item.price * 100) / 100,
+        }));
+        const now = new Date();
+        const order: PurchaseOrder = {
+          id: crypto.randomUUID(),
+          date: `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}`,
+          lines, totalQty: lines.reduce((s: number, l: any) => s + l.qty, 0),
+          totalCbm: lines.reduce((s: number, l: any) => s + l.cbm, 0),
+          totalAmount: lines.reduce((s: number, l: any) => s + l.amount, 0),
+          cbmLimit: params.cbm_limit || cbmLimit, daysHorizon: params.days_horizon || daysHorizon, markdownReport: data.answer || '',
+        };
+        setCurrentOrder(order);
+        if (onOrderGenerated) onOrderGenerated(order);
+      }
+      toast.success('Novo pedido gerado com sucesso!');
+    } catch (err: any) {
+      toast.error('Erro ao re-gerar pedido: ' + err.message);
+      setAgentSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' } : s));
     } finally {
       setLoading(false);
     }
@@ -741,6 +844,18 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
 
           {/* Report content — structured sections */}
           <KnapsackReport markdown={result} order={currentOrder} />
+
+          {/* SopChat — chat de revisão com re-run automático */}
+          {sopData && (
+            <SopChat
+              knapsack={sopData.knapsack}
+              demandas={sopData.demandas}
+              metricas={sopData.metricas}
+              cbmLimit={cbmLimit}
+              daysHorizon={daysHorizon}
+              onRerun={handleRerun}
+            />
+          )}
         </div>
       )}
     </Card>
