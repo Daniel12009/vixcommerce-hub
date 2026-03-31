@@ -177,63 +177,93 @@ function buildPurchaseOrder(
 
   let lines: PurchaseOrderLine[] = [];
 
-  // ═══════ Strategy 1: Parse AI's recommended plan from markdown ═══════
-  // Find the "Plano Otimizado" / "Plano Final" section
-  const planSection = markdownReport.match(
-    /(?:Plano (?:Otimizado|Final)[^\n]*|QTD\s*Recomendad[ao])[^\n]*\n([\s\S]*?)(?:\n(?:#{1,4}\s|\|?\s*TOTAL|\*{2}|5\.|6\.))/i
-  );
-  const searchText = planSection ? planSection[1] : markdownReport;
+  // ═══════ Strategy 1: Parse JSON block from AI response ═══════
+  // The AI is instructed to include ```json {"purchase_order": [...]} ```
+  const jsonMatch = markdownReport.match(/```json\s*\n?([\s\S]*?)```/i);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1].trim());
+      const poItems = parsed.purchase_order || parsed.purchaseOrder || parsed.items || [];
+      if (Array.isArray(poItems) && poItems.length > 0) {
+        let no = 1;
+        for (const item of poItems) {
+          const sku = (item.sku || item.SKU || '').toUpperCase();
+          if (!sku) continue;
+          const compraItem = getItem(sku);
+          const qty = item.qty || item.quantity || item.qtd || 0;
+          const price = item.price || item.custo || compraItem?.custoProduto || 0;
+          const cbmPerUnit = getCbmPerUnit(sku);
+          const cbm = item.cbm || qty * cbmPerUnit;
 
-  // Match lines that contain an SKU pattern followed by numbers
-  // Handles: "FC-138 2.700  2.700  7,56  32.400" or "| FC-29 | 420 |"
-  const skuLinePattern = /^[|\s]*(?:\d+[º°]?\s+)?(FC-\d+\w*|KIT-?\w+|BA-\w+|BT\w+|BS\w+|LU\w+|E\d+|\d{10,})\s+/gim;
-  const processedSkus = new Set<string>();
-  let no = 1;
-
-  for (const match of searchText.matchAll(skuLinePattern)) {
-    const sku = match[1].toUpperCase();
-    if (processedSkus.has(sku)) continue;
-    processedSkus.add(sku);
-
-    // Get the rest of the line after the SKU
-    const lineStart = match.index!;
-    const lineEnd = searchText.indexOf('\n', lineStart);
-    const fullLine = searchText.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
-
-    // Extract all numbers from the line
-    const numbers: number[] = [];
-    const numPattern = /[\d]+[.,]?\d*/g;
-    const afterSku = fullLine.slice(match[0].length);
-    for (const nm of afterSku.matchAll(numPattern)) {
-      const cleaned = nm[0].replace(/\./g, '').replace(',', '.');
-      const n = parseFloat(cleaned);
-      if (!isNaN(n) && n > 0) numbers.push(n);
+          lines.push({
+            no: no++,
+            sku,
+            description: item.description || item.descricao || compraItem?.categoria || '',
+            packing: 1,
+            qty,
+            price: Math.round(price * 100) / 100,
+            ctn: qty,
+            cbmCtn: Math.round(cbmPerUnit * 10000) / 10000,
+            cbm: Math.round(cbm * 100) / 100,
+            amount: Math.round(qty * price * 100) / 100,
+          });
+        }
+        console.log(`[NexusIQ] PO from JSON: ${lines.length} SKUs parsed`);
+      }
+    } catch (e) {
+      console.error('[NexusIQ] JSON parse failed:', e);
     }
-
-    // First meaningful number is typically the QTD (quantity)
-    const qty = numbers.find(n => n >= 10 && n <= 100000) || 0;
-    if (qty <= 0) continue;
-
-    const compraItem = getItem(sku);
-    const price = compraItem?.custoProduto || 0;
-    const cbmPerUnit = getCbmPerUnit(sku);
-    const cbm = qty * cbmPerUnit;
-
-    lines.push({
-      no: no++,
-      sku,
-      description: compraItem?.categoria || '',
-      packing: 1,
-      qty,
-      price: Math.round(price * 100) / 100,
-      ctn: qty,
-      cbmCtn: Math.round(cbmPerUnit * 10000) / 10000,
-      cbm: Math.round(cbm * 100) / 100,
-      amount: Math.round(qty * price * 100) / 100,
-    });
   }
 
-  // ═══════ Strategy 2: Fallback — algorithmic Knapsack ═══════
+  // ═══════ Strategy 2: Regex on markdown tables (fallback) ═══════
+  if (lines.length === 0) {
+    const planPatterns = [
+      /(?:Plano\s+Final[^\n]*)\n([\s\S]*?)(?:\n[|\s]*TOTAL|\n#{1,4}\s|\n\*{2,}\s*\d+\.|$)/i,
+      /(?:Plano\s+Otimizado[^\n]*)\n([\s\S]*?)(?:\n[|\s]*TOTAL|\n#{1,4}\s|\n\*{2,}\s*\d+\.|$)/i,
+      /(?:QTD\s*Recomendad[ao][^\n]*)\n([\s\S]*?)(?:\n[|\s]*TOTAL|\n#{1,4}\s|\n\*{2,}\s*\d+\.|$)/i,
+    ];
+
+    let planText: string | null = null;
+    for (const pat of planPatterns) {
+      const m = markdownReport.match(pat);
+      if (m && m[1]) { planText = m[1]; break; }
+    }
+
+    if (planText) {
+      const skuLinePattern = /^[|\s]*(?:\d+[º°]?\s+)?(FC-\d+\w*|KIT-?\w+|BA-\w+|BT\w+|BS\w+|LU\w+|E\d+|\d{10,})\s+/gim;
+      const processedSkus = new Set<string>();
+      let no = 1;
+      for (const match of planText.matchAll(skuLinePattern)) {
+        const sku = match[1].toUpperCase();
+        if (processedSkus.has(sku)) continue;
+        processedSkus.add(sku);
+        const lineStart = match.index!;
+        const lineEnd = planText.indexOf('\n', lineStart);
+        const fullLine = planText.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+        const afterSku = fullLine.slice(match[0].length);
+        const numbers: number[] = [];
+        for (const nm of afterSku.matchAll(/[\d]+[.,]?\d*/g)) {
+          const n = parseFloat(nm[0].replace(/\./g, '').replace(',', '.'));
+          if (!isNaN(n) && n > 0) numbers.push(n);
+        }
+        const qty = numbers.find(n => n >= 10 && n <= 100000) || 0;
+        if (qty <= 0) continue;
+        const compraItem = getItem(sku);
+        const price = compraItem?.custoProduto || 0;
+        const cbmPerUnit = getCbmPerUnit(sku);
+        lines.push({
+          no: no++, sku, description: compraItem?.categoria || '', packing: 1, qty,
+          price: Math.round(price * 100) / 100, ctn: qty,
+          cbmCtn: Math.round(cbmPerUnit * 10000) / 10000,
+          cbm: Math.round(qty * cbmPerUnit * 100) / 100,
+          amount: Math.round(qty * price * 100) / 100,
+        });
+      }
+      console.log(`[NexusIQ] PO from regex: ${lines.length} SKUs parsed`);
+    }
+  }
+
+  // ═══════ Strategy 3: Fallback — algorithmic Knapsack ═══════
   if (lines.length === 0) {
     const allItems = comprasItems
       .filter(d => d.sku && d.cbmTotal && d.pedidoSugerido && d.pedidoSugerido > 0)
@@ -263,7 +293,7 @@ function buildPurchaseOrder(
       }
       runningCbm += cbm;
       lines.push({
-        no: no++, sku: item.sku, description: item.categoria || '',
+        no: lines.length + 1, sku: item.sku, description: item.categoria || '',
         packing: 1, qty,
         price: Math.round((item.custoProduto || 0) * 100) / 100,
         ctn: qty,
@@ -377,28 +407,31 @@ Garanta que SKUs com risco de ruptura tenham reposição mínima (Estoque Mínim
 
 6. Otimização da Compra (Core do Problema)
 Distribua o espaço disponível (CBM) da seguinte forma:
-1. Reserve CBM para reposição mínima dos SKUs críticos.
+1. Reserve CBM para reposição mínima dos SKUs críticos (ruptura < ${daysHorizon} dias).
 2. Com o restante, priorize SKUs com maior lucro por CBM (algoritmo tipo "knapsack problem").
+3. REGRA OBRIGATÓRIA: SE a soma dos CBMs dos itens selecionados for MENOR que ${cbmLimit} CBMs, AUMENTE as quantidades dos SKUs mais lucrativos (maior lucro por CBM) até preencher TODO o espaço. O container DEVE ser utilizado a pelo menos 95% da capacidade (${Math.round(cbmLimit * 0.95)} CBMs mínimo).
 
 7. Output Final
 Apresente a tabela final de recomendação e consolidação (CBM utilizado, Lucro esperado, Top SKUs por eficiência, SKUs que ficaram de fora).
 
 A tabela de "Plano Otimizado Recomendado" DEVE conter a coluna SKU com o código exato (ex: FC-138, FC-71, etc.) e QTD recomendada.
 
-REGRA FUNDAMENTAL: O total de CBM do plano otimizado NÃO PODE ultrapassar ${cbmLimit} CBMs. Inclua apenas os SKUs que cabem no container.
+REGRA FUNDAMENTAL: O total de CBM do plano otimizado NÃO PODE ultrapassar ${cbmLimit} CBMs, mas DEVE utilizar pelo menos 95% (${Math.round(cbmLimit * 0.95)} CBMs). Se sobrar espaço, adicione mais unidades dos produtos com maior lucro/CBM.
 
 8. Camada Estratégica
 Onde há trade-offs, riscos e sugestões.
 
 9. OBRIGATÓRIO — Bloco JSON para Pedido de Compra
-NO FINAL DO RELATÓRIO, adicione um bloco de código JSON (entre \`\`\`json e \`\`\`) com EXATAMENTE os SKUs recomendados para compra. O formato DEVE ser:
+NO FINAL DO RELATÓRIO, você DEVE incluir um bloco de código JSON (entre \`\`\`json e \`\`\`) com EXATAMENTE os SKUs recomendados para compra. Este bloco é CRÍTICO — o sistema lê este JSON para gerar automaticamente o Purchase Order. Se você não incluir este bloco, o pedido não será gerado.
+
+Formato OBRIGATÓRIO:
 \`\`\`json
 {"purchase_order": [
   {"sku": "FC-138", "qty": 2700, "description": "Torneira", "price": 1.63, "cbm": 7.65},
   {"sku": "FC-02", "qty": 1140, "description": "Torneira", "price": 2.46, "cbm": 1.48}
 ]}
 \`\`\`
-Use os dados reais do contexto. O campo "price" é o custo unitário em USD. Inclua APENAS os SKUs que entraram no plano otimizado respeitando o limite de ${cbmLimit} CBMs.
+Use os dados reais do contexto. O campo "price" é o custo unitário em USD. O campo "cbm" é o CBM total para aquela quantidade. Inclua APENAS os SKUs que entraram no plano otimizado. A soma dos CBMs DEVE estar entre ${Math.round(cbmLimit * 0.95)} e ${cbmLimit} CBMs.
 
 GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NEGRITO ONDE APLICÁVEL. Formate como um relatório executivo requintado.`;
 
