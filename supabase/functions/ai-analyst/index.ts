@@ -16,7 +16,7 @@ async function callClaude(system: string, messages: any[]): Promise<string> {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 4000,
       system,
       messages,
@@ -114,7 +114,7 @@ Sempre indique se está usando dados da planilha ou da API ML para cada afirmaç
 
     // Montar mensagem do usuário com contexto
     const contextStr = context_data
-      ? `\n\nDados disponíveis:\n${JSON.stringify(context_data, null, 2).slice(0, 6000)}`
+      ? `\n\nDados disponíveis:\n${JSON.stringify(context_data)}`
       : '';
 
     let userContent = '';
