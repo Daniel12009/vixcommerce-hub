@@ -170,6 +170,7 @@ export interface EstimativaCompraItem {
   margemDez24?: number;
   margemJan25?: number;
   margemFev25?: number;
+  taxaDevolucao: number;           // ADD — col I (taxa de devolução)
 }
 
 export interface Order {

@@ -359,6 +359,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         pararDeTrazer: r['O que vou parar de trazer'] || r.pararDeTrazer || '',
         checkDemanda: r['Check demanda'] || r.checkDemanda || '',
         containerBM: num(r['Ctnr 15/04/26'] || r['Ctnr 15/04/26'] || r.containerBM),
+        taxaDevolucao: num(r['Taxa de devolução'] || r['taxaDevolucao'] || r.taxaDevolucao),
         raw: { ...r } // Store complete raw row for AI prompt matching
       }));
     setComprasItems(items);
