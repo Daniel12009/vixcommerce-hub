@@ -67,17 +67,20 @@ ${JSON.stringify(skus.map(s => ({ sku: s.sku, parar: s.parar, check: s.check, cu
 async function agent2_demanda(elegíveis: any[], skusMap: Record<string, any>, daysHorizon: number): Promise<any[]> {
   const system = `Você é especialista em previsão de demanda. Retorne APENAS JSON válido (array). Sem markdown.
 Para cada SKU, calcule:
+- Se "historico_mensal" tiver dados reais: use-os para calcular VMD e detectar tendência/sazonalidade
 - vmd_ajustada = (vmd * 0.4 + vmd_recente * 0.6) * bias. Se vmd_recente=0, usar só vmd. Se bias=0 usar 1.
+- Se "total_180d" > 0: vmd_real = total_180d / 180 — use como referência principal
 - demanda_periodo = vmd_ajustada * ${daysHorizon}
 - demanda_lead_time = vmd_ajustada * 90
 - estoque_seguranca = vmd_ajustada * 15 (ou dias_seg se informado)
 - necessidade_minima = max(0, demanda_periodo + demanda_lead_time + estoque_seguranca - estoque - transito_bm)
-- tendencia: "crescente" se vmd_recente > vmd*1.2, "decrescente" se < vmd*0.8, senão "estavel"
-- dias_cobertura = (estoque + transito_bm) / vmd_ajustada (0 se vmd=0)
+- tendencia: compare últimos 3 meses vs 3 meses anteriores no historico_mensal.
+  "crescente" se +20%, "decrescente" se -20%, senão "estavel"
+- dias_cobertura = (estoque + transito_bm) / vmd_ajustada
 - status: "critico" se dias_cobertura < 30, "risco" se < 90, "ok" se >= 90
 
 Formato:
-[{"sku":"FC-138","vmd_ajustada":91.28,"demanda_periodo":2738,"necessidade_minima":10957,"tendencia":"estavel","dias_cobertura":30,"status":"critico"}]`;
+[{"sku":"FC-138","vmd_ajustada":91.28,"vmd_fonte":"vendas_reais","demanda_periodo":2738,"necessidade_minima":10957,"tendencia":"estavel","dias_cobertura":30,"status":"critico"}]`;
 
   const skusData = elegíveis
     .filter(e => !e.motivo_exclusao)
@@ -87,11 +90,13 @@ Formato:
         sku: e.sku,
         vmd: s.vmd || 0,
         vmd_recente: s.vmd_recente || 0,
+        vmd_planilha: s.vmd_planilha || 0,
+        total_180d: s.total_180d || 0,
+        historico_mensal: s.historico_mensal || {},
         bias: s.bias || 1,
         estoque: s.estoque || 0,
         transito_bm: s.transito_bm || 0,
         dias_seg: s.dias_seg || 15,
-        dias_rupu: s.dias_rupu || 999,
       };
     });
 

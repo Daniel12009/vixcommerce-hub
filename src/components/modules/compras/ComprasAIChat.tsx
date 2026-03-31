@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { KnapsackReport } from './KnapsackReport';
 import { toast } from 'sonner';
+import type { VendaItem } from '@/lib/types';
 
 /* ───────── Types ───────── */
 export interface PurchaseOrderLine {
@@ -352,8 +353,50 @@ function emptyOrder(cbmLimit: number, daysHorizon: number, report: string): Purc
 }
 
 /* ───────── Component ───────── */
+// ─── Calcula VMD e histórico real a partir da planilha de Vendas ───
+function calcVMDFromVendas(
+  sku: string,
+  vendas: VendaItem[] | null
+): { vmd_real: number; historico_mensal: Record<string, number>; total_180d: number } {
+  if (!vendas?.length) return { vmd_real: 0, historico_mensal: {}, total_180d: 0 };
+
+  const hoje = new Date();
+  const limite = new Date(hoje);
+  limite.setDate(hoje.getDate() - 180);
+
+  const skuUpper = sku.toUpperCase();
+
+  // Filtrar vendas do SKU nos últimos 180 dias, excluindo canceladas
+  const linhas = vendas.filter(v => {
+    if (v.sku?.toUpperCase() !== skuUpper) return false;
+    if (v.statusPedido?.toLowerCase().includes('cancelad')) return false;
+    const d = new Date(v.data);
+    return !isNaN(d.getTime()) && d >= limite;
+  });
+
+  // Agrupar por mês
+  const historico_mensal: Record<string, number> = {};
+  let total = 0;
+  for (const v of linhas) {
+    const d = new Date(v.data);
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    historico_mensal[chave] = (historico_mensal[chave] || 0) + (v.quantidade || 0);
+    total += v.quantidade || 0;
+  }
+
+  // Dias reais com vendas no período
+  const diasComDados = Object.keys(historico_mensal).length * 30; // aproximação por mês
+  const diasEfetivos = Math.max(diasComDados, 30); // mínimo 30 dias
+
+  return {
+    vmd_real: total / Math.min(180, diasEfetivos),
+    historico_mensal,
+    total_180d: total,
+  };
+}
+
 export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order: PurchaseOrder) => void }) {
-  const { comprasItems } = useSheetsData();
+  const { comprasItems, vendasItems } = useSheetsData();
   const [cbmLimit, setCbmLimit] = useState(69);
   const [daysHorizon, setDaysHorizon] = useState(30);
 
@@ -389,29 +432,43 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
       const { data: { session } } = await supabase.auth.getSession();
 
       // Preparar dados dos SKUs para enviar
-      const skusPayload = comprasItems?.map(d => ({
-        sku: d.sku,
-        cat: d.categoria,
-        abc: d.curvaABC,
-        custo: d.custoProduto,
-        margem: (d as any).margemJanFev || d.margemAtual || 0,
-        taxa_dev: (d as any).taxaDevolucao || 0,
-        vmd: d.mediaVendaDiaria,
-        vmd_recente: (d as any).vmdRecente || 0,
-        bias: (d as any).bias || 1,
-        estoque: d.onHand,
-        dias_rupu: d.diasParaRuptura,
-        parar: (d as any).pararDeTrazer || '',
-        check: (d as any).checkDemanda || '',
-        transito_bm: (d as any).containerBM || 0,
-        pedido_user: d.pedidoSugerido,
-        cbm_unit: d.cbmTotal > 0 && d.pedidoSugerido > 0 ? d.cbmTotal / d.pedidoSugerido : 0,
-        cbm_tot_user: d.cbmTotal,
-        lucro_cbm: d.lucroPorCBM,
-        status: d.statusProjecao,
-        abr_sop: d.tendenciaMeses?.abr || 0,
-        dias_seg: 15,
-      })) || [];
+      const skusPayload = comprasItems?.map(d => {
+        // Cruzar com dados reais de vendas
+        const { vmd_real, historico_mensal, total_180d } = calcVMDFromVendas(d.sku, vendasItems);
+
+        // Usar VMD real se disponível, senão usar da planilha de compras
+        const vmd_final = vmd_real > 0 ? vmd_real : d.mediaVendaDiaria;
+        const vmd_recente_final = (d as any).vmdRecente > 0 ? (d as any).vmdRecente : vmd_real;
+
+        return {
+          sku: d.sku,
+          cat: d.categoria,
+          abc: d.curvaABC,
+          custo: d.custoProduto,
+          margem: (d as any).margemJanFev || d.margemAtual || 0,
+          taxa_dev: (d as any).taxaDevolucao || 0,
+          vmd: vmd_final,                         // VMD calculada das vendas reais
+          vmd_planilha: d.mediaVendaDiaria,       // VMD original da planilha (referência)
+          vmd_recente: vmd_recente_final,
+          historico_mensal,                        // ex: {"2025-10": 320, "2025-11": 290, ...}
+          total_180d,                              // total vendido nos últimos 180 dias
+          bias: (d as any).bias || 1,
+          estoque: d.onHand,
+          dias_rupu: d.diasParaRuptura,
+          parar: (d as any).pararDeTrazer || '',
+          check: (d as any).checkDemanda || '',
+          transito_bm: (d as any).containerBM || 0,
+          pedido_user: d.pedidoSugerido,
+          cbm_unit: d.cbmTotal > 0 && d.pedidoSugerido > 0
+            ? d.cbmTotal / d.pedidoSugerido
+            : 0,
+          cbm_tot_user: d.cbmTotal,
+          lucro_cbm: d.lucroPorCBM,
+          status: d.statusProjecao,
+          abr_sop: d.tendenciaMeses?.abr || 0,
+          dias_seg: 15,
+        };
+      }) || [];
 
       // Atualizar agentes visualmente conforme logs chegam
       const updateStep = (stepId: string, status: 'running'|'done'|'error') => {
