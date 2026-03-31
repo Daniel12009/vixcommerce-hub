@@ -42,8 +42,8 @@ function parseJSON(text: string): any {
 // AGENTE 1 — FILTROS & EXCLUSÕES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function agent1_filtros(skus: any[]): Promise<any[]> {
-  const system = `Você é responsável por filtrar SKUs elegíveis para compra.
-Retorne APENAS JSON válido (array). Sem markdown, sem explicações.
+  const system = `MUITO IMPORTANTE: Você é responsável por filtrar SKUs elegíveis para compra.
+Retorne APENAS um array JSON válido. NÃO ESCREVA NENHUM TEXTO ANTES OU DEPOIS, NENHUMA SAUDAÇÃO E NENHUMA EXPLICAÇÃO. A primeira letra da sua resposta deve ser '[' e a última ']'.
 Formato: [{"sku":"FC-138","motivo_exclusao":null}, {"sku":"FC-13","motivo_exclusao":"Não vou mais trazer"}]
 Inclua TODOS os SKUs — os excluídos com motivo_exclusao preenchido, os elegíveis com null.`;
 
@@ -65,7 +65,8 @@ ${JSON.stringify(skus.map(s => ({ sku: s.sku, parar: s.parar, check: s.check, cu
 // AGENTE 2 — DEMANDA & VMD
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function agent2_demanda(elegíveis: any[], skusMap: Record<string, any>, daysHorizon: number): Promise<any[]> {
-  const system = `Você é especialista em previsão de demanda. Retorne APENAS JSON válido (array). Sem markdown.
+  const system = `MUITO IMPORTANTE: Você é especialista em previsão de demanda.
+Retorne APENAS um array JSON válido. NÃO ESCREVA NENHUM TEXTO ANTES OU DEPOIS, NENHUMA SAUDAÇÃO E NENHUMA EXPLICAÇÃO. A primeira letra da sua resposta deve ser '[' e a última ']'.
 Para cada SKU, calcule:
 - Se "historico_mensal" tiver dados reais: use-os para calcular VMD e detectar tendência/sazonalidade
 - vmd_ajustada = (vmd * 0.4 + vmd_recente * 0.6) * bias. Se vmd_recente=0, usar só vmd. Se bias=0 usar 1.
@@ -129,7 +130,8 @@ async function agent3_cbm(elegíveis: any[], skusMap: Record<string, any>): Prom
 // AGENTE 4 — MÉTRICAS DE OTIMIZAÇÃO
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function agent4_metricas(demandas: any[], cbmMap: Record<string, number>, skusMap: Record<string, any>): Promise<any[]> {
-  const system = `Você calcula métricas de otimização para compras. Retorne APENAS JSON válido (array). Sem markdown.
+  const system = `MUITO IMPORTANTE: Você calcula métricas de otimização para compras.
+Retorne APENAS um array JSON válido. NÃO ESCREVA NENHUM TEXTO ANTES OU DEPOIS, NENHUMA SAUDAÇÃO E NENHUMA EXPLICAÇÃO. A primeira letra da sua resposta deve ser '[' e a última ']'.
 Fórmulas:
 - preco_venda = custo / (1 - margem) se margem < 1
 - lucro_unitario = preco_venda * margem * (1 - taxa_dev)
@@ -160,7 +162,8 @@ Formato:
 // AGENTE 5 — KNAPSACK (core)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function agent5_knapsack(demandas: any[], metricas: any[], cbmLimit: number): Promise<any> {
-  const system = `Você é o otimizador Knapsack para compras de container. Retorne APENAS JSON válido. Sem markdown.
+  const system = `MUITO IMPORTANTE: Você é o otimizador Knapsack para compras de container.
+Retorne APENAS um objeto JSON válido. NÃO ESCREVA NENHUM TEXTO ANTES OU DEPOIS, NENHUMA SAUDAÇÃO E NENHUMA EXPLICAÇÃO. A primeira letra da sua resposta deve ser '{' e a última '}'.
 ALGORITMO OBRIGATÓRIO:
 1. Fase Críticos: Para SKUs com status="critico", aloque necessidade_minima. Ordene por lucro_cbm desc.
 2. Fase Oportunidade: Com CBM restante, aloque MAIS unidades dos SKUs com maior lucro_cbm.
