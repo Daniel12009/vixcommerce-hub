@@ -3,7 +3,7 @@ import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { formatBRL } from '@/lib/utils-vix';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, LineChart, Line, ComposedChart, Area,
+  ResponsiveContainer, LineChart, Line, ComposedChart, Area, LabelList
 } from 'recharts';
 import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, Percent, Target, ArrowUpDown } from 'lucide-react';
 
@@ -302,7 +302,9 @@ export function MarketplaceTab() {
                 />
                 <Legend />
                 <Bar yAxisId="left" dataKey="faturamento" fill="#6366f1" name="Faturamento Bruto" radius={[4, 4, 0, 0]} opacity={0.8} />
-                <Line yAxisId="right" type="monotone" dataKey="pctLucro" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: '#22c55e' }} name="Margem %" />
+                <Line yAxisId="right" type="monotone" dataKey="pctLucro" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: '#22c55e' }} name="Margem %">
+                  <LabelList dataKey="pctLucro" position="top" formatter={(v: number) => `${v}%`} fill="#22c55e" fontSize={11} fontWeight={700} />
+                </Line>
               </ComposedChart>
             </ResponsiveContainer>
           </div>

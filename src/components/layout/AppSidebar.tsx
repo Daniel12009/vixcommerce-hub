@@ -44,7 +44,7 @@ export function AppSidebar({ activeModule, onModuleChange, isOpen, onClose }: Ap
       <aside className={`fixed left-0 top-0 z-50 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         {/* Logo + Mobile Close */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-sidebar-border">
-          <img src="/nexusiq-logo.png" alt="NexusIQ" className="h-8 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
+          <img src="/nexusiq-logo.png" alt="NexusIQ" className="h-12 w-auto object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-sidebar-accent transition-colors lg:hidden"
