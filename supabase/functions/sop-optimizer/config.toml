@@ -1,0 +1,2 @@
+[functions.sop-optimizer]
+verify_jwt = false

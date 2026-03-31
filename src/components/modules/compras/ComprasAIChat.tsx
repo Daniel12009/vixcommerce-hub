@@ -367,169 +367,112 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
   const [emailTo, setEmailTo] = useState('ATENDIMENTO@VIAFLIX.COM.BR');
   const [sendingEmail, setSendingEmail] = useState(false);
 
+  // Multi-Agent states
+  const [agentSteps, setAgentSteps] = useState<{id: string; label: string; status: 'pending'|'running'|'done'|'error'}[]>([]);
+  
+  const AGENT_STEPS = [
+    { id: 'agent1', label: 'Filtros & Exclusões' },
+    { id: 'agent2', label: 'Cálculo de Demanda' },
+    { id: 'agent3', label: 'CBM por Unidade' },
+    { id: 'agent4', label: 'Métricas de Otimização' },
+    { id: 'agent5', label: 'Knapsack — Alocação' },
+    { id: 'agent6', label: 'Relatório & Estratégia' },
+  ];
+
   const handleAnalise = async () => {
     setLoading(true);
     setResult(null);
     setCurrentOrder(null);
+    setAgentSteps(AGENT_STEPS.map(s => ({ ...s, status: 'pending' })));
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const systemPrompt = `Você é um especialista em planejamento de demanda, S&OP e otimização de compras com restrição logística (CBM). Gere os 7 outputs abaixo de forma auditável e objetiva.
+      // Preparar dados dos SKUs para enviar
+      const skusPayload = comprasItems?.map(d => ({
+        sku: d.sku,
+        cat: d.categoria,
+        abc: d.curvaABC,
+        custo: d.custoProduto,
+        margem: (d as any).margemJanFev || d.margemAtual || 0,
+        taxa_dev: (d as any).taxaDevolucao || 0,
+        vmd: d.mediaVendaDiaria,
+        vmd_recente: (d as any).vmdRecente || 0,
+        bias: (d as any).bias || 1,
+        estoque: d.onHand,
+        dias_rupu: d.diasParaRuptura,
+        parar: (d as any).pararDeTrazer || '',
+        check: (d as any).checkDemanda || '',
+        transito_bm: (d as any).containerBM || 0,
+        pedido_user: d.pedidoSugerido,
+        cbm_unit: d.cbmTotal > 0 && d.pedidoSugerido > 0 ? d.cbmTotal / d.pedidoSugerido : 0,
+        cbm_tot_user: d.cbmTotal,
+        lucro_cbm: d.lucroPorCBM,
+        status: d.statusProjecao,
+        abr_sop: d.tendenciaMeses?.abr || 0,
+        dias_seg: 15,
+      })) || [];
 
-## FONTE DE DADOS
-- O json enviado contém os dados da Aba Ordem_Inicial_All
-
-## PARÂMETROS DO PROBLEMA
-CAPACIDADE_CONTAINER_CBM = ${cbmLimit}
-HORIZONTE_PLANEJAMENTO_DIAS = ${daysHorizon}
-LEAD_TIME_CHINA_BRASIL_DIAS = 60
-LEAD_TIME_TOTAL_DIAS = 90
-PESO_VMD_ATUAL = 0.40
-PESO_VMD_RECENTE = 0.60
-DIAS_SEGURANCA_PADRAO = 15
-BIAS_PADRAO = 1.0
-
-## REGRAS DE EXCLUSÃO
-Excluir completamente o SKU da compra se:
-1. "O que vou parar de trazer" (Coluna D) contiver "Não vou mais trazer"
-2. "Check demanda" (Coluna Q) contiver "Não comprar"
-3. Sem histórico de venda e não for ABC=L
-
-## TRATAMENTO E DEMANDA
-- Tratar dados nulos como 0
-- VMD Base = (VMD_Atual * 0.40 + VMD_Recente * 0.60). Se VMD_Recente for zero, usar VMD_Atual.
-- VMD Ajustada = VMD_Base * BIAS
-- Trânsito = SOMENTE O CONTAINER BM (15/04/26) — Ignore os demais que já chegaram.
-- Estoque de Segurança = VMD_Ajustada * ${daysHorizon} dias
-- Necessidade Bruta = (VMD_Ajustada * 30) + (VMD_Ajustada * 90) + Estoque_Segurança
-- Necessidade Mínima = max(0, Necessidade_Bruta - OnHand - Trânsito)
-
-## MÉTRICAS DE OTIMIZAÇÃO
-- Margem a usar será a mais recente.
-- Lucro Unitário = Preço Estimado * Margem * (1 - Taxa_Devolução)
-- Lucro por CBM = Lucro Unitário / CBM_por_unidade
-
-## REGRA FUNDAMENTAL — PEDIDO DO USUÁRIO É APENAS REFERÊNCIA
-O campo pedido_user e cbm_tot_user NO JSON são o pedido histórico do usuário — servem APENAS como referência de comparação.
-NÃO trate o pedido_user como pedido fixo ou reservado.
-A sua missão é calcular o pedido OTIMIZADO do zero usando o Knapsack.
-
-## OTIMIZAÇÃO KNAPSACK
-1. Fase 1 — Críticos (dias_rupu < 30): aloque necessidade mínima ordenada por lucro/CBM desc
-2. Fase 2 — Com CBM restante: aloque MÁXIMO possível dos SKUs com maior lucro/CBM
-3. REGRA INVIOLÁVEL: CBM final DEVE estar entre ${Math.round(cbmLimit * 0.95)} e ${cbmLimit} m³
-   - Se sobrar espaço após cobrir críticos, adicione MAIS unidades dos top SKUs por lucro/CBM
-   - Se necessidade mínima total exceder ${cbmLimit} CBMs, priorize críticos por lucro/CBM até encher
-   - NÃO deixe espaço vazio — o container DEVE ir cheio
-
-## OUTPUTS OBRIGATÓRIOS
-ATENÇÃO: Use EXATAMENTE estes headings markdown para cada seção — o sistema faz parse automático:
-
-## OUTPUT 1 — Tabela por SKU
-(tabela: SKU | Qtd Sugerida | CBM | Custo R$ | Lucro/CBM | Status)
-
-## OUTPUT 2 — Visão da Demanda
-(tabela: SKU | VMD Ajustada | Tendência | Cobertura dias | Status)
-
-## OUTPUT 3 — Comparação com Pedido do Usuário
-(tabela: SKU | Pedido Usuário | Sugestão IA | Diferença | Impacto R$)
-
-## OUTPUT 4 — Consolidação do Container
-(resumo: CBM usado, custo total, lucro esperado, SKUs incluídos/excluídos)
-
-## OUTPUT 5 — Análise Estratégica
-(trade-offs, riscos, oportunidades, cenário alternativo)
-
-## OUTPUT 6 — Verificação de Consistência
-(validação das métricas, divergências, alertas)
-
-## OUTPUT 7 — Pedido ao Fornecedor
-(tabela no formato invoice: No | SKU | Packing | QTY | Price | CTN | CBM | Amount)
-
-## OBRIGATÓRIO — Bloco JSON para Pedido de Compra
-NO FINAL DO RELATÓRIO, você DEVE incluir um bloco de código JSON (entre \`\`\`json e \`\`\`) com EXATAMENTE os SKUs recomendados para compra. Este bloco é CRÍTICO — o sistema lê este JSON para gerar automaticamente o Purchase Order.
-
-Formato OBRIGATÓRIO:
-\`\`\`json
-{"purchase_order": [
-  {"sku": "FC-138", "qty": 2700, "description": "Torneira", "price": 1.63, "cbm": 7.65},
-  {"sku": "FC-02", "qty": 1140, "description": "Torneira", "price": 2.46, "cbm": 1.48}
-]}
-\`\`\`
-O campo "price" é o custo unitário em USD. O campo "cbm" é o CBM total para aquela quantidade. A soma dos CBMs DEVE estar entre ${Math.round(cbmLimit * 0.95)} e ${cbmLimit} CBMs.`;
-
-      const context_data = {
-        compras: comprasItems?.map(d => ({
-          sku: d.sku,
-          cat: d.categoria,
-          abc: d.curvaABC,
-          custo: d.custoProduto,
-          margem: d.margemJanFev || d.margemAtual,    // margem mais recente
-          vmd: d.mediaVendaDiaria,
-          vmd_recente: d.vmdRecente,                   // AVG Jan/Fev26
-          bias: d.bias || 1,
-          estoque: d.onHand,
-          dias_rupu: d.diasParaRuptura,
-          parar: d.pararDeTrazer,                      // regra exclusão D
-          check: d.checkDemanda,                       // regra exclusão Q
-          transito_bm: d.containerBM,                  // container 15/04
-          pedido_user: d.pedidoSugerido,
-          cbm_unit: d.cbmTotal > 0 && d.pedidoSugerido > 0
-            ? d.cbmTotal / d.pedidoSugerido            // CBM por unidade
-            : 0,
-          lucro_cbm: d.lucroPorCBM,
-          status: d.statusProjecao,
-          abr_sop: d.tendenciaMeses?.abr,
-        })) || [],
+      // Atualizar agentes visualmente conforme logs chegam
+      const updateStep = (stepId: string, status: 'running'|'done'|'error') => {
+        setAgentSteps(prev => prev.map(s => s.id === stepId ? { ...s, status } : s));
       };
 
-      const { data, error } = await supabase.functions.invoke('ai-analyst', {
+      // Mostrar agentes como running em sequência (simulação visual)
+      updateStep('agent1', 'running');
+      
+      const { data, error } = await supabase.functions.invoke('sop-optimizer', {
         body: {
-          mode: 'sop_knapsack',
-          question: 'Execute a otimização Knapsack com base no meu json atual de compras.',
-          context_data,
-          system_prompt: systemPrompt
+          skus: skusPayload,
+          cbm_limit: cbmLimit,
+          days_horizon: daysHorizon,
         },
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
 
       if (error) throw new Error(error.message);
-      if (data?.exception || data?.error) throw new Error(data.error || 'Ocorreu um erro interno na IA.');
+      if (data?.error) throw new Error(data.error);
 
-      const answer = data?.answer || 'Sem reposta do assistente.';
+      // Marcar todos como done
+      setAgentSteps(AGENT_STEPS.map(s => ({ ...s, status: 'done' })));
+
+      const answer = data?.answer || '';
       setResult(answer);
 
-      // Build purchase order algorithmically (Knapsack) from comprasItems data
-      const order = buildPurchaseOrder(comprasItems || [], cbmLimit, daysHorizon, answer);
-      setCurrentOrder(order);
+      // Construir purchase order a partir do JSON retornado pela Edge Function
+      if (data?.purchase_order?.length > 0) {
+        const lines = data.purchase_order.map((item: any, idx: number) => ({
+          no: idx + 1,
+          sku: item.sku,
+          description: item.description || '',
+          packing: 1,
+          qty: item.qty,
+          price: Math.round(item.price * 100) / 100,
+          ctn: item.qty,
+          cbmCtn: item.cbm_unit || 0,
+          cbm: item.cbm,
+          amount: Math.round(item.qty * item.price * 100) / 100,
+        }));
 
-      // Fetch photos for each SKU in the PO (in parallel)
-      if (order.lines.length > 0) {
-        toast.info('Buscando fotos dos produtos...');
-        try {
-          const photoPromises = order.lines.map(async (line) => {
-            try {
-              const { data: photoData } = await supabase.functions.invoke('drive-photos', {
-                body: { sku: line.sku, account_name: '', fetch_dimensions: false },
-                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-              });
-              if (photoData?.photos?.found && photoData.photos.urls?.length > 0) {
-                line.photoUrl = photoData.photos.urls[0];
-              }
-            } catch { /* skip photo for this SKU */ }
-          });
-          await Promise.allSettled(photoPromises);
-          const photosFound = order.lines.filter(l => l.photoUrl).length;
-          if (photosFound > 0) toast.success(`${photosFound} fotos encontradas!`);
-          // Update state with photos
-          setCurrentOrder({ ...order });
-        } catch { /* photo fetch failed silently */ }
+        const now = new Date();
+        const order: PurchaseOrder = {
+          id: crypto.randomUUID(),
+          date: `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}`,
+          lines,
+          totalQty: lines.reduce((s: number, l: any) => s + l.qty, 0),
+          totalCbm: lines.reduce((s: number, l: any) => s + l.cbm, 0),
+          totalAmount: lines.reduce((s: number, l: any) => s + l.amount, 0),
+          cbmLimit,
+          daysHorizon,
+          markdownReport: answer,
+        };
+        setCurrentOrder(order);
+        if (onOrderGenerated) onOrderGenerated(order);
       }
 
-      if (onOrderGenerated) onOrderGenerated(order);
-
     } catch (err: any) {
-      setResult('Erro ao conectar com a IA: ' + err.message);
+      setAgentSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' } : s));
+      setResult('❌ Erro: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -629,11 +572,38 @@ O campo "price" é o custo unitário em USD. O campo "cbm" é o CBM total para a
             disabled={loading || !comprasItems?.length}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-10 mt-5 md:mt-0"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Brain className="w-4 h-4 mr-2" />}
-            {loading ? 'Calculando Knapsack...' : 'Montar Container'}
+            {loading
+              ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Otimizando...</>
+              : <><Brain className="w-4 h-4 mr-2" />Montar Container</>
+            }
           </Button>
         </div>
       </div>
+
+      {/* Progresso dos agentes */}
+      {agentSteps.length > 0 && (
+        <div className="relative z-10 mt-4 mb-6">
+          <div className="flex items-center gap-2 flex-wrap">
+            {agentSteps.map((step, idx) => (
+              <div key={step.id} className="flex items-center gap-1.5">
+                {idx > 0 && <div className="w-4 h-px bg-border hidden sm:block" />}
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  step.status === 'done'    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' :
+                  step.status === 'running' ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 animate-pulse' :
+                  step.status === 'error'   ? 'bg-red-500/15 text-red-400 border border-red-500/20' :
+                  'bg-muted/50 text-muted-foreground border border-border'
+                }`}>
+                  {step.status === 'done'    && <span>✓</span>}
+                  {step.status === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {step.status === 'error'   && <span>✗</span>}
+                  {step.status === 'pending' && <span className="w-1.5 h-1.5 rounded-full bg-current inline-block" />}
+                  {step.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {result && (
         <div className="relative z-10 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
