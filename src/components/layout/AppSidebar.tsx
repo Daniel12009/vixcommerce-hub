@@ -45,7 +45,7 @@ export function AppSidebar({ activeModule, onModuleChange, isOpen, onClose }: Ap
         {/* Logo + Mobile Close */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
-            <img src="/nexusiq-icon.png" alt="NexusIQ" className="w-9 h-9 rounded-lg bg-white p-0.5 object-contain" />
+            <img src="/nexusiq-icon.png" alt="NexusIQ" className="w-9 h-9 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
             <div>
               <h1 className="text-sidebar-primary-foreground font-bold text-lg leading-tight">NexusIQ</h1>
               <p className="text-sidebar-foreground text-xs opacity-60">E-Commerce Intelligence</p>
