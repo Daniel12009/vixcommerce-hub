@@ -45,12 +45,10 @@ export function AppSidebar({ activeModule, onModuleChange, isOpen, onClose }: Ap
         {/* Logo + Mobile Close */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg vix-gradient flex items-center justify-center">
-              <span className="text-sidebar-primary-foreground font-bold text-sm">VP</span>
-            </div>
+            <img src="/nexusiq-icon.png" alt="NexusIQ" className="w-9 h-9 rounded-lg object-contain" />
             <div>
               <h1 className="text-sidebar-primary-foreground font-bold text-lg leading-tight">NexusIQ</h1>
-              <p className="text-sidebar-foreground text-xs opacity-60">Gestão E-commerce</p>
+              <p className="text-sidebar-foreground text-xs opacity-60">E-Commerce Intelligence</p>
             </div>
           </div>
           <button

@@ -51,21 +51,15 @@ export function LoginPage() {
       }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{
-            width: 72, height: 72, borderRadius: 18, margin: '0 auto 16px',
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 40px rgba(99, 102, 241, 0.4)',
-            animation: 'pulse-glow 2s ease-in-out infinite',
-          }}>
-            <span style={{ color: '#fff', fontWeight: 800, fontSize: 24 }}>VP</span>
-          </div>
-          <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 700, margin: '0 0 4px', letterSpacing: '-0.02em' }}>
-            NexusIQ
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, margin: 0 }}>
-            Gestão E-commerce
-          </p>
+          <img
+            src="/nexusiq-logo.png"
+            alt="NexusIQ"
+            style={{
+              maxWidth: 280, height: 'auto', margin: '0 auto 16px',
+              display: 'block',
+              filter: 'brightness(0) invert(1)',
+            }}
+          />
         </div>
 
         {/* Login Form */}

@@ -111,9 +111,7 @@ function AppContent() {
           <Menu className="w-5 h-5 text-foreground" />
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md vix-gradient flex items-center justify-center">
-            <span className="text-white font-bold text-[10px]">VP</span>
-          </div>
+          <img src="/nexusiq-icon.png" alt="NexusIQ" className="w-7 h-7 rounded-md object-contain" />
           <span className="text-foreground font-semibold text-sm">NexusIQ</span>
         </div>
       </div>
