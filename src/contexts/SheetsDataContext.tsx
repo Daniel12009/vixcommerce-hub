@@ -353,6 +353,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         margemDez24: num(r.margemDez24),
         margemJan25: num(r.margemJan25),
         margemFev25: num(r.margemFev25),
+        raw: { ...r } // Store complete raw row for AI prompt matching
       }));
     setComprasItems(items);
   }, []);

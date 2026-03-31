@@ -377,52 +377,59 @@ export function ComprasAIChat({ onOrderGenerated }: { onOrderGenerated?: (order:
 
       const systemPrompt = `Você é um especialista em planejamento de demanda, S&OP e otimização de compras com restrição logística (CBM).
 
-Você possui três grandes objetivos que precisamos de um output:
-1) Definir a quantidade ótima de compra por SKU maximizando o lucro total esperado, respeitando a limitação de espaço (CBM) disponível.
-2) Criar uma visão auditável da demanda estimada do período
-3) Criticar/complementar o exercício que o usuário mesmo criou baseado nas premissas dele para a compra do período, comparando com a sua sugestão com análises objetivas da diferença entre um e outro.
+// ─── PROMPT V3 — Agente de Otimização de Compras (S&OP + CBM) ───
+      const systemPrompt = `Você é um especialista em planejamento de demanda, S&OP e otimização de compras com restrição logística (CBM). Gere os 7 outputs abaixo de forma auditável e objetiva.
 
----
-0. Parâmetros do Problema
-Considere:
-- Capacidade total disponível: [Máximo de ${cbmLimit} CBMs]
-- Horizonte de planejamento: [a compra prevista é para ${daysHorizon} dias de vendas]
+## FONTE DE DADOS
+- O json enviado contém os dados da Aba Ordem_Inicial_All
 
-1. Coleta de Dados
-Para cada SKU, analise os dados enviados no JSON.
+## PARÂMETROS DO PROBLEMA
+CAPACIDADE_CONTAINER_CBM = ${cbmLimit}
+HORIZONTE_PLANEJAMENTO_DIAS = ${daysHorizon}
+LEAD_TIME_CHINA_BRASIL_DIAS = 60
+LEAD_TIME_TOTAL_DIAS = 90
+PESO_VMD_ATUAL = 0.40
+PESO_VMD_RECENTE = 0.60
+DIAS_SEGURANCA_PADRAO = 15
+BIAS_PADRAO = 1.0
 
-2. Tratamento dos Dados
-Identifique tendência, sazonalidade e outliers se possível.
+## REGRAS DE EXCLUSÃO
+Excluir completamente o SKU da compra se:
+1. "O que vou parar de trazer" (Coluna D) contiver "Não vou mais trazer"
+2. "Check demanda" (Coluna Q) contiver "Não comprar"
+3. Sem histórico de venda e não for ABC=L
 
-3. Cálculo da Demanda
-Média de venda diária e Demanda projetada no período.
+## TRATAMENTO E DEMANDA
+- Tratar dados nulos como 0
+- VMD Base = (VMD_Atual * 0.40 + VMD_Recente * 0.60). Se VMD_Recente for zero, usar VMD_Atual.
+- VMD Ajustada = VMD_Base * BIAS
+- Trânsito = SOMENTE O CONTAINER BM (15/04/26) — Ignore os demais que já chegaram.
+- Estoque de Segurança = VMD_Ajustada * ${daysHorizon} dias
+- Necessidade Bruta = (VMD_Ajustada * 30) + (VMD_Ajustada * 90) + Estoque_Segurança
+- Necessidade Mínima = max(0, Necessidade_Bruta - OnHand - Trânsito)
 
-4. Cálculo de Métricas de Otimização
-Lucro Unitário = Receita (ou CustoProduto * (Margem/100))
-Lucro por CBM = Lucro Unitário / CBM por unidade
-Classifique os SKUs do maior para o menor lucro por CBM.
+## MÉTRICAS DE OTIMIZAÇÃO
+- Margem a usar será a mais recente.
+- Lucro Unitário = Preço Estimado * Margem * (1 - Taxa_Devolução)
+- Lucro por CBM = Lucro Unitário / CBM_por_unidade
 
-5. Restrições Operacionais
-Garanta que SKUs com risco de ruptura tenham reposição mínima (Estoque Mínimo).
+## OTIMIZAÇÃO KNAPSACK (CRÍTICO)
+1. Fase 1: Críticos. Aloque Quantidade Mínima para cada crítico até esgotar o CBM.
+2. Fase 2: Com o CBM restante, aloque o MÁXIMO POSSÍVEL para os SKUs com maior Lucro/CBM.
+3. REGRA OBRIGATÓRIA: O total de CBM DEVE utilizar pelo menos 95% da capacidade (${Math.round(cbmLimit * 0.95)} CBMs mínimo) e no máximo ${cbmLimit} CBMs. Se sobrar espaço, adicione mais unidades dos produtos com maior lucro/CBM.
 
-6. Otimização da Compra (Core do Problema)
-Distribua o espaço disponível (CBM) da seguinte forma:
-1. Reserve CBM para reposição mínima dos SKUs críticos (ruptura < ${daysHorizon} dias).
-2. Com o restante, priorize SKUs com maior lucro por CBM (algoritmo tipo "knapsack problem").
-3. REGRA OBRIGATÓRIA: SE a soma dos CBMs dos itens selecionados for MENOR que ${cbmLimit} CBMs, AUMENTE as quantidades dos SKUs mais lucrativos (maior lucro por CBM) até preencher TODO o espaço. O container DEVE ser utilizado a pelo menos 95% da capacidade (${Math.round(cbmLimit * 0.95)} CBMs mínimo).
+## OUTPUTS OBRIGATÓRIOS (NO FORMATO MARKDOWN COM TABELAS)
+Gere os seguintes 7 outputs formatais:
+1. OUTPUT 1: Tabela por SKU (Qtd Sugerida, CBM, Custo, Lucro)
+2. OUTPUT 2: Visão da Demanda Estimada (VMD, Tendência, Cobertura, Status)
+3. OUTPUT 3: Comparação com Pedido Base do Usuário
+4. OUTPUT 4: Consolidação Geral (Resumo do Container ETA 25/06/2026)
+5. OUTPUT 5: Camada Estratégica (Trade-offs, Riscos)
+6. OUTPUT 6: Verificação de Consistência
+7. OUTPUT 7: Pedido no Formato para o Fornecedor (Invoice)
 
-7. Output Final
-Apresente a tabela final de recomendação e consolidação (CBM utilizado, Lucro esperado, Top SKUs por eficiência, SKUs que ficaram de fora).
-
-A tabela de "Plano Otimizado Recomendado" DEVE conter a coluna SKU com o código exato (ex: FC-138, FC-71, etc.) e QTD recomendada.
-
-REGRA FUNDAMENTAL: O total de CBM do plano otimizado NÃO PODE ultrapassar ${cbmLimit} CBMs, mas DEVE utilizar pelo menos 95% (${Math.round(cbmLimit * 0.95)} CBMs). Se sobrar espaço, adicione mais unidades dos produtos com maior lucro/CBM.
-
-8. Camada Estratégica
-Onde há trade-offs, riscos e sugestões.
-
-9. OBRIGATÓRIO — Bloco JSON para Pedido de Compra
-NO FINAL DO RELATÓRIO, você DEVE incluir um bloco de código JSON (entre \`\`\`json e \`\`\`) com EXATAMENTE os SKUs recomendados para compra. Este bloco é CRÍTICO — o sistema lê este JSON para gerar automaticamente o Purchase Order. Se você não incluir este bloco, o pedido não será gerado.
+## OBRIGATÓRIO — Bloco JSON para Pedido de Compra
+NO FINAL DO RELATÓRIO, você DEVE incluir um bloco de código JSON (entre \`\`\`json e \`\`\`) com EXATAMENTE os SKUs recomendados para compra. Este bloco é CRÍTICO — o sistema lê este JSON para gerar automaticamente o Purchase Order.
 
 Formato OBRIGATÓRIO:
 \`\`\`json
@@ -431,9 +438,7 @@ Formato OBRIGATÓRIO:
   {"sku": "FC-02", "qty": 1140, "description": "Torneira", "price": 2.46, "cbm": 1.48}
 ]}
 \`\`\`
-Use os dados reais do contexto. O campo "price" é o custo unitário em USD. O campo "cbm" é o CBM total para aquela quantidade. Inclua APENAS os SKUs que entraram no plano otimizado. A soma dos CBMs DEVE estar entre ${Math.round(cbmLimit * 0.95)} e ${cbmLimit} CBMs.
-
-GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NEGRITO ONDE APLICÁVEL. Formate como um relatório executivo requintado.`;
+O campo "price" é o custo unitário em USD. O campo "cbm" é o CBM total para aquela quantidade. A soma dos CBMs DEVE estar entre ${Math.round(cbmLimit * 0.95)} e ${cbmLimit} CBMs.`;
 
       const context_data = {
         compras: comprasItems?.map(d => ({
@@ -448,7 +453,9 @@ GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NE
           lucro_cbm: d.lucroPorCBM,
           custo_tot_user: d.custoTotalPedido,
           jan: d.tendenciaMeses?.jan,
-          fev: d.tendenciaMeses?.fev
+          fev: d.tendenciaMeses?.fev,
+          // Injecting FULL raw spreadsheet row matching exactly the prompt columns (D, Q, BM, etc)
+          ...((d as any).raw || {})
         })) || [],
       };
 
