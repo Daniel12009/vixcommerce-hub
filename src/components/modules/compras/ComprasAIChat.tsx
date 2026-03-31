@@ -13,6 +13,7 @@ export interface PurchaseOrderLine {
   no: number;
   sku: string;
   description: string;
+  photoUrl?: string;
   packing: number;
   qty: number;
   price: number;
@@ -41,6 +42,7 @@ function generateExcelXML(order: PurchaseOrder): string {
    <Row>
     <Cell><Data ss:Type="Number">${l.no}</Data></Cell>
     <Cell><Data ss:Type="String">${l.sku}</Data></Cell>
+    <Cell><Data ss:Type="String">${l.photoUrl ? '=HYPERLINK("' + l.photoUrl + '","📷 Ver Foto")' : ''}</Data></Cell>
     <Cell><Data ss:Type="String">${l.description}</Data></Cell>
     <Cell><Data ss:Type="Number">${l.packing}</Data></Cell>
     <Cell><Data ss:Type="Number">${l.qty}</Data></Cell>
@@ -80,7 +82,8 @@ function generateExcelXML(order: PurchaseOrder): string {
   <Table>
    <Column ss:Width="40"/>
    <Column ss:Width="80"/>
-   <Column ss:Width="160"/>
+   <Column ss:Width="100"/>
+   <Column ss:Width="140"/>
    <Column ss:Width="80"/>
    <Column ss:Width="80"/>
    <Column ss:Width="80"/>
@@ -90,20 +93,21 @@ function generateExcelXML(order: PurchaseOrder): string {
    <Column ss:Width="100"/>
 
    <Row ss:StyleID="title">
-    <Cell ss:MergeAcross="9"><Data ss:Type="String">PURCHASE ORDER — VIX COMMERCE</Data></Cell>
+    <Cell ss:MergeAcross="10"><Data ss:Type="String">PURCHASE ORDER — VIX COMMERCE</Data></Cell>
    </Row>
    <Row>
-    <Cell ss:MergeAcross="4"><Data ss:Type="String">BUYER: J.SCHRUBER COMERCIAL-UTILIDADES LTDA</Data></Cell>
+    <Cell ss:MergeAcross="5"><Data ss:Type="String">BUYER: J.SCHRUBER COMERCIAL-UTILIDADES LTDA</Data></Cell>
     <Cell ss:MergeAcross="4"><Data ss:Type="String">Data: ${d}</Data></Cell>
    </Row>
    <Row>
-    <Cell ss:MergeAcross="9"><Data ss:Type="String">Attn: Rua Chile, 1389 - Padro Velho Curitiba - Paraná - Brazil</Data></Cell>
+    <Cell ss:MergeAcross="10"><Data ss:Type="String">Attn: Rua Chile, 1389 - Padro Velho Curitiba - Paraná - Brazil</Data></Cell>
    </Row>
    <Row/>
 
    <Row ss:StyleID="header">
     <Cell><Data ss:Type="String">Nº</Data></Cell>
     <Cell><Data ss:Type="String">SKU</Data></Cell>
+    <Cell><Data ss:Type="String">Picture</Data></Cell>
     <Cell><Data ss:Type="String">Descrição</Data></Cell>
     <Cell><Data ss:Type="String">Packing</Data></Cell>
     <Cell><Data ss:Type="String">QTY (pcs)</Data></Cell>
@@ -120,6 +124,7 @@ function generateExcelXML(order: PurchaseOrder): string {
     <Cell/>
     <Cell/>
     <Cell/>
+    <Cell/>
     <Cell><Data ss:Type="Number">${order.totalQty}</Data></Cell>
     <Cell/>
     <Cell/>
@@ -130,10 +135,10 @@ function generateExcelXML(order: PurchaseOrder): string {
 
    <Row/>
    <Row>
-    <Cell ss:MergeAcross="9"><Data ss:Type="String">Lead Time: 30-45 days (10 days prevent emergencies)</Data></Cell>
+    <Cell ss:MergeAcross="10"><Data ss:Type="String">Lead Time: 30-45 days (10 days prevent emergencies)</Data></Cell>
    </Row>
    <Row>
-    <Cell ss:MergeAcross="9"><Data ss:Type="String">FOB XIAMEN</Data></Cell>
+    <Cell ss:MergeAcross="10"><Data ss:Type="String">FOB XIAMEN</Data></Cell>
    </Row>
   </Table>
  </Worksheet>
@@ -414,6 +419,30 @@ GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NE
       // Parse structured order from AI response
       const order = parseAIToPurchaseOrder(answer, comprasItems || [], cbmLimit, daysHorizon);
       setCurrentOrder(order);
+
+      // Fetch photos for each SKU in the PO (in parallel)
+      if (order.lines.length > 0) {
+        toast.info('Buscando fotos dos produtos...');
+        try {
+          const photoPromises = order.lines.map(async (line) => {
+            try {
+              const { data: photoData } = await supabase.functions.invoke('drive-photos', {
+                body: { sku: line.sku, account_name: '', fetch_dimensions: false },
+                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+              });
+              if (photoData?.photos?.found && photoData.photos.urls?.length > 0) {
+                line.photoUrl = photoData.photos.urls[0];
+              }
+            } catch { /* skip photo for this SKU */ }
+          });
+          await Promise.allSettled(photoPromises);
+          const photosFound = order.lines.filter(l => l.photoUrl).length;
+          if (photosFound > 0) toast.success(`${photosFound} fotos encontradas!`);
+          // Update state with photos
+          setCurrentOrder({ ...order });
+        } catch { /* photo fetch failed silently */ }
+      }
+
       if (onOrderGenerated) onOrderGenerated(order);
 
     } catch (err: any) {
@@ -532,16 +561,17 @@ GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NE
               {copied ? 'Copiado!' : 'Copiar Relatório'}
             </Button>
 
-            {currentOrder && currentOrder.lines.length > 0 && (
+            {currentOrder && (
               <>
-                <Button variant="outline" size="sm" onClick={handleDownloadXML} className="gap-2 border-emerald-500/50 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
+                <Button variant="outline" size="sm" onClick={handleDownloadXML} disabled={currentOrder.lines.length === 0} className="gap-2 border-emerald-500/50 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
                   <Download className="w-4 h-4" />
-                  Baixar XML ({currentOrder.lines.length} SKUs)
+                  Baixar XML {currentOrder.lines.length > 0 ? `(${currentOrder.lines.length} SKUs)` : ''}
                 </Button>
 
                 <Button
                   variant="outline" size="sm"
                   onClick={() => setShowEmailModal(true)}
+                  disabled={currentOrder.lines.length === 0}
                   className="gap-2 border-blue-500/50 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                 >
                   <Mail className="w-4 h-4" />
