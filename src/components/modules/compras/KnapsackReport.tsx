@@ -15,7 +15,7 @@ interface Section {
 
 function parseOutputs(markdown: string): Section[] {
   // Split by OUTPUT headings
-  const outputRegex = /#{1,3}\s*OUTPUT\s+(\d+)[:\s—–-]*([^\n]*)/gi;
+  const outputRegex = /^#{1,3}\s*(?:OUTPUT\s+(\d+)|(\d+)[º°\.]?\s+(?:OUTPUT|output))[:\s—–-]*([^\n]*)/gim;
   const matches = [...markdown.matchAll(outputRegex)];
   
   if (matches.length === 0) {
@@ -59,8 +59,9 @@ function parseOutputs(markdown: string): Section[] {
 
   for (let i = 0; i < matches.length; i++) {
     const match = matches[i];
-    const num = parseInt(match[1]) - 1;
-    const title = match[2].trim() || `Output ${match[1]}`;
+    const rawNum = match[1] || match[2];
+    const num = parseInt(rawNum) - 1;
+    const title = match[3].trim() || `Output ${rawNum}`;
     const start = match.index! + match[0].length;
     const end = i < matches.length - 1 ? matches[i + 1].index! : markdown.length;
     const content = markdown.slice(start, end).trim();

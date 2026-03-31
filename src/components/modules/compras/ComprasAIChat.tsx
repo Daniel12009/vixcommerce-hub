@@ -409,25 +409,42 @@ Excluir completamente o SKU da compra se:
 - Lucro Unitário = Preço Estimado * Margem * (1 - Taxa_Devolução)
 - Lucro por CBM = Lucro Unitário / CBM_por_unidade
 
-## OTIMIZAÇÃO KNASPACK (CRÍTICO)
-1. Fase 1: Críticos. Aloque Quantidade Mínima para cada crítico até esgotar o CBM.
-2. Fase 2: Com o CBM restante, aloque o MÁXIMO POSSÍVEL para os SKUs com maior Lucro/CBM.
-3. REGRA OBRIGATÓRIA: O total de CBM DEVE utilizar pelo menos 95% da capacidade (${Math.round(cbmLimit * 0.95)} CBMs mínimo) e no máximo ${cbmLimit} CBMs. Se sobrar espaço, adicione mais unidades dos produtos com maior lucro/CBM.
+## REGRA FUNDAMENTAL — PEDIDO DO USUÁRIO É APENAS REFERÊNCIA
+O campo pedido_user e cbm_tot_user NO JSON são o pedido histórico do usuário — servem APENAS como referência de comparação.
+NÃO trate o pedido_user como pedido fixo ou reservado.
+A sua missão é calcular o pedido OTIMIZADO do zero usando o Knapsack.
 
-## OUTPUTS OBRIGATÓRIOS (USAR SINTAXE MARKDOWN ESTRITA PARA TABELAS)
-OBRIGATÓRIO: Todas as tabelas do seu relatório DEVEM usar a sintaxe oficial de tabelas em Markdown (com pipes "|"). NUNCA use apenas espaços ou tabulações. Exemplo exigido:
-| Coluna A | Coluna B |
-| -------- | -------- |
-| Valor 1  | Valor 2  |
+## OTIMIZAÇÃO KNAPSACK
+1. Fase 1 — Críticos (dias_rupu < 30): aloque necessidade mínima ordenada por lucro/CBM desc
+2. Fase 2 — Com CBM restante: aloque MÁXIMO possível dos SKUs com maior lucro/CBM
+3. REGRA INVIOLÁVEL: CBM final DEVE estar entre ${Math.round(cbmLimit * 0.95)} e ${cbmLimit} m³
+   - Se sobrar espaço após cobrir críticos, adicione MAIS unidades dos top SKUs por lucro/CBM
+   - Se necessidade mínima total exceder ${cbmLimit} CBMs, priorize críticos por lucro/CBM até encher
+   - NÃO deixe espaço vazio — o container DEVE ir cheio
 
-Gere os seguintes 7 outputs formatados com títulos em negrito e tabelas Markdown verdadeiras:
-1. OUTPUT 1: Tabela por SKU (Qtd Sugerida, CBM, Custo, Lucro)
-2. OUTPUT 2: Visão da Demanda Estimada (VMD, Tendência, Cobertura, Status)
-3. OUTPUT 3: Comparação com Pedido Base do Usuário
-4. OUTPUT 4: Consolidação Geral (Resumo do Container ETA 25/06/2026)
-5. OUTPUT 5: Camada Estratégica (Trade-offs, Riscos)
-6. OUTPUT 6: Verificação de Consistência
-7. OUTPUT 7: Pedido no Formato para o Fornecedor (Invoice)
+## OUTPUTS OBRIGATÓRIOS
+ATENÇÃO: Use EXATAMENTE estes headings markdown para cada seção — o sistema faz parse automático:
+
+## OUTPUT 1 — Tabela por SKU
+(tabela: SKU | Qtd Sugerida | CBM | Custo R$ | Lucro/CBM | Status)
+
+## OUTPUT 2 — Visão da Demanda
+(tabela: SKU | VMD Ajustada | Tendência | Cobertura dias | Status)
+
+## OUTPUT 3 — Comparação com Pedido do Usuário
+(tabela: SKU | Pedido Usuário | Sugestão IA | Diferença | Impacto R$)
+
+## OUTPUT 4 — Consolidação do Container
+(resumo: CBM usado, custo total, lucro esperado, SKUs incluídos/excluídos)
+
+## OUTPUT 5 — Análise Estratégica
+(trade-offs, riscos, oportunidades, cenário alternativo)
+
+## OUTPUT 6 — Verificação de Consistência
+(validação das métricas, divergências, alertas)
+
+## OUTPUT 7 — Pedido ao Fornecedor
+(tabela no formato invoice: No | SKU | Packing | QTY | Price | CTN | CBM | Amount)
 
 ## OBRIGATÓRIO — Bloco JSON para Pedido de Compra
 NO FINAL DO RELATÓRIO, você DEVE incluir um bloco de código JSON (entre \`\`\`json e \`\`\`) com EXATAMENTE os SKUs recomendados para compra. Este bloco é CRÍTICO — o sistema lê este JSON para gerar automaticamente o Purchase Order.
