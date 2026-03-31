@@ -57,7 +57,7 @@ export function LoadingScreen() {
         color: '#fff', fontSize: 28, fontWeight: 700, margin: '0 0 8px 0',
         letterSpacing: '-0.02em',
       }}>
-        VixPainel
+        NexusIQ
       </h1>
       <p style={{
         color: 'rgba(255,255,255,0.5)', fontSize: 14, margin: '0 0 40px 0',

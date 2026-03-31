@@ -114,7 +114,7 @@ function AppContent() {
           <div className="w-7 h-7 rounded-md vix-gradient flex items-center justify-center">
             <span className="text-white font-bold text-[10px]">VP</span>
           </div>
-          <span className="text-foreground font-semibold text-sm">VixPainel</span>
+          <span className="text-foreground font-semibold text-sm">NexusIQ</span>
         </div>
       </div>
 

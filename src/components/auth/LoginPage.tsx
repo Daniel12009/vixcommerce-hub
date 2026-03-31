@@ -61,7 +61,7 @@ export function LoginPage() {
             <span style={{ color: '#fff', fontWeight: 800, fontSize: 24 }}>VP</span>
           </div>
           <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 700, margin: '0 0 4px', letterSpacing: '-0.02em' }}>
-            VixPainel
+            NexusIQ
           </h1>
           <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, margin: 0 }}>
             Gestão E-commerce
@@ -190,7 +190,7 @@ export function LoginPage() {
         </form>
 
         <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, textAlign: 'center', marginTop: 24 }}>
-          VixPainel © 2026 · Gestão E-commerce
+          NexusIQ © 2026 · Gestão E-commerce
         </p>
       </div>
 

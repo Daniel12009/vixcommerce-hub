@@ -49,7 +49,7 @@ export function AppSidebar({ activeModule, onModuleChange, isOpen, onClose }: Ap
               <span className="text-sidebar-primary-foreground font-bold text-sm">VP</span>
             </div>
             <div>
-              <h1 className="text-sidebar-primary-foreground font-bold text-lg leading-tight">VixPainel</h1>
+              <h1 className="text-sidebar-primary-foreground font-bold text-lg leading-tight">NexusIQ</h1>
               <p className="text-sidebar-foreground text-xs opacity-60">Gestão E-commerce</p>
             </div>
           </div>

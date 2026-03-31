@@ -40,25 +40,25 @@ serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "VIX Commerce <noreply@viaflix.com.br>",
+        from: "NexusIQ <noreply@viaflix.com.br>",
         to: [to],
-        subject: subject || "Purchase Order — VIX Commerce",
+        subject: subject || "Purchase Order — NexusIQ",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: linear-gradient(135deg, #1e3a5f, #2563eb); padding: 30px; border-radius: 12px 12px 0 0;">
               <h1 style="color: white; margin: 0; font-size: 22px;">📦 Purchase Order</h1>
-              <p style="color: #93c5fd; margin: 8px 0 0;">VIX Commerce — Pedido de Compra</p>
+              <p style="color: #93c5fd; margin: 8px 0 0;">NexusIQ — Pedido de Compra</p>
             </div>
             <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
               <p style="color: #334155; font-size: 14px; line-height: 1.6;">
-                Segue em anexo o pedido de compra gerado pelo sistema VIX Commerce.
+                Segue em anexo o pedido de compra gerado pelo sistema NexusIQ.
               </p>
               ${summary ? `<div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
                 <p style="color: #64748b; font-size: 12px; text-transform: uppercase; font-weight: bold; margin: 0 0 8px;">Resumo</p>
                 <p style="color: #1e293b; font-size: 14px; margin: 0;">${summary}</p>
               </div>` : ''}
               <p style="color: #94a3b8; font-size: 12px; margin-top: 20px;">
-                Este e-mail foi enviado automaticamente pelo sistema VIX Commerce.
+                Este e-mail foi enviado automaticamente pelo sistema NexusIQ.
               </p>
             </div>
           </div>

@@ -54,7 +54,7 @@ function generateExcelXML(order: PurchaseOrder): string {
  <Worksheet ss:Name="Purchase Order">
   <Table>
    <Column ss:Width="40"/><Column ss:Width="80"/><Column ss:Width="160"/><Column ss:Width="80"/><Column ss:Width="80"/><Column ss:Width="80"/><Column ss:Width="60"/><Column ss:Width="80"/><Column ss:Width="80"/><Column ss:Width="100"/>
-   <Row ss:StyleID="title"><Cell ss:MergeAcross="9"><Data ss:Type="String">PURCHASE ORDER — VIX COMMERCE</Data></Cell></Row>
+   <Row ss:StyleID="title"><Cell ss:MergeAcross="9"><Data ss:Type="String">PURCHASE ORDER — NEXUSIQ</Data></Cell></Row>
    <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">BUYER: J.SCHRUBER COMERCIAL-UTILIDADES LTDA</Data></Cell><Cell ss:MergeAcross="4"><Data ss:Type="String">Data: ${d}</Data></Cell></Row>
    <Row><Cell ss:MergeAcross="9"><Data ss:Type="String">Attn: Rua Chile, 1389 - Padro Velho Curitiba - Paraná - Brazil</Data></Cell></Row>
    <Row/>

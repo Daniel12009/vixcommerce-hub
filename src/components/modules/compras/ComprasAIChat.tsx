@@ -93,7 +93,7 @@ function generateExcelXML(order: PurchaseOrder): string {
    <Column ss:Width="100"/>
 
    <Row ss:StyleID="title">
-    <Cell ss:MergeAcross="10"><Data ss:Type="String">PURCHASE ORDER — VIX COMMERCE</Data></Cell>
+    <Cell ss:MergeAcross="10"><Data ss:Type="String">PURCHASE ORDER — NEXUSIQ</Data></Cell>
    </Row>
    <Row>
     <Cell ss:MergeAcross="5"><Data ss:Type="String">BUYER: J.SCHRUBER COMERCIAL-UTILIDADES LTDA</Data></Cell>
@@ -168,62 +168,96 @@ function buildPurchaseOrder(
   }
 
   // Calculate CBM per unit for each item
-  const items = comprasItems
-    .filter(d => d.sku && d.mediaVendaDiaria > 0)
+  const allItems = comprasItems
+    .filter(d => d.sku && d.cbmTotal && d.pedidoSugerido && d.pedidoSugerido > 0)
     .map(d => {
-      const cbmPerUnit = d.cbmTotal && d.pedidoSugerido && d.pedidoSugerido > 0
-        ? d.cbmTotal / d.pedidoSugerido
-        : 0;
-      const demanda = Math.ceil(d.mediaVendaDiaria * daysHorizon);
+      const cbmPerUnit = d.cbmTotal / d.pedidoSugerido;
+      const demanda = Math.ceil((d.mediaVendaDiaria || 0) * daysHorizon);
       const diasRuptura = typeof d.diasParaRuptura === 'number' ? d.diasParaRuptura : 999;
       const isCritical = diasRuptura < daysHorizon;
-      const lucroCBM = d.lucroPorCBM || 0;
+      const lucroCBM = d.lucroPorCBM || (d.custoProduto ? d.custoProduto / cbmPerUnit : 0);
 
       return {
         sku: d.sku,
         categoria: d.categoria || '',
         custoProduto: d.custoProduto || 0,
-        vmd: d.mediaVendaDiaria,
+        vmd: d.mediaVendaDiaria || 0,
         demanda,
         onHand: d.onHand || 0,
         diasRuptura,
         isCritical,
         lucroCBM,
         cbmPerUnit,
-        // Qty to order = demand - current stock (min 0)
         qtyNeeded: Math.max(demanda - (d.onHand || 0), 0),
         pedidoUser: d.pedidoSugerido || 0,
       };
     })
-    .filter(d => d.qtyNeeded > 0 && d.cbmPerUnit > 0);
+    .filter(d => d.cbmPerUnit > 0);
 
-  // Phase 1: Critical SKUs first (ruptura < horizon)
-  const criticals = items.filter(d => d.isCritical).sort((a, b) => b.lucroCBM - a.lucroCBM);
-  // Phase 2: Non-critical sorted by lucro/CBM descending
-  const nonCriticals = items.filter(d => !d.isCritical).sort((a, b) => b.lucroCBM - a.lucroCBM);
+  // Sort all items by: criticals first, then by lucro/CBM descending
+  const sorted = [...allItems].sort((a, b) => {
+    if (a.isCritical !== b.isCritical) return a.isCritical ? -1 : 1;
+    return b.lucroCBM - a.lucroCBM;
+  });
 
-  const ordered = [...criticals, ...nonCriticals];
   let runningCbm = 0;
-  const lines: PurchaseOrderLine[] = [];
-  let no = 1;
+  const lineMap = new Map<string, { item: typeof sorted[0]; qty: number }>();
 
-  for (const item of ordered) {
-    // How much CBM would the full order take?
+  // Phase 1: Fill demand gaps (demanda - estoque) for all items
+  for (const item of sorted) {
+    if (item.qtyNeeded <= 0) continue;
     let qty = item.qtyNeeded;
     let cbm = qty * item.cbmPerUnit;
 
-    // If it doesn't fit, reduce qty to fit remaining space
     if (runningCbm + cbm > cbmLimit) {
-      const remainingCbm = cbmLimit - runningCbm;
-      if (remainingCbm < 0.01) break; // No space left
-      qty = Math.floor(remainingCbm / item.cbmPerUnit);
+      const remaining = cbmLimit - runningCbm;
+      if (remaining < 0.01) break;
+      qty = Math.floor(remaining / item.cbmPerUnit);
       if (qty <= 0) continue;
       cbm = qty * item.cbmPerUnit;
     }
 
     runningCbm += cbm;
-    const amount = qty * item.custoProduto;
+    lineMap.set(item.sku, { item, qty });
+    if (runningCbm >= cbmLimit - 0.01) break;
+  }
 
+  // Phase 2: Fill remaining CBM with extra quantities (most profitable first)
+  if (runningCbm < cbmLimit - 0.01) {
+    const byProfit = [...allItems].sort((a, b) => b.lucroCBM - a.lucroCBM);
+
+    for (const item of byProfit) {
+      const remaining = cbmLimit - runningCbm;
+      if (remaining < 0.01) break;
+
+      // How many extra units can we fit?
+      const extraQty = Math.floor(remaining / item.cbmPerUnit);
+      if (extraQty <= 0) continue;
+
+      const extraCbm = extraQty * item.cbmPerUnit;
+      const existing = lineMap.get(item.sku);
+      if (existing) {
+        existing.qty += extraQty;
+      } else {
+        lineMap.set(item.sku, { item, qty: extraQty });
+      }
+      runningCbm += extraCbm;
+      if (runningCbm >= cbmLimit - 0.01) break;
+    }
+  }
+
+  // Build lines
+  const lines: PurchaseOrderLine[] = [];
+  let no = 1;
+  // Sort final lines: criticals first, then by lucro/CBM
+  const finalEntries = [...lineMap.values()].sort((a, b) => {
+    if (a.item.isCritical !== b.item.isCritical) return a.item.isCritical ? -1 : 1;
+    return b.item.lucroCBM - a.item.lucroCBM;
+  });
+
+  for (const { item, qty } of finalEntries) {
+    const cbm = qty * item.cbmPerUnit;
+    const amount = qty * item.custoProduto;
     lines.push({
       no: no++,
       sku: item.sku,
@@ -236,8 +270,6 @@ function buildPurchaseOrder(
       cbm: Math.round(cbm * 100) / 100,
       amount: Math.round(amount * 100) / 100,
     });
-
-    if (runningCbm >= cbmLimit - 0.01) break;
   }
 
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
@@ -447,7 +479,7 @@ GERE SEU OUTPUT COMPLETAMENTE EM MARKDOWN FORMATADO, COM TABELAS (usando |) E NE
       const { error } = await supabase.functions.invoke('send-purchase-order', {
         body: {
           to: emailTo.trim(),
-          subject: `Purchase Order — VIX Commerce — ${currentOrder.date}`,
+          subject: `Purchase Order — NEXUSIQ — ${currentOrder.date}`,
           xml_content: xml,
           filename: `PO_VixCommerce_${currentOrder.date.replace(/\//g, '-')}.xls`,
           summary: `Total: ${currentOrder.lines.length} SKUs | ${currentOrder.totalQty} pcs | ${currentOrder.totalCbm.toFixed(2)} CBM | $${currentOrder.totalAmount.toFixed(2)}`,

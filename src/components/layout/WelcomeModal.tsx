@@ -89,7 +89,7 @@ export function WelcomeModal() {
           </div>
 
           <h2 className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent mb-3">
-            Bem-vindo ao VixPainel! 🎉
+            Bem-vindo ao NexusIQ! 🎉
           </h2>
           
           <p className="text-muted-foreground text-[15px] leading-relaxed mb-8">
