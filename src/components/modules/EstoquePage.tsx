@@ -134,7 +134,9 @@ export function EstoquePage() {
       tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
     });
 
-    const allSkus = new Set<string>([...fullMap.keys(), ...tinyMap.keys()]);
+    // Full ML is the source of truth — only count SKUs that exist there.
+    // Tiny is just a lookup for the tinyLocal column.
+    const allSkus = new Set<string>([...fullMap.keys()]);
 
     return Array.from(allSkus).map((sku) => {
       const full = fullMap.get(sku);
