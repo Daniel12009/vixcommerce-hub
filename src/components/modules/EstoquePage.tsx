@@ -13,16 +13,17 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 
 interface MergedStockRow {
   sku: string;
+  conta: string;           // specific account
   venSemanal: number;
   vmd: number;
-  tinyLocal: number;
-  fullML: number;
-  entradaPendente: number;
-  emTransferencia: number;
+  tinyLocal: number;       // global total (across all accounts)
+  fullML: number;          // this account's aptas para venda
+  entradaPendente: number; // this account's
+  emTransferencia: number; // this account's
   sugestaoEnvio: number;
   coberturaDias: number;
   status: 'ruptura' | 'critico' | 'ok';
-  contas: string[];
+  contas: string[];        // kept for KPI compat
   customCobertura?: number;
 }
 
@@ -151,10 +152,41 @@ export function EstoquePage() {
       else if (coberturaDias < skuCobertura) status = 'critico';
 
       return {
-        sku, venSemanal: Math.round(vmd * 7), vmd, tinyLocal, fullML,
+        sku, conta: '', venSemanal: Math.round(vmd * 7), vmd, tinyLocal, fullML,
         entradaPendente, emTransferencia, sugestaoEnvio, coberturaDias, status,
         contas: Array.from(full?.contas || []),
         customCobertura: skuCoberturaOverrides[sku],
+      };
+    });
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo, skuCoberturaOverrides]);
+
+  // Per-account rows for the table — one row per (SKU × conta)
+  const perAccountData = useMemo<MergedStockRow[]>(() => {
+    const tinyMap = new Map<string, number>();
+    (estoqueTinyItems || []).forEach(item => {
+      const sku = item.sku?.trim().toUpperCase();
+      if (!sku) return;
+      tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
+    });
+
+    return (estoqueFullItems || []).map(item => {
+      const sku = item.sku?.trim().toUpperCase() || '';
+      const conta = item.conta || '';
+      const fullML = Number(item.aptasParaVenda || 0);
+      const entradaPendente = Number(item.entradaPendente || 0);
+      const emTransferencia = Number(item.emTransferencia || 0);
+      const tinyLocal = tinyMap.get(sku) || 0;
+      const vmd = vmdBySku.get(sku) || 0;
+      const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
+      const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
+      const sugestaoEnvio = Math.max(0, Math.ceil((vmd * skuCobertura) - (fullML + entradaPendente + emTransferencia)));
+      let status: 'ruptura' | 'critico' | 'ok' = 'ok';
+      if (fullML <= 0) status = 'ruptura';
+      else if (coberturaDias < skuCobertura) status = 'critico';
+      return {
+        sku, conta, venSemanal: Math.round(vmd * 7), vmd, tinyLocal, fullML,
+        entradaPendente, emTransferencia, sugestaoEnvio, coberturaDias, status,
+        contas: [conta], customCobertura: skuCoberturaOverrides[sku],
       };
     });
   }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo, skuCoberturaOverrides]);
@@ -219,10 +251,11 @@ export function EstoquePage() {
 
   const displayData = useMemo(() => {
     const term = searchTerm.trim().toUpperCase();
-    const filtered = mergedData.filter(row => {
+    // Use per-account rows for the table; filter by specific account if selected
+    const filtered = perAccountData.filter(row => {
       if (term && !row.sku.includes(term)) return false;
       if (filterStatus !== 'all' && row.status !== filterStatus) return false;
-      if (filterConta !== 'all' && !row.contas.includes(filterConta)) return false;
+      if (filterConta !== 'all' && row.conta !== filterConta) return false;
       return true;
     });
     return [...filtered].sort((a, b) => {
@@ -230,7 +263,7 @@ export function EstoquePage() {
       if (typeof aVal === 'string' && typeof bVal === 'string') return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       return sortDir === 'asc' ? Number(aVal) - Number(bVal) : Number(bVal) - Number(aVal);
     });
-  }, [mergedData, searchTerm, filterStatus, filterConta, sortField, sortDir]);
+  }, [perAccountData, searchTerm, filterStatus, filterConta, sortField, sortDir]);
 
   const transferItems = useMemo(() => {
     if (!estoqueFullItems) return [];
@@ -458,17 +491,18 @@ export function EstoquePage() {
                 <span className="text-xs text-muted-foreground ml-auto">{displayData.length} de {totalSkus} SKUs</span>
               </div>
 
-              {/* Table */}
+              {/* Table — per-account rows */}
               <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
+                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
                         <th className="text-left px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('sku')}>SKU{sortIcon('sku')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('venSemanal')}>Ven. Sem.{sortIcon('venSemanal')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('vmd')}>VMD{sortIcon('vmd')}</th>
-                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('tinyLocal')}>Tiny{sortIcon('tinyLocal')}</th>
-                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('fullML')}>Full{sortIcon('fullML')}</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('tinyLocal')}>Tiny (Total){sortIcon('tinyLocal')}</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('fullML')}>Full (Conta){sortIcon('fullML')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('entradaPendente')}>Entrada{sortIcon('entradaPendente')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('emTransferencia')}>Transf.{sortIcon('emTransferencia')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('sugestaoEnvio')}>Sugestão{sortIcon('sugestaoEnvio')}</th>
@@ -477,8 +511,9 @@ export function EstoquePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {displayData.map(row => (
-                        <tr key={row.sku} className={`border-b border-border hover:bg-muted/30 transition-colors ${row.status === 'ruptura' ? 'bg-[hsl(var(--vix-danger)/0.03)]' : row.status === 'critico' ? 'bg-[hsl(var(--vix-warning)/0.03)]' : ''}`}>
+                      {displayData.map((row, idx) => (
+                        <tr key={`${row.sku}-${row.conta}-${idx}`} className={`border-b border-border hover:bg-muted/30 transition-colors ${row.status === 'ruptura' ? 'bg-[hsl(var(--vix-danger)/0.03)]' : row.status === 'critico' ? 'bg-[hsl(var(--vix-warning)/0.03)]' : ''}`}>
+                          <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{row.conta}</td>
                           <td className="px-3 py-2.5 font-mono text-xs font-semibold text-primary">{row.sku}</td>
                           <td className="px-3 py-2.5 text-right text-foreground">{row.venSemanal}</td>
                           <td className="px-3 py-2.5 text-right text-muted-foreground">{row.vmd.toFixed(1)}</td>
@@ -495,7 +530,7 @@ export function EstoquePage() {
                         </tr>
                       ))}
                       {displayData.length === 0 && (
-                        <tr><td colSpan={10} className="py-8 text-center text-muted-foreground text-sm">{searchTerm || filterStatus !== 'all' ? 'Nenhum SKU encontrado com os filtros aplicados' : 'Nenhum dado disponível'}</td></tr>
+                        <tr><td colSpan={11} className="py-8 text-center text-muted-foreground text-sm">{searchTerm || filterStatus !== 'all' ? 'Nenhum SKU encontrado com os filtros aplicados' : 'Nenhum dado disponível'}</td></tr>
                       )}
                     </tbody>
                   </table>
