@@ -2,7 +2,9 @@
  * mlSearch — calls ML public search API directly from the browser.
  * ML's public API supports CORS, so no edge function needed.
  * Paginates up to maxPages to find the user's real position.
+ * saveSearchSnapshot persists results to market_snapshots for trend tracking.
  */
+import { supabase } from '@/integrations/supabase/client';
 
 const PAGE_SIZE = 50;
 
@@ -143,4 +145,64 @@ export async function mlSearch({
     total_vendas_top: totalVendas,
     used_keyword:     usedKw,
   };
+}
+
+/**
+ * saveSearchSnapshot — persists a mlSearch result to Supabase.
+ * - Upserts a market_segment row for the keyword (or reuses existing)
+ * - Bulk-inserts all ranked items into market_snapshots
+ * Fire-and-forget: call without await so it never blocks the UI.
+ */
+export async function saveSearchSnapshot(
+  result: MLSearchResponse,
+  categoryId?: string,
+): Promise<void> {
+  try {
+    const kw   = result.used_keyword;
+    const nome = kw || categoryId || 'busca';
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+
+    // 1. Find or create the market_segment for this keyword/category
+    let segmentId: string | null = null;
+
+    const { data: existing } = await db
+      .from('market_segments')
+      .select('id')
+      .eq('tipo', categoryId ? 'categoria' : 'keyword')
+      .eq(categoryId ? 'category_id' : 'keyword', categoryId || kw)
+      .maybeSingle();
+
+    if (existing?.id) {
+      segmentId = existing.id;
+    } else {
+      const { data: created } = await db
+        .from('market_segments')
+        .insert({ nome, tipo: categoryId ? 'categoria' : 'keyword', keyword: kw || null, category_id: categoryId || null, top_n: 50, ativo: true })
+        .select('id')
+        .single();
+      segmentId = created?.id || null;
+    }
+
+    if (!segmentId || !result.ranking.length) return;
+
+    // 2. Bulk-insert all ranked items as snapshots
+    const rows = result.ranking.map(r => ({
+      segment_id:        segmentId,
+      item_id:           r.item_id,
+      seller_id:         r.seller_id,
+      seller_nick:       r.seller_nick,
+      titulo:            r.titulo,
+      posicao:           r.posicao,
+      preco:             r.preco,
+      vendas_estimadas:  r.vendas,
+      free_shipping:     r.free_shipping,
+      listing_type:      r.listing_type,
+    }));
+
+    await db.from('market_snapshots').insert(rows);
+  } catch (err) {
+    console.warn('[saveSearchSnapshot] failed silently:', err);
+  }
 }

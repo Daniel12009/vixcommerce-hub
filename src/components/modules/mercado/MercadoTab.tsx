@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Search, Crown, ExternalLink, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { mlSearch } from './mlSearch';
+import { mlSearch, saveSearchSnapshot } from './mlSearch';
 
 interface Props {
   mySellerIds: string[];
@@ -36,6 +36,8 @@ export function MercadoTab({ mySellerIds }: Props) {
         maxPages: 3,
       });
       setResult(data);
+      // Save to DB for history (fire-and-forget, no await)
+      saveSearchSnapshot(data, categoryId.trim() || undefined);
     } catch (err: any) {
       toast.error('Erro na busca: ' + err.message);
     } finally { setLoading(false); }

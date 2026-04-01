@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Search, ExternalLink, Package, AlertCircle, Crown, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
-import { mlSearch, extractKeywordFromTitle } from './mlSearch';
+import { mlSearch, extractKeywordFromTitle, saveSearchSnapshot } from './mlSearch';
 
 interface Props {
   myAccounts: any[];
@@ -128,6 +128,8 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
       const result = await mlSearch({ keyword, mySellerIds, maxPages: 3 });
       setRankingMap(prev => ({ ...prev, [item.id]: { ranking: result.ranking, keyword: result.used_keyword } }));
       setOpenRanking(item.id);
+      // Save snapshot (fire-and-forget)
+      saveSearchSnapshot(result);
     } catch (err: any) {
       toast.error('Erro ao buscar ranking: ' + err.message);
     } finally { setLoadingRank(null); }
