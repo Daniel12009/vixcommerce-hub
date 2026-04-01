@@ -188,17 +188,31 @@ Deno.serve(async (req: Request) => {
 
       const PAGE_SIZE = 50;
 
-      // Normalize accents/special chars from Portuguese titles
+      // Normalize: strip combining diacritics (ã→a, ç→c, etc.) via unicode range
       const normalize = (s: string) =>
-        s.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        s.normalize('NFD')
+         .replace(/[\u0300-\u036f]/g, '')
+         .replace(/[^a-zA-Z0-9\s]/g, ' ')
+         .replace(/\s+/g, ' ')
+         .trim();
 
-      // Build keyword variants: full, normalized, short (4 words), short normalized
-      const kwRaw   = (keyword || '').trim();
-      const kwNorm  = normalize(kwRaw);
-      const kwShort = kwNorm.split(' ').slice(0, 4).join(' ');
-      let usedKw = '';
+      const kwRaw  = (keyword || '').trim();
+      const kwNorm = normalize(kwRaw);
+      const words  = kwNorm.split(' ').filter((w: string) => w.length > 1);
 
-      // Build URL with optional offset
+      // Progressive keyword candidates: more specific → broader
+      const candidates: string[] = [...new Set([
+        kwNorm,                                  // full normalized            e.g. "Ducha Chuveiro Gas Aquecimento Solar"
+        words.slice(0, 4).join(' '),             // first 4 words              e.g. "Ducha Chuveiro Gas Aquecimento"
+        words.slice(1, 5).join(' '),             // drop first word (often sub-cat) e.g. "Chuveiro Gas Aquecimento Solar"
+        words.slice(0, 3).join(' '),             // first 3                    e.g. "Ducha Chuveiro Gas"
+        words.slice(1, 4).join(' '),             // words 2-4                  e.g. "Chuveiro Gas Aquecimento"
+        words.slice(1, 3).join(' '),             // words 2-3                  e.g. "Chuveiro Gas"
+        words.slice(0, 2).join(' '),             // first 2                    e.g. "Ducha Chuveiro"
+        kwRaw,                                   // raw (with accents) fallback
+      ])].filter(Boolean);
+
+      // Build URL
       const buildUrl = (kw: string, catId: string | undefined, offset: number) => {
         let u = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${PAGE_SIZE}&offset=${offset}`;
         if (kw) u += `&q=${encodeURIComponent(kw)}`;
@@ -206,26 +220,36 @@ Deno.serve(async (req: Request) => {
         return u;
       };
 
-      // Helper: fetch one page, returns { items, total } or null on failure
+      // Fetch one page
       const fetchPage = async (kw: string, offset: number) => {
         try {
           const res = await fetch(buildUrl(kw, category_id, offset));
-          if (!res.ok) return null;
           const d = await res.json();
+          if (!res.ok) {
+            console.warn(`[search_ranking] ML ${res.status} for kw="${kw}":`, JSON.stringify(d).slice(0, 200));
+            return null;
+          }
           return { items: d.results || [], total: d.paging?.total || 0 };
-        } catch { return null; }
+        } catch (e) {
+          console.warn(`[search_ranking] fetch error for kw="${kw}":`, e);
+          return null;
+        }
       };
 
-      // First page — try normalized full, then short 4 words, then raw
+      // Try keyword candidates until one returns results
       let firstPage: { items: any[]; total: number } | null = null;
-      for (const kw of [kwNorm, kwShort, kwRaw]) {
-        if (!kw) continue;
+      let usedKw = '';
+      for (const kw of candidates) {
         firstPage = await fetchPage(kw, 0);
         if (firstPage && firstPage.items.length > 0) { usedKw = kw; break; }
+        firstPage = null;
       }
-      if (!firstPage || !firstPage.items.length) {
-        return ok({ ranking: [], my_positions: [], lider: null, total_results: 0, my_share: 0, total_vendas_top: 0, my_seller_ids: sellerIds, used_keyword: kwNorm });
+
+      if (!firstPage) {
+        console.warn(`[search_ranking] all candidates returned empty for keyword="${kwRaw}"`);
+        return ok({ ranking: [], my_positions: [], lider: null, total_results: 0, my_share: 0, total_vendas_top: 0, my_seller_ids: sellerIds, used_keyword: kwNorm, pages_searched: 0 });
       }
+
 
       const totalAvailable = firstPage.total;
       const allResults: any[] = [...firstPage.items];
