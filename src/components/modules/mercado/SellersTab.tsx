@@ -104,10 +104,11 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
 
     setLoadingRank(item.id);
     try {
-      // Search by title in item's category
+      // Use only the first ~50 chars of the title as keyword (most reliable)
+      const keyword = item.title?.slice(0, 50) || '';
+      if (!keyword) return toast.error('Produto sem título para buscar');
       const result = await callMarketData('search_ranking', {
-        keyword: item.title?.slice(0, 60),
-        category_id: item.category_id || undefined,
+        keyword,
         limit: 30,
         my_seller_ids: mySellerIds,
       });
@@ -138,7 +139,56 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* ── Account overview cards ─────────────────────────────── */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Minhas Contas ML</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {myAccounts.map(acc => {
+            const accItems = myItems.filter(i => i.account_id === acc.id);
+            const active  = accItems.filter(i => i.status === 'active').length;
+            const paused  = accItems.filter(i => i.status === 'paused').length;
+            const avgPrice = accItems.length
+              ? (accItems.reduce((s, i) => s + (i.price || 0), 0) / accItems.length).toFixed(0)
+              : '—';
+            return (
+              <div key={acc.id}
+                className="bg-card border border-indigo-500/30 rounded-2xl p-4 cursor-pointer hover:border-indigo-400/60 transition-all"
+                onClick={() => setSelectedAccount(prev => prev === acc.id ? 'all' : acc.id)}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    {acc.nome[0].toUpperCase()}
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="font-semibold text-foreground truncate">{acc.nome}</p>
+                    {acc.seller_id && <p className="text-[10px] text-muted-foreground">ID: {acc.seller_id}</p>}
+                  </div>
+                  <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white flex-shrink-0">Minha Conta</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Total</p>
+                    <p className="text-lg font-bold text-foreground">{accItems.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Ativos</p>
+                    <p className="text-lg font-bold text-emerald-400">{active}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Pausados</p>
+                    <p className="text-lg font-bold text-yellow-400">{paused}</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center mt-2">Preço médio: R$ {avgPrice}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* ── Produtos ───────────────────────────────────────────── */}
       {/* Account filter tabs */}
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setSelectedAccount('all')}
