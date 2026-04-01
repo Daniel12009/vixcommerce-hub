@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Search, Crown, ExternalLink, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { mlSearch } from './mlSearch';
 
 interface Props {
   mySellerIds: string[];
-  callMarketData: (action: string, extra?: any) => Promise<any>;
+  callMarketData: (action: string, extra?: any) => Promise<any>; // kept for other uses
 }
 
 const LISTING_COLOR: Record<string, string> = {
@@ -15,7 +16,7 @@ const LISTING_COLOR: Record<string, string> = {
   free:         '#6b7280',
 };
 
-export function MercadoTab({ mySellerIds, callMarketData }: Props) {
+export function MercadoTab({ mySellerIds }: Props) {
   const [keyword, setKeyword] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [limit, setLimit] = useState(30);
@@ -28,11 +29,11 @@ export function MercadoTab({ mySellerIds, callMarketData }: Props) {
     setLoading(true);
     setResult(null);
     try {
-      const data = await callMarketData('search_ranking', {
+      const data = await mlSearch({
         keyword: keyword.trim() || undefined,
-        category_id: categoryId.trim() || undefined,
-        limit,
-        my_seller_ids: mySellerIds,
+        categoryId: categoryId.trim() || undefined,
+        mySellerIds,
+        maxPages: 3,
       });
       setResult(data);
     } catch (err: any) {

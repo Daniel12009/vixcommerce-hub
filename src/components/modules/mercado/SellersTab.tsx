@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Search, ExternalLink, Package, AlertCircle, ChevronDown, ChevronUp, Crown, TrendingUp } from 'lucide-react';
+import { Search, ExternalLink, Package, AlertCircle, Crown, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { mlSearch, extractKeywordFromTitle } from './mlSearch';
 
 interface Props {
   myAccounts: any[];
@@ -115,14 +116,6 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
     return counts;
   }, [myItems, myAccounts, statusFilter]);
 
-  // Extract a useful keyword: first 4-5 words, skip adjectives and codes at end
-  const extractKeyword = (title: string): string => {
-    const words = title.split(/\s+/).filter(w => w.length > 2);
-    // Remove model codes (contain digits mixed with letters like Fc-133, V2, 220V)
-    const clean = words.filter(w => !/^[A-Za-z]{0,3}[-]?\d/.test(w) && !/^\d/.test(w));
-    return clean.slice(0, 5).join(' ');
-  };
-
   const handleCheckRank = async (item: any) => {
     if (loadingRank) return;
     if (openRanking === item.id) { setOpenRanking(null); return; }
@@ -130,14 +123,10 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
 
     setLoadingRank(item.id);
     try {
-      const keyword = extractKeyword(item.title || '');
+      const keyword = extractKeywordFromTitle(item.title || '');
       if (!keyword) return toast.error('Produto sem título para buscar');
-      const result = await callMarketData('search_ranking', {
-        keyword,
-        limit: 30,
-        my_seller_ids: mySellerIds,
-      });
-      setRankingMap(prev => ({ ...prev, [item.id]: { ranking: result.ranking || [], keyword } }));
+      const result = await mlSearch({ keyword, mySellerIds, maxPages: 3 });
+      setRankingMap(prev => ({ ...prev, [item.id]: { ranking: result.ranking, keyword: result.used_keyword } }));
       setOpenRanking(item.id);
     } catch (err: any) {
       toast.error('Erro ao buscar ranking: ' + err.message);
