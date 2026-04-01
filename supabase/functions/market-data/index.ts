@@ -176,61 +176,76 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── search_ranking ────────────────────────────────────────────────────────
-    // Live ML search: returns top N results, marking my products
     if (action === 'search_ranking') {
       const { keyword, category_id, limit = 50, my_seller_ids = [] } = rest;
       if (!keyword && !category_id) throw new Error('keyword or category_id required');
 
-      // Get MY seller_ids from ml_accounts if not provided
       let sellerIds: string[] = my_seller_ids;
       if (!sellerIds.length) {
         const { data: accs } = await client.from('ml_accounts').select('seller_id').eq('ativo', true);
         sellerIds = (accs || []).map((a: any) => String(a.seller_id)).filter(Boolean);
       }
 
-      let url = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${Math.min(limit, 50)}`;
-      if (keyword) url += `&q=${encodeURIComponent(keyword)}`;
-      if (category_id) url += `&category=${category_id}`;
+      // Try progressively shorter keywords to avoid ML 4xx errors
+      const buildUrl = (kw: string, catId?: string, n = 50) => {
+        let u = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${Math.min(n, 50)}`;
+        if (kw) u += `&q=${encodeURIComponent(kw)}`;
+        if (catId) u += `&category=${catId}`;
+        return u;
+      };
 
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`ML search failed: ${await res.text()}`);
-      const data = await res.json();
-      const results = (data.results || []).slice(0, limit);
+      const kwFull  = (keyword || '').trim();
+      // Fallback: first 4 words of keyword
+      const kwShort = kwFull.split(' ').slice(0, 4).join(' ');
 
-      const ranked = results.map((item: any, idx: number) => {
+      let results: any[] = [];
+      for (const kw of [kwFull, kwShort]) {
+        if (!kw) continue;
+        try {
+          const res = await fetch(buildUrl(kw, category_id, limit));
+          if (res.ok) {
+            const d = await res.json();
+            results = d.results || [];
+            break;
+          }
+          console.warn(`[search_ranking] ML returned ${res.status} for kw="${kw}"`);
+        } catch (fetchErr) {
+          console.warn(`[search_ranking] fetch error for kw="${kw}":`, fetchErr);
+        }
+      }
+
+      const ranked = results.slice(0, limit).map((item: any, idx: number) => {
         const sellerId = String(item.seller?.id || '');
-        const isMe = sellerIds.includes(sellerId);
         return {
-          posicao:          idx + 1,
-          item_id:          item.id,
-          titulo:           item.title || '',
-          preco:            item.price || 0,
-          seller_id:        sellerId,
-          seller_nick:      item.seller?.nickname || '',
-          vendas:           item.sold_quantity || 0,
-          thumbnail:        item.thumbnail || '',
-          permalink:        item.permalink || '',
-          free_shipping:    item.shipping?.free_shipping || false,
-          listing_type:     item.listing_type_id || '',
-          is_mine:          isMe,
-          categoria_id:     item.category_id || '',
+          posicao:       idx + 1,
+          item_id:       item.id,
+          titulo:        item.title || '',
+          preco:         item.price || 0,
+          seller_id:     sellerId,
+          seller_nick:   item.seller?.nickname || '',
+          vendas:        item.sold_quantity || 0,
+          thumbnail:     item.thumbnail || '',
+          permalink:     item.permalink || '',
+          free_shipping: item.shipping?.free_shipping || false,
+          listing_type:  item.listing_type_id || '',
+          is_mine:       sellerIds.includes(sellerId),
+          categoria_id:  item.category_id || '',
         };
       });
 
-      const myPositions = ranked.filter((r: any) => r.is_mine);
-      const totalVendas = ranked.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
-      const myVendas    = myPositions.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
-      const myShare     = totalVendas > 0 ? (myVendas / totalVendas * 100) : 0;
-      const lider       = ranked[0] || null;
+      const myPositions  = ranked.filter((r: any) => r.is_mine);
+      const totalVendas  = ranked.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
+      const myVendas     = myPositions.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
+      const myShare      = totalVendas > 0 ? Math.round(myVendas / totalVendas * 1000) / 10 : 0;
 
       return ok({
-        ranking: ranked,
-        my_positions: myPositions,
-        lider,
-        total_results: data.paging?.total || results.length,
-        my_share: Math.round(myShare * 10) / 10,
+        ranking:         ranked,
+        my_positions:    myPositions,
+        lider:           ranked[0] || null,
+        total_results:   results.length,
+        my_share:        myShare,
         total_vendas_top: totalVendas,
-        my_seller_ids: sellerIds,
+        my_seller_ids:   sellerIds,
       });
     }
 
