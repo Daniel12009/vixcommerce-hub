@@ -177,7 +177,7 @@ Deno.serve(async (req: Request) => {
 
     // ── search_ranking ────────────────────────────────────────────────────────
     if (action === 'search_ranking') {
-      const { keyword, category_id, my_seller_ids = [], max_pages = 6 } = rest;
+      const { keyword, category_id, my_seller_ids = [], max_pages = 3 } = rest;
       if (!keyword && !category_id) throw new Error('keyword or category_id required');
 
       let sellerIds: string[] = my_seller_ids;
@@ -188,6 +188,16 @@ Deno.serve(async (req: Request) => {
 
       const PAGE_SIZE = 50;
 
+      // Normalize accents/special chars from Portuguese titles
+      const normalize = (s: string) =>
+        s.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+      // Build keyword variants: full, normalized, short (4 words), short normalized
+      const kwRaw   = (keyword || '').trim();
+      const kwNorm  = normalize(kwRaw);
+      const kwShort = kwNorm.split(' ').slice(0, 4).join(' ');
+      let usedKw = '';
+
       // Build URL with optional offset
       const buildUrl = (kw: string, catId: string | undefined, offset: number) => {
         let u = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${PAGE_SIZE}&offset=${offset}`;
@@ -195,11 +205,6 @@ Deno.serve(async (req: Request) => {
         if (catId) u += `&category=${catId}`;
         return u;
       };
-
-      // Resolve keyword (try full, fallback to 4 words)
-      const kwFull  = (keyword || '').trim();
-      const kwShort = kwFull.split(' ').slice(0, 4).join(' ');
-      let usedKw = '';
 
       // Helper: fetch one page, returns { items, total } or null on failure
       const fetchPage = async (kw: string, offset: number) => {
@@ -211,16 +216,15 @@ Deno.serve(async (req: Request) => {
         } catch { return null; }
       };
 
-      // First page — try full kw, fallback short kw
+      // First page — try normalized full, then short 4 words, then raw
       let firstPage: { items: any[]; total: number } | null = null;
-      for (const kw of [kwFull, kwShort]) {
+      for (const kw of [kwNorm, kwShort, kwRaw]) {
         if (!kw) continue;
         firstPage = await fetchPage(kw, 0);
-        if (firstPage) { usedKw = kw; break; }
+        if (firstPage && firstPage.items.length > 0) { usedKw = kw; break; }
       }
-      if (!firstPage) {
-        // Totally failed — return empty
-        return ok({ ranking: [], my_positions: [], lider: null, total_results: 0, my_share: 0, total_vendas_top: 0, my_seller_ids: sellerIds, used_keyword: kwFull });
+      if (!firstPage || !firstPage.items.length) {
+        return ok({ ranking: [], my_positions: [], lider: null, total_results: 0, my_share: 0, total_vendas_top: 0, my_seller_ids: sellerIds, used_keyword: kwNorm });
       }
 
       const totalAvailable = firstPage.total;
