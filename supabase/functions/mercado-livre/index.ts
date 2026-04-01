@@ -335,7 +335,7 @@ Deno.serve(async (req) => {
         const batch = itemIds.slice(i, i + 20);
         const ids = batch.join(',');
         if (!ids) continue;
-        const batchData = await mlFetch(account, `/items?ids=${ids}&attributes=id,title,price,thumbnail,available_quantity,status,sub_status,seller_custom_field,variations,catalog_listing,listing_type_id,shipping,tags,date_created`);
+        const batchData = await mlFetch(account, `/items?ids=${ids}&attributes=id,title,price,thumbnail,available_quantity,status,sub_status,seller_custom_field,variations,catalog_listing,listing_type_id,shipping,tags,date_created,category_id,permalink,domain_id`);
         for (const item of batchData) {
           if (item.code === 200 && item.body) {
             const b = item.body;
@@ -354,6 +354,10 @@ Deno.serve(async (req) => {
               seller_sku: b.seller_custom_field || skus[0] || '',
               skus,
               conta: account.nome,
+              account_id: account.id,
+              category_id: b.category_id || '',
+              domain_id: b.domain_id || '',
+              permalink: b.permalink || '',
               catalog_listing: b.catalog_listing || false,
               listing_type_id: b.listing_type_id || '',
               logistic_type: b.shipping?.logistic_type || '',

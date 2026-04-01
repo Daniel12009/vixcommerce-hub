@@ -175,6 +175,65 @@ Deno.serve(async (req: Request) => {
       return ok(data || []);
     }
 
+    // ── search_ranking ────────────────────────────────────────────────────────
+    // Live ML search: returns top N results, marking my products
+    if (action === 'search_ranking') {
+      const { keyword, category_id, limit = 50, my_seller_ids = [] } = rest;
+      if (!keyword && !category_id) throw new Error('keyword or category_id required');
+
+      // Get MY seller_ids from ml_accounts if not provided
+      let sellerIds: string[] = my_seller_ids;
+      if (!sellerIds.length) {
+        const { data: accs } = await client.from('ml_accounts').select('seller_id').eq('ativo', true);
+        sellerIds = (accs || []).map((a: any) => String(a.seller_id)).filter(Boolean);
+      }
+
+      let url = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${Math.min(limit, 50)}`;
+      if (keyword) url += `&q=${encodeURIComponent(keyword)}`;
+      if (category_id) url += `&category=${category_id}`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`ML search failed: ${await res.text()}`);
+      const data = await res.json();
+      const results = (data.results || []).slice(0, limit);
+
+      const ranked = results.map((item: any, idx: number) => {
+        const sellerId = String(item.seller?.id || '');
+        const isMe = sellerIds.includes(sellerId);
+        return {
+          posicao:          idx + 1,
+          item_id:          item.id,
+          titulo:           item.title || '',
+          preco:            item.price || 0,
+          seller_id:        sellerId,
+          seller_nick:      item.seller?.nickname || '',
+          vendas:           item.sold_quantity || 0,
+          thumbnail:        item.thumbnail || '',
+          permalink:        item.permalink || '',
+          free_shipping:    item.shipping?.free_shipping || false,
+          listing_type:     item.listing_type_id || '',
+          is_mine:          isMe,
+          categoria_id:     item.category_id || '',
+        };
+      });
+
+      const myPositions = ranked.filter((r: any) => r.is_mine);
+      const totalVendas = ranked.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
+      const myVendas    = myPositions.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
+      const myShare     = totalVendas > 0 ? (myVendas / totalVendas * 100) : 0;
+      const lider       = ranked[0] || null;
+
+      return ok({
+        ranking: ranked,
+        my_positions: myPositions,
+        lider,
+        total_results: data.paging?.total || results.length,
+        my_share: Math.round(myShare * 10) / 10,
+        total_vendas_top: totalVendas,
+        my_seller_ids: sellerIds,
+      });
+    }
+
     throw new Error(`Unknown action: ${action}`);
 
   } catch (err: any) {

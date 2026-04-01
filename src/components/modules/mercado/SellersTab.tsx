@@ -1,228 +1,250 @@
-import { useState } from 'react';
-import { Plus, Trash2, Star, Award, Package, ExternalLink } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useMemo } from 'react';
+import { Search, ExternalLink, Package, AlertCircle, ChevronDown, ChevronUp, Crown, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
-} from 'recharts';
 
 interface Props {
-  sellers: any[];
   myAccounts: any[];
-  onRefresh: () => void;
+  myItems: any[];
+  mySellerIds: string[];
+  loadingItems: boolean;
   callMarketData: (action: string, extra?: any) => Promise<any>;
 }
 
-const LEVEL_LABELS: Record<string, string> = {
-  platinum: '🏆 Platinum',
-  gold_special: '🥇 Gold Special',
-  gold_pro: '🥇 Gold Pro',
-  gold: '🥇 Gold',
-  silver: '🥈 Silver',
-  bronze: '🥉 Bronze',
-  green: '🟢 Green',
-  '': '—',
+const STATUS_LABEL: Record<string, { label: string; color: string }> = {
+  active:   { label: 'Ativo',     color: 'text-emerald-400 bg-emerald-500/10' },
+  paused:   { label: 'Pausado',   color: 'text-yellow-400 bg-yellow-500/10' },
+  closed:   { label: 'Encerrado', color: 'text-red-400 bg-red-500/10' },
+  inactive: { label: 'Inativo',   color: 'text-gray-400 bg-gray-500/10' },
 };
 
-function SellerCard({ seller, isMe }: { seller: any; isMe: boolean }) {
-  const snap = seller.ultimo_snapshot;
-  const nivel = snap?.nivel || '';
-  const accent = isMe ? 'border-indigo-500/40 bg-indigo-500/5' : 'border-orange-500/30 bg-orange-500/5';
-  const badge = isMe ? 'bg-indigo-600 text-white' : 'bg-orange-500 text-white';
+function RankingPanel({ ranking, mySellerIds, onClose }: { ranking: any[]; mySellerIds: string[]; onClose: () => void }) {
+  const myPositions = ranking.filter(r => r.is_mine);
+  const lider = ranking[0];
+  const totalVendas = ranking.reduce((s, r) => s + (r.vendas || 0), 0);
+  const myVendas = myPositions.reduce((s, r) => s + (r.vendas || 0), 0);
+  const myShare = totalVendas > 0 ? (myVendas / totalVendas * 100).toFixed(1) : '0';
 
   return (
-    <div className={`relative border rounded-2xl p-5 transition-all hover:shadow-md ${accent}`}>
-      <div className="absolute top-3 right-3">
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge}`}>
-          {isMe ? 'Minha Conta' : 'Concorrente'}
-        </span>
+    <div className="mt-3 border border-indigo-500/30 bg-indigo-500/5 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-indigo-500/20">
+        <div className="flex items-center gap-4">
+          {myPositions.length > 0 ? (
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground">Minha posição</p>
+              <p className="text-xl font-bold text-indigo-400">#{myPositions[0].posicao}</p>
+            </div>
+          ) : (
+            <div className="text-center">
+              <p className="text-[10px] text-amber-400">⚠ Não aparece no top {ranking.length}</p>
+            </div>
+          )}
+          <div className="text-center">
+            <p className="text-[10px] text-muted-foreground">Meu share</p>
+            <p className="text-xl font-bold text-foreground">{myShare}%</p>
+          </div>
+          {lider && (
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground">Líder</p>
+              <p className="text-xs font-semibold text-amber-400 flex items-center gap-1"><Crown className="w-3 h-3" />{lider.seller_nick.slice(0, 18)}</p>
+            </div>
+          )}
+        </div>
+        <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Fechar</button>
       </div>
-
-      <div className="flex items-start gap-3 mb-4">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${isMe ? 'bg-indigo-600 text-white' : 'bg-orange-500 text-white'}`}
-          style={{ background: seller.cor || undefined }}>
-          {(seller.nickname || seller.nome_interno || '?')[0].toUpperCase()}
-        </div>
-        <div>
-          <p className="font-semibold text-foreground">{seller.nickname || seller.nome_interno || `Seller ${seller.seller_id}`}</p>
-          <p className="text-xs text-muted-foreground">ID: {seller.seller_id}</p>
-          {nivel && <p className="text-xs font-medium text-amber-400 mt-0.5">{LEVEL_LABELS[nivel] || nivel}</p>}
-        </div>
+      <div className="max-h-64 overflow-y-auto divide-y divide-border/30">
+        {ranking.slice(0, 30).map(item => (
+          <div key={item.item_id} className={`flex items-center gap-3 px-4 py-2 text-xs ${item.is_mine ? 'bg-indigo-500/10' : ''}`}>
+            <span className={`w-6 text-center font-bold flex-shrink-0 ${item.is_mine ? 'text-indigo-400' : 'text-muted-foreground'}`}>
+              #{item.posicao}
+            </span>
+            {item.thumbnail && <img src={item.thumbnail.replace('http://', 'https://')} alt="" className="w-7 h-7 object-contain rounded flex-shrink-0" />}
+            <span className={`flex-1 truncate ${item.is_mine ? 'font-semibold text-indigo-300' : 'text-foreground'}`} title={item.titulo}>{item.titulo}</span>
+            <span className="text-muted-foreground flex-shrink-0">{item.seller_nick.slice(0, 15)}</span>
+            <span className="font-semibold text-foreground flex-shrink-0">R$ {item.preco.toFixed(0)}</span>
+            {item.free_shipping && <span className="text-emerald-400 flex-shrink-0">Grátis</span>}
+            {item.permalink && <a href={item.permalink} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-indigo-400 flex-shrink-0"><ExternalLink className="w-3 h-3" /></a>}
+          </div>
+        ))}
       </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">Transações</p>
-          <p className="text-base font-bold text-foreground">{snap?.transactions_total?.toLocaleString('pt-BR') || '—'}</p>
-        </div>
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">Avaliação Neg.</p>
-          <p className="text-base font-bold" style={{ color: (snap?.negative_rating || 0) > 5 ? '#ef4444' : '#22c55e' }}>
-            {snap?.negative_rating != null ? `${snap.negative_rating.toFixed(1)}%` : '—'}
-          </p>
-        </div>
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">Nível</p>
-          <p className="text-base font-bold text-foreground">{LEVEL_LABELS[nivel]?.split(' ')[0] || '—'}</p>
-        </div>
-      </div>
-
-      {snap?.coletado_em && (
-        <p className="text-[10px] text-muted-foreground mt-3">
-          Atualizado: {new Date(snap.coletado_em).toLocaleString('pt-BR')}
-        </p>
-      )}
     </div>
   );
 }
 
-export function SellersTab({ sellers, myAccounts, onRefresh, callMarketData }: Props) {
-  const [addMode, setAddMode] = useState(false);
-  const [newSellerId, setNewSellerId] = useState('');
-  const [newNome, setNewNome] = useState('');
-  const [newCor, setNewCor] = useState('#f97316');
-  const [saving, setSaving] = useState(false);
+export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, callMarketData }: Props) {
+  const [selectedAccount, setSelectedAccount] = useState<string>('all');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('active');
+  const [rankingMap, setRankingMap] = useState<Record<string, any[]>>({});
+  const [loadingRank, setLoadingRank] = useState<string | null>(null);
+  const [openRanking, setOpenRanking] = useState<string | null>(null);
 
-  const myAccountIds = new Set(myAccounts.map(a => a.seller_id));
-  const mySellers = sellers.filter(s => s.is_minha_conta || myAccountIds.has(s.seller_id));
-  const competitors = sellers.filter(s => !s.is_minha_conta && !myAccountIds.has(s.seller_id));
+  const filtered = useMemo(() => {
+    return myItems.filter(item => {
+      const matchAccount = selectedAccount === 'all' || item.account_id === selectedAccount || item.conta === selectedAccount;
+      const matchStatus = statusFilter === 'all' || item.status === statusFilter;
+      const q = search.toLowerCase();
+      const matchSearch = !q || item.title?.toLowerCase().includes(q) || item.seller_sku?.toLowerCase().includes(q) || item.id?.toLowerCase().includes(q);
+      return matchAccount && matchStatus && matchSearch;
+    });
+  }, [myItems, selectedAccount, statusFilter, search]);
 
-  // Chart: share among sellers visible in snapshots
-  const shareData = sellers.slice(0, 8).map(s => ({
-    name: (s.nickname || s.nome_interno || s.seller_id).slice(0, 12),
-    share: Math.round(Math.random() * 30 + 5), // placeholder until real data
-    color: s.cor || '#6366f1',
-  }));
+  const countByAccount = useMemo(() => {
+    const all = myItems.filter(i => statusFilter === 'all' || i.status === statusFilter);
+    const counts: Record<string, number> = { all: all.length };
+    myAccounts.forEach(acc => {
+      counts[acc.id] = all.filter(i => i.account_id === acc.id).length;
+    });
+    return counts;
+  }, [myItems, myAccounts, statusFilter]);
 
-  const handleAdd = async () => {
-    if (!newSellerId.trim()) return toast.error('Informe o ID do seller no ML');
-    setSaving(true);
+  const handleCheckRank = async (item: any) => {
+    if (loadingRank) return;
+    if (openRanking === item.id) { setOpenRanking(null); return; }
+    if (rankingMap[item.id]) { setOpenRanking(item.id); return; }
+
+    setLoadingRank(item.id);
     try {
-      await callMarketData('add_seller', {
-        seller_id: newSellerId.trim(),
-        nome_interno: newNome || undefined,
-        cor: newCor,
-        is_minha_conta: false,
+      // Search by title in item's category
+      const result = await callMarketData('search_ranking', {
+        keyword: item.title?.slice(0, 60),
+        category_id: item.category_id || undefined,
+        limit: 30,
+        my_seller_ids: mySellerIds,
       });
-      toast.success('Concorrente adicionado!');
-      setAddMode(false); setNewSellerId(''); setNewNome('');
-      onRefresh();
+      setRankingMap(prev => ({ ...prev, [item.id]: result.ranking || [] }));
+      setOpenRanking(item.id);
     } catch (err: any) {
-      toast.error(err.message);
-    } finally { setSaving(false); }
+      toast.error('Erro ao buscar ranking: ' + err.message);
+    } finally { setLoadingRank(null); }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await callMarketData('delete_seller', { id });
-      toast.success('Removido'); onRefresh();
-    } catch (err: any) { toast.error(err.message); }
-  };
+  if (loadingItems) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-3" />
+        Carregando produtos das contas ML…
+      </div>
+    );
+  }
 
-  if (sellers.length === 0 && myAccounts.length === 0) {
+  if (myItems.length === 0) {
     return (
       <div className="text-center py-20">
-        <Award className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
-        <h3 className="font-semibold text-foreground mb-1">Nenhum seller monitorado</h3>
-        <p className="text-sm text-muted-foreground mb-4">Clique em "Atualizar Dados" para a primeira coleta, ou adicione concorrentes manualmente.</p>
+        <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+        <h3 className="font-semibold text-foreground mb-1">Nenhum produto encontrado</h3>
+        <p className="text-sm text-muted-foreground">Verifique se as contas ML estão configuradas em Configurações.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Minhas contas */}
-      {(mySellers.length > 0 || myAccounts.length > 0) && (
-        <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Star className="w-4 h-4 text-indigo-400" /> Minhas Contas ML
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {mySellers.map(s => <SellerCard key={s.id} seller={s} isMe={true} />)}
-            {mySellers.length === 0 && myAccounts.map(acc => (
-              <div key={acc.id} className="border border-indigo-500/40 bg-indigo-500/5 rounded-2xl p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">
-                    {acc.nome[0].toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">{acc.nome}</p>
-                    <p className="text-xs text-muted-foreground">Seller ID: {acc.seller_id || 'N/A'}</p>
-                  </div>
-                  <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white">Minha Conta</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-3">Rode "Atualizar Dados" para ver métricas desta conta.</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Concorrentes */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Package className="w-4 h-4 text-orange-400" /> Concorrentes Monitorados ({competitors.length})
-          </h3>
-          <Button size="sm" variant="outline" onClick={() => setAddMode(v => !v)} className="gap-2">
-            <Plus className="w-3.5 h-3.5" /> Adicionar Concorrente
-          </Button>
-        </div>
-
-        {addMode && (
-          <div className="bg-card border border-border rounded-xl p-4 mb-4 space-y-3">
-            <p className="text-xs text-muted-foreground font-medium">Para encontrar o ID do seller: abra o perfil dele no ML e pegue o número na URL, ex: <code>/MLB123456789</code></p>
-            <div className="flex gap-3 flex-wrap">
-              <input value={newSellerId} onChange={e => setNewSellerId(e.target.value)}
-                className="flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                placeholder="ID ML (ex: 123456789)" />
-              <input value={newNome} onChange={e => setNewNome(e.target.value)}
-                className="flex-1 min-w-[120px] px-3 py-2 rounded-lg bg-background border border-input text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                placeholder="Apelido interno" />
-              <input type="color" value={newCor} onChange={e => setNewCor(e.target.value)}
-                className="w-10 h-10 rounded-lg border border-input cursor-pointer" title="Cor do seller" />
-              <Button size="sm" onClick={handleAdd} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white">{saving ? 'Salvando…' : 'Adicionar'}</Button>
-              <Button size="sm" variant="ghost" onClick={() => setAddMode(false)}>Cancelar</Button>
-            </div>
-          </div>
-        )}
-
-        {competitors.length === 0 ? (
-          <div className="text-center py-10 border border-dashed border-border rounded-xl">
-            <p className="text-muted-foreground text-sm">Nenhum concorrente adicionado ainda. Cole o ID do seller ML do seu principal concorrente.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {competitors.map(s => (
-              <div key={s.id} className="relative">
-                <SellerCard seller={s} isMe={false} />
-                <button onClick={() => handleDelete(s.id)}
-                  className="absolute top-3 left-3 p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
-                  title="Remover">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="space-y-4">
+      {/* Account filter tabs */}
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => setSelectedAccount('all')}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedAccount === 'all' ? 'bg-indigo-600 text-white' : 'bg-card border border-border text-muted-foreground hover:text-foreground'}`}>
+          Todas <span className="ml-1 text-xs opacity-70">({countByAccount.all})</span>
+        </button>
+        {myAccounts.map(acc => (
+          <button key={acc.id} onClick={() => setSelectedAccount(acc.id)}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedAccount === acc.id ? 'bg-indigo-600 text-white' : 'bg-card border border-border text-muted-foreground hover:text-foreground'}`}>
+            {acc.nome} <span className="ml-1 text-xs opacity-70">({countByAccount[acc.id] || 0})</span>
+          </button>
+        ))}
       </div>
 
-      {/* Share chart — shown when we have snapshot data */}
-      {sellers.length >= 2 && (
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4">📊 Presença estimada no mercado</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={shareData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
-              <Tooltip formatter={(v: number) => `${v}%`} />
-              <Bar dataKey="share" radius={[0, 4, 4, 0]}>
-                {shareData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="text-[10px] text-muted-foreground mt-2">* Share estimado baseado na presença nos resultados de busca. Rode "Atualizar Dados" para recalcular.</p>
+      {/* Status + Search */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por título, SKU ou ID…"
+            className="w-full pl-9 pr-4 py-2 rounded-lg bg-card border border-input text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {(['active', 'paused', 'all'] as const).map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${statusFilter === s ? 'bg-indigo-600 text-white' : 'bg-card border border-border text-muted-foreground hover:text-foreground'}`}>
+              {s === 'all' ? 'Todos' : s === 'active' ? 'Ativos' : 'Pausados'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">{filtered.length} produto{filtered.length !== 1 ? 's' : ''}</p>
+
+      {/* Product list */}
+      <div className="space-y-2">
+        {filtered.map(item => {
+          const st = STATUS_LABEL[item.status] || { label: item.status, color: 'text-gray-400 bg-gray-500/10' };
+          const isOpen = openRanking === item.id;
+          const isLoading = loadingRank === item.id;
+          const ranking = rankingMap[item.id] || [];
+          const myPos = ranking.find(r => r.is_mine);
+
+          return (
+            <div key={item.id} className="border border-border rounded-xl overflow-hidden bg-card">
+              <div className="flex items-center gap-3 p-3">
+                {item.thumbnail && (
+                  <img src={item.thumbnail.replace('http://', 'https://')} alt=""
+                    className="w-14 h-14 object-contain rounded-lg bg-muted flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate" title={item.title}>{item.title}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
+                    <span className="text-xs text-foreground font-bold">R$ {(item.price || 0).toFixed(2)}</span>
+                    <span className="text-[10px] text-muted-foreground">Estq: {item.available_quantity ?? '—'}</span>
+                    {item.seller_sku && <span className="text-[10px] text-muted-foreground">SKU: {item.seller_sku}</span>}
+                    <span className="text-[10px] text-muted-foreground">{item.conta}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* My position badge */}
+                  {ranking.length > 0 && (
+                    myPos ? (
+                      <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-full">#{myPos.posicao}</span>
+                    ) : (
+                      <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded-full">Não aparece</span>
+                    )
+                  )}
+
+                  {/* Check rank button */}
+                  <button onClick={() => handleCheckRank(item)} disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isOpen ? 'bg-indigo-600 text-white' : 'bg-card border border-border text-muted-foreground hover:text-indigo-400 hover:border-indigo-400/50'}`}>
+                    {isLoading ? (
+                      <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <TrendingUp className="w-3 h-3" />
+                    )}
+                    {isLoading ? 'Buscando…' : isOpen ? 'Ocultar' : 'Ver Ranking'}
+                  </button>
+
+                  {item.permalink && (
+                    <a href={item.permalink} target="_blank" rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-indigo-400 hover:bg-indigo-500/10 transition-all">
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Ranking panel */}
+              {isOpen && ranking.length > 0 && (
+                <div className="px-3 pb-3">
+                  <RankingPanel ranking={ranking} mySellerIds={mySellerIds} onClose={() => setOpenRanking(null)} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="text-center py-10">
+          <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+          <p className="text-sm text-muted-foreground">Nenhum produto encontrado.</p>
         </div>
       )}
     </div>
