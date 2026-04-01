@@ -177,7 +177,7 @@ Deno.serve(async (req: Request) => {
 
     // ── search_ranking ────────────────────────────────────────────────────────
     if (action === 'search_ranking') {
-      const { keyword, category_id, limit = 50, my_seller_ids = [] } = rest;
+      const { keyword, category_id, my_seller_ids = [], max_pages = 6 } = rest;
       if (!keyword && !category_id) throw new Error('keyword or category_id required');
 
       let sellerIds: string[] = my_seller_ids;
@@ -186,35 +186,60 @@ Deno.serve(async (req: Request) => {
         sellerIds = (accs || []).map((a: any) => String(a.seller_id)).filter(Boolean);
       }
 
-      // Try progressively shorter keywords to avoid ML 4xx errors
-      const buildUrl = (kw: string, catId?: string, n = 50) => {
-        let u = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${Math.min(n, 50)}`;
+      const PAGE_SIZE = 50;
+
+      // Build URL with optional offset
+      const buildUrl = (kw: string, catId: string | undefined, offset: number) => {
+        let u = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${PAGE_SIZE}&offset=${offset}`;
         if (kw) u += `&q=${encodeURIComponent(kw)}`;
         if (catId) u += `&category=${catId}`;
         return u;
       };
 
+      // Resolve keyword (try full, fallback to 4 words)
       const kwFull  = (keyword || '').trim();
-      // Fallback: first 4 words of keyword
       const kwShort = kwFull.split(' ').slice(0, 4).join(' ');
+      let usedKw = '';
 
-      let results: any[] = [];
+      // Helper: fetch one page, returns { items, total } or null on failure
+      const fetchPage = async (kw: string, offset: number) => {
+        try {
+          const res = await fetch(buildUrl(kw, category_id, offset));
+          if (!res.ok) return null;
+          const d = await res.json();
+          return { items: d.results || [], total: d.paging?.total || 0 };
+        } catch { return null; }
+      };
+
+      // First page — try full kw, fallback short kw
+      let firstPage: { items: any[]; total: number } | null = null;
       for (const kw of [kwFull, kwShort]) {
         if (!kw) continue;
-        try {
-          const res = await fetch(buildUrl(kw, category_id, limit));
-          if (res.ok) {
-            const d = await res.json();
-            results = d.results || [];
-            break;
-          }
-          console.warn(`[search_ranking] ML returned ${res.status} for kw="${kw}"`);
-        } catch (fetchErr) {
-          console.warn(`[search_ranking] fetch error for kw="${kw}":`, fetchErr);
-        }
+        firstPage = await fetchPage(kw, 0);
+        if (firstPage) { usedKw = kw; break; }
+      }
+      if (!firstPage) {
+        // Totally failed — return empty
+        return ok({ ranking: [], my_positions: [], lider: null, total_results: 0, my_share: 0, total_vendas_top: 0, my_seller_ids: sellerIds, used_keyword: kwFull });
       }
 
-      const ranked = results.slice(0, limit).map((item: any, idx: number) => {
+      const totalAvailable = firstPage.total;
+      const allResults: any[] = [...firstPage.items];
+
+      // Continue paginating until we find MY product OR we reach max_pages
+      let myFound = firstPage.items.some((r: any) => sellerIds.includes(String(r.seller?.id || '')));
+      const pagesNeeded = Math.min(max_pages, Math.ceil(totalAvailable / PAGE_SIZE));
+
+      for (let page = 1; page < pagesNeeded && !myFound; page++) {
+        const offset = page * PAGE_SIZE;
+        const p = await fetchPage(usedKw, offset);
+        if (!p || !p.items.length) break;
+        allResults.push(...p.items);
+        myFound = p.items.some((r: any) => sellerIds.includes(String(r.seller?.id || '')));
+      }
+
+      // Map all results into ranked items
+      const allRanked = allResults.map((item: any, idx: number) => {
         const sellerId = String(item.seller?.id || '');
         return {
           posicao:       idx + 1,
@@ -233,21 +258,30 @@ Deno.serve(async (req: Request) => {
         };
       });
 
-      const myPositions  = ranked.filter((r: any) => r.is_mine);
-      const totalVendas  = ranked.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
-      const myVendas     = myPositions.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
-      const myShare      = totalVendas > 0 ? Math.round(myVendas / totalVendas * 1000) / 10 : 0;
+      // Top 50 for main display
+      const top50 = allRanked.slice(0, 50);
+
+      // All my positions (anywhere in the full result set)
+      const myPositions = allRanked.filter((r: any) => r.is_mine);
+
+      // Share calculation based on top 50 only (to be meaningful)
+      const totalVendas = top50.reduce((s: number, r: any) => s + (r.vendas || 0), 0);
+      const myVendasTop = top50.filter((r: any) => r.is_mine).reduce((s: number, r: any) => s + (r.vendas || 0), 0);
+      const myShare = totalVendas > 0 ? Math.round(myVendasTop / totalVendas * 1000) / 10 : 0;
 
       return ok({
-        ranking:         ranked,
-        my_positions:    myPositions,
-        lider:           ranked[0] || null,
-        total_results:   results.length,
-        my_share:        myShare,
+        ranking:          top50,       // top 50 displayed
+        my_positions:     myPositions, // ALL my products found across pages
+        lider:            top50[0] || null,
+        total_results:    totalAvailable,
+        pages_searched:   Math.ceil(allResults.length / PAGE_SIZE),
+        my_share:         myShare,
         total_vendas_top: totalVendas,
-        my_seller_ids:   sellerIds,
+        my_seller_ids:    sellerIds,
+        used_keyword:     usedKw,
       });
     }
+
 
     throw new Error(`Unknown action: ${action}`);
 
