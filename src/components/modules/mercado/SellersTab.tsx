@@ -17,7 +17,21 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   inactive: { label: 'Inativo',   color: 'text-gray-400 bg-gray-500/10' },
 };
 
-function RankingPanel({ ranking, mySellerIds, onClose }: { ranking: any[]; mySellerIds: string[]; onClose: () => void }) {
+function RankingPanel({ ranking, mySellerIds, keyword, onClose }: { ranking: any[]; mySellerIds: string[]; keyword: string; onClose: () => void }) {
+  if (!ranking.length) {
+    return (
+      <div className="mt-3 border border-amber-500/30 bg-amber-500/5 rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-amber-400 font-medium">
+            ⚠ Nenhum resultado encontrado no ML para <em>"{keyword}"</em>.
+            Tente a busca manual na aba "Busca de Ranking" com uma keyword mais simples.
+          </p>
+          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground ml-4 flex-shrink-0">Fechar</button>
+        </div>
+      </div>
+    );
+  }
+
   const myPositions = ranking.filter(r => r.is_mine);
   const lider = ranking[0];
   const totalVendas = ranking.reduce((s, r) => s + (r.vendas || 0), 0);
@@ -48,6 +62,10 @@ function RankingPanel({ ranking, mySellerIds, onClose }: { ranking: any[]; mySel
               <p className="text-xs font-semibold text-amber-400 flex items-center gap-1"><Crown className="w-3 h-3" />{lider.seller_nick.slice(0, 18)}</p>
             </div>
           )}
+          <div className="text-center">
+            <p className="text-[10px] text-muted-foreground text-left">Keyword usada</p>
+            <p className="text-[10px] text-muted-foreground italic">"{keyword}"</p>
+          </div>
         </div>
         <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Fechar</button>
       </div>
@@ -97,6 +115,14 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
     return counts;
   }, [myItems, myAccounts, statusFilter]);
 
+  // Extract a useful keyword: first 4-5 words, skip adjectives and codes at end
+  const extractKeyword = (title: string): string => {
+    const words = title.split(/\s+/).filter(w => w.length > 2);
+    // Remove model codes (contain digits mixed with letters like Fc-133, V2, 220V)
+    const clean = words.filter(w => !/^[A-Za-z]{0,3}[-]?\d/.test(w) && !/^\d/.test(w));
+    return clean.slice(0, 5).join(' ');
+  };
+
   const handleCheckRank = async (item: any) => {
     if (loadingRank) return;
     if (openRanking === item.id) { setOpenRanking(null); return; }
@@ -104,15 +130,14 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
 
     setLoadingRank(item.id);
     try {
-      // Use only the first ~50 chars of the title as keyword (most reliable)
-      const keyword = item.title?.slice(0, 50) || '';
+      const keyword = extractKeyword(item.title || '');
       if (!keyword) return toast.error('Produto sem título para buscar');
       const result = await callMarketData('search_ranking', {
         keyword,
         limit: 30,
         my_seller_ids: mySellerIds,
       });
-      setRankingMap(prev => ({ ...prev, [item.id]: result.ranking || [] }));
+      setRankingMap(prev => ({ ...prev, [item.id]: { ranking: result.ranking || [], keyword } }));
       setOpenRanking(item.id);
     } catch (err: any) {
       toast.error('Erro ao buscar ranking: ' + err.message);
@@ -229,8 +254,9 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
           const st = STATUS_LABEL[item.status] || { label: item.status, color: 'text-gray-400 bg-gray-500/10' };
           const isOpen = openRanking === item.id;
           const isLoading = loadingRank === item.id;
-          const ranking = rankingMap[item.id] || [];
-          const myPos = ranking.find(r => r.is_mine);
+          const rankEntry = rankingMap[item.id];
+          const ranking = rankEntry?.ranking || [];
+          const myPos = ranking.find((r: any) => r.is_mine);
 
           return (
             <div key={item.id} className="border border-border rounded-xl overflow-hidden bg-card">
@@ -280,10 +306,14 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
                 </div>
               </div>
 
-              {/* Ranking panel */}
-              {isOpen && ranking.length > 0 && (
+              {isOpen && (
                 <div className="px-3 pb-3">
-                  <RankingPanel ranking={ranking} mySellerIds={mySellerIds} onClose={() => setOpenRanking(null)} />
+                  <RankingPanel
+                    ranking={rankingMap[item.id]?.ranking || []}
+                    mySellerIds={mySellerIds}
+                    keyword={rankingMap[item.id]?.keyword || ''}
+                    onClose={() => setOpenRanking(null)}
+                  />
                 </div>
               )}
             </div>
