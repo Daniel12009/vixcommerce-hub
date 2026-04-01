@@ -175,16 +175,40 @@ Deno.serve(async (req: Request) => {
       return ok(data || []);
     }
 
-    // ── search_ranking ────────────────────────────────────────────────────────
+    // ── ping_ml — diagnostic: raw ML API test ─────────────────────────────────
+    if (action === 'ping_ml') {
+      const { keyword = 'torneira', limit = 3 } = rest;
+      const url = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(keyword)}&limit=${limit}`;
+      try {
+        const res = await fetch(url);
+        const text = await res.text();
+        let body: any;
+        try { body = JSON.parse(text); } catch { body = text.slice(0, 500); }
+        return ok({ status: res.status, ok: res.ok, url, body_preview: text.slice(0, 400), results_count: body?.results?.length ?? null, total: body?.paging?.total ?? null });
+      } catch (err: any) {
+        return ok({ error: err.message, url });
+      }
+    }
+
     if (action === 'search_ranking') {
       const { keyword, category_id, my_seller_ids = [], max_pages = 3 } = rest;
       if (!keyword && !category_id) throw new Error('keyword or category_id required');
 
+      // Load accounts: need seller_ids + at least one access_token for authenticated ML calls
+      // (ML API returns 403 from non-BR IPs without auth token)
+      const { data: accs } = await client
+        .from('ml_accounts')
+        .select('seller_id, access_token')
+        .eq('ativo', true);
+
       let sellerIds: string[] = my_seller_ids;
       if (!sellerIds.length) {
-        const { data: accs } = await client.from('ml_accounts').select('seller_id').eq('ativo', true);
         sellerIds = (accs || []).map((a: any) => String(a.seller_id)).filter(Boolean);
       }
+
+      // Use any available access token for authenticated requests
+      const mlToken: string | undefined = (accs || []).find((a: any) => a.access_token)?.access_token;
+      const mlHeaders: Record<string, string> = mlToken ? { Authorization: `Bearer ${mlToken}` } : {};
 
       const PAGE_SIZE = 50;
 
@@ -212,7 +236,7 @@ Deno.serve(async (req: Request) => {
         kwRaw,                                   // raw (with accents) fallback
       ])].filter(Boolean);
 
-      // Build URL
+      // Build URL — with auth: sort=sold_quantity_desc is allowed
       const buildUrl = (kw: string, catId: string | undefined, offset: number) => {
         let u = `https://api.mercadolibre.com/sites/MLB/search?sort=sold_quantity_desc&limit=${PAGE_SIZE}&offset=${offset}`;
         if (kw) u += `&q=${encodeURIComponent(kw)}`;
@@ -220,10 +244,10 @@ Deno.serve(async (req: Request) => {
         return u;
       };
 
-      // Fetch one page
+      // Fetch one page — authenticated via mlHeaders to avoid 403 geo-block
       const fetchPage = async (kw: string, offset: number) => {
         try {
-          const res = await fetch(buildUrl(kw, category_id, offset));
+          const res = await fetch(buildUrl(kw, category_id, offset), { headers: mlHeaders });
           const d = await res.json();
           if (!res.ok) {
             console.warn(`[search_ranking] ML ${res.status} for kw="${kw}":`, JSON.stringify(d).slice(0, 200));
