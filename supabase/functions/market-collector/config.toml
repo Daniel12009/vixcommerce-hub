@@ -1,0 +1,2 @@
+[functions.market-collector]
+verify_jwt = false
