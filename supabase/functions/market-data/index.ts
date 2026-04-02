@@ -194,11 +194,10 @@ Deno.serve(async (req: Request) => {
       const { keyword, category_id, my_seller_ids = [], max_pages = 3 } = rest;
       if (!keyword && !category_id) throw new Error('keyword or category_id required');
 
-      // Load accounts: need seller_ids + at least one access_token for authenticated ML calls
-      // (ML API returns 403 from non-BR IPs without auth token)
+      // Load accounts with full token info for refresh capability
       const { data: accs } = await client
         .from('ml_accounts')
-        .select('seller_id, access_token')
+        .select('id, seller_id, access_token, refresh_token, token_expires_at, client_id, client_secret')
         .eq('ativo', true);
 
       let sellerIds: string[] = my_seller_ids;
@@ -206,8 +205,46 @@ Deno.serve(async (req: Request) => {
         sellerIds = (accs || []).map((a: any) => String(a.seller_id)).filter(Boolean);
       }
 
-      // Use any available access token for authenticated requests
-      const mlToken: string | undefined = (accs || []).find((a: any) => a.access_token)?.access_token;
+      // Get a fresh ML access token (auto-refresh if expired like mercado-livre edge fn)
+      const getToken = async (): Promise<string | undefined> => {
+        const acc = (accs || []).find((a: any) => a.refresh_token || a.access_token);
+        if (!acc) return undefined;
+        try {
+          // Refresh if expired or expiring in next 5 min
+          const expiry = acc.token_expires_at ? new Date(acc.token_expires_at) : null;
+          const needsRefresh = !expiry || expiry < new Date(Date.now() + 5 * 60 * 1000);
+          if (needsRefresh && acc.refresh_token && acc.client_id && acc.client_secret) {
+            const res = await fetch('https://api.mercadolibre.com/oauth/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                grant_type: 'refresh_token',
+                client_id: acc.client_id,
+                client_secret: acc.client_secret,
+                refresh_token: acc.refresh_token,
+              }),
+            });
+            if (res.ok) {
+              const d = await res.json();
+              // Update token in DB (best-effort)
+              await client.from('ml_accounts').update({
+                access_token: d.access_token,
+                refresh_token: d.refresh_token,
+                token_expires_at: new Date(Date.now() + d.expires_in * 1000).toISOString(),
+              }).eq('id', acc.id);
+              console.log(`[search_ranking] token refreshed for account ${acc.id}`);
+              return d.access_token;
+            }
+            console.warn('[search_ranking] token refresh failed, falling back to stored token');
+          }
+          return acc.access_token;
+        } catch (e) {
+          console.warn('[search_ranking] getToken error:', e);
+          return acc?.access_token;
+        }
+      };
+
+      const mlToken = await getToken();
       const mlHeaders: Record<string, string> = mlToken ? { Authorization: `Bearer ${mlToken}` } : {};
 
       const PAGE_SIZE = 50;
