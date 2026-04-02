@@ -396,14 +396,27 @@ Deno.serve(async (req: Request) => {
         if (tr.ok) { const td = await tr.json(); closeToken = td.access_token; }
       }
 
-      const mlRes = await fetch(`https://api.mercadolibre.com/items/${item_id}`, {
+      const authHeaders = { Authorization: `Bearer ${closeToken}`, 'Content-Type': 'application/json' };
+      const itemUrl = `https://api.mercadolibre.com/items/${item_id}`;
+
+      // 1️⃣ Try hard DELETE first (works for ghost/0-sale/unpublished items)
+      const delRes = await fetch(itemUrl, { method: 'DELETE', headers: authHeaders });
+      if (delRes.ok || delRes.status === 204) {
+        console.log(`[close_item] DELETE succeeded for ${item_id}`);
+        return ok({ success: true, item_id, method: 'deleted' });
+      }
+
+      console.log(`[close_item] DELETE returned ${delRes.status} — falling back to status:closed`);
+
+      // 2️⃣ Fall back to close (status: closed)
+      const closeRes = await fetch(itemUrl, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${closeToken}`, 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({ status: 'closed' }),
       });
-      const mlBody = await mlRes.json();
-      if (!mlRes.ok) throw new Error(`ML close failed [${mlRes.status}]: ${JSON.stringify(mlBody)}`);
-      return ok({ success: true, item_id, status: mlBody.status });
+      const closeBody = await closeRes.json();
+      if (!closeRes.ok) throw new Error(`ML close failed [${closeRes.status}]: ${JSON.stringify(closeBody)}`);
+      return ok({ success: true, item_id, method: 'closed', status: closeBody.status });
     }
 
     throw new Error(`Unknown action: ${action}`);

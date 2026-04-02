@@ -145,7 +145,8 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
     try {
       const res = await callMarketData('close_item', { item_id: item.id, account_id: item.account_id });
       if (res?.error) throw new Error(res.error);
-      toast.success(`Anúncio "${item.title?.slice(0, 40)}..." fechado no ML.`);
+      const action = res?.method === 'deleted' ? 'excluído' : 'fechado';
+      toast.success(`Anúncio ${action} com sucesso no ML.`);
       // Remove from local state (the list will refresh on next load)
       // Trigger parent reload if possible
     } catch (err: any) {
