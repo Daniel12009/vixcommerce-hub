@@ -101,6 +101,8 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
 
   const filtered = useMemo(() => {
     return myItems.filter(item => {
+      // Exclude ghost items (sub_status: deleted — visible via API but absent from ML panel)
+      if (item.sub_status === 'deleted' || item.substatus === 'deleted') return false;
       const matchAccount = selectedAccount === 'all' || item.account_id === selectedAccount || item.conta === selectedAccount;
       const matchStatus = statusFilter === 'all' || item.status === statusFilter;
       const q = search.toLowerCase();
