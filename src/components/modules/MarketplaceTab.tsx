@@ -49,22 +49,35 @@ export function MarketplaceTab() {
   const allItems = sheetsData.marketplaceDiaItems || [];
 
   const [filterDias, setFilterDias] = useState(30);
+  const [customFrom, setCustomFrom] = useState(''); // YYYY-MM-DD
+  const [customTo, setCustomTo] = useState('');   // YYYY-MM-DD
   const [sortField, setSortField] = useState<SortField>('faturamentoBruto');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // Helper: active date range bounds
+  const getRange = () => {
+    if (filterDias === -1 && customFrom && customTo) {
+      return { from: new Date(customFrom + 'T00:00:00'), to: new Date(customTo + 'T23:59:59') };
+    }
+    if (filterDias <= 0) return null;
+    const from = new Date(); from.setDate(from.getDate() - filterDias);
+    return { from, to: new Date() };
+  };
+
   // Filter items by date range
   const items = useMemo(() => {
-    if (filterDias <= 0) return allItems;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - filterDias);
+    const range = getRange();
+    if (!range) return allItems;
     return allItems.filter(item => {
       const d = parseDate(item.data);
-      return d ? d >= cutoff : true;
+      return d ? d >= range.from && d <= range.to : true;
     });
-  }, [allItems, filterDias]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allItems, filterDias, customFrom, customTo]);
 
   // Previous period items
   const prevItems = useMemo(() => {
+    if (filterDias === -1) return []; // no comparison for custom range
     if (filterDias <= 0) return [];
     const now = new Date();
     const cutoffCurrent = new Date();
@@ -225,7 +238,7 @@ export function MarketplaceTab() {
     <div className="space-y-6 animate-fade-in">
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-xl p-4">
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <label className="text-xs text-muted-foreground font-medium">Período:</label>
           <select value={filterDias} onChange={e => setFilterDias(parseInt(e.target.value))} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
             <option value={7}>Últimos 7 dias</option>
@@ -234,7 +247,17 @@ export function MarketplaceTab() {
             <option value={60}>Últimos 60 dias</option>
             <option value={90}>Últimos 90 dias</option>
             <option value={0}>Todo o período</option>
+            <option value={-1}>Data personalizada</option>
           </select>
+          {filterDias === -1 && (
+            <div className="flex items-center gap-1.5 ml-1">
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                className="px-2 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs" />
+              <span className="text-xs text-muted-foreground">até</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                className="px-2 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs" />
+            </div>
+          )}
         </div>
         <span className="text-xs text-muted-foreground ml-auto">
           {items.length} registros | {origens.length} contas {hasPrev && `| comparando com período anterior`}
