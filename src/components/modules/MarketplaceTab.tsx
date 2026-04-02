@@ -51,8 +51,22 @@ export function MarketplaceTab() {
   const [filterDias, setFilterDias] = useState(30);
   const [customFrom, setCustomFrom] = useState(''); // YYYY-MM-DD
   const [customTo, setCustomTo] = useState('');   // YYYY-MM-DD
+  const [filterOrigem, setFilterOrigem] = useState('all'); // 'all' | specific origem
+  const [filterMkt, setFilterMkt] = useState('all'); // 'all' | 'ml' | 'shopee' | 'amazon' | 'other'
   const [sortField, setSortField] = useState<SortField>('faturamentoBruto');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Detect marketplace from origin name
+  const detectMkt = (origem: string): string => {
+    const o = (origem || '').toLowerCase();
+    if (o.includes('shopee')) return 'shopee';
+    if (o.includes('amazon')) return 'amazon';
+    if (o.includes('tiktok')) return 'tiktok';
+    if (o.includes('magalu') || o.includes('magazine')) return 'magalu';
+    if (o.includes('americanas')) return 'americanas';
+    if (o.includes('mercado') || o.includes(' ml') || o.includes('(ml)')) return 'ml';
+    return 'ml'; // default assumption
+  };
 
   // Helper: active date range bounds
   const getRange = () => {
@@ -64,16 +78,20 @@ export function MarketplaceTab() {
     return { from, to: new Date() };
   };
 
-  // Filter items by date range
+  // Filter items by date range + conta + marketplace
   const items = useMemo(() => {
     const range = getRange();
-    if (!range) return allItems;
     return allItems.filter(item => {
-      const d = parseDate(item.data);
-      return d ? d >= range.from && d <= range.to : true;
+      if (range) {
+        const d = parseDate(item.data);
+        if (d && (d < range.from || d > range.to)) return false;
+      }
+      if (filterOrigem !== 'all' && item.origem !== filterOrigem) return false;
+      if (filterMkt !== 'all' && detectMkt(item.origem) !== filterMkt) return false;
+      return true;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allItems, filterDias, customFrom, customTo]);
+  }, [allItems, filterDias, customFrom, customTo, filterOrigem, filterMkt]);
 
   // Previous period items
   const prevItems = useMemo(() => {
@@ -92,7 +110,9 @@ export function MarketplaceTab() {
 
   const hasPrev = prevItems.length > 0;
 
-  // Unique origins (accounts)
+  // Unique origins — from allItems so filter dropdowns don't collapse options when one is active
+  const allOrigens = useMemo(() => [...new Set(allItems.map(i => i.origem).filter(Boolean))].sort(), [allItems]);
+  const allMkts = useMemo(() => [...new Set(allItems.map(i => detectMkt(i.origem)).filter(Boolean))].sort(), [allItems]);
   const origens = useMemo(() => [...new Set(items.map(i => i.origem).filter(Boolean))].sort(), [items]);
 
   // KPIs
@@ -259,6 +279,33 @@ export function MarketplaceTab() {
             </div>
           )}
         </div>
+
+        {/* Conta filter */}
+        {allOrigens.length > 1 && (
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground font-medium">Conta:</label>
+            <select value={filterOrigem} onChange={e => setFilterOrigem(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+              <option value="all">Todas</option>
+              {allOrigens.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Marketplace filter */}
+        {allMkts.length > 1 && (
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground font-medium">Marketplace:</label>
+            <select value={filterMkt} onChange={e => setFilterMkt(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+              <option value="all">Todos</option>
+              {allMkts.map(m => (
+                <option key={m} value={m}>{m === 'ml' ? 'Mercado Livre' : m === 'shopee' ? 'Shopee' : m === 'amazon' ? 'Amazon' : m === 'tiktok' ? 'TikTok' : m === 'magalu' ? 'Magalu' : m === 'americanas' ? 'Americanas' : m}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <span className="text-xs text-muted-foreground ml-auto">
           {items.length} registros | {origens.length} contas {hasPrev && `| comparando com período anterior`}
         </span>
