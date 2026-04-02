@@ -146,6 +146,8 @@ export function CadastroPage() {
   const [categorySuggestions, setCategorySuggestions] = useState<{ domain_name: string; category_id: string; category_name: string }[]>([]);
   const [catSearching, setCatSearching] = useState(false);
   const [catSearchQuery, setCatSearchQuery] = useState('');
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<MLItemSummary | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
   // Load accounts on mount
   useEffect(() => {
@@ -334,6 +336,28 @@ export function CadastroPage() {
       await loadDetail(detail.id);
     } catch (err: any) { setSaveMsg(`❌ Erro ao remover foto: ${err.message}`); }
     setUploading(false);
+  };
+
+  const handleCloseItem = async () => {
+    const item = confirmDeleteItem;
+    if (!item) return;
+    setConfirmDeleteItem(null);
+    setDeletingItemId(item.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('market-data', {
+        body: { action: 'close_item', item_id: item.id, account_id: selectedAccount },
+      });
+      if (error || data?.error) throw new Error(error?.message || data?.error);
+      const verb = data?.method === 'deleted' ? 'excluído' : 'fechado';
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      if (detail?.id === item.id) setDetail(null);
+      setSaveMsg(`✅ Anúncio ${verb} com sucesso no ML.`);
+      setTimeout(() => setSaveMsg(''), 4000);
+    } catch (err: any) {
+      setSaveMsg(`❌ Erro ao fechar: ${err.message}`);
+    } finally {
+      setDeletingItemId(null);
+    }
   };
 
   if (!selectedPlatform) {
@@ -556,20 +580,32 @@ export function CadastroPage() {
           {!listLoading && items.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">Clique em "Carregar" para listar</div>}
           <div className="space-y-1">
             {items.map(item => (
-              <button key={item.id} onClick={() => loadDetail(item.id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-3 ${detail?.id === item.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground'}`}>
-                {item.thumbnail ? <img src={item.thumbnail} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded bg-muted flex-shrink-0 flex items-center justify-center"><ImageIcon className="w-4 h-4 text-muted-foreground" /></div>}
-                <div className="flex-1 min-w-0">
-                  <p className="truncate font-medium text-xs">{item.title || item.id}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {item.seller_sku && <span className="font-mono text-[10px] opacity-70">{item.seller_sku}</span>}
-                    <span className="text-[10px] font-semibold">R$ {item.price?.toFixed(2)}</span>
+              <div key={item.id} className="relative group/row">
+                <button onClick={() => loadDetail(item.id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-3 pr-8 ${detail?.id === item.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground'}`}>
+                  {item.thumbnail ? <img src={item.thumbnail} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded bg-muted flex-shrink-0 flex items-center justify-center"><ImageIcon className="w-4 h-4 text-muted-foreground" /></div>}
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-medium text-xs">{item.title || item.id}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {item.seller_sku && <span className="font-mono text-[10px] opacity-70">{item.seller_sku}</span>}
+                      <span className="text-[10px] font-semibold">R$ {item.price?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <ItemStatusBadge status={item.status} subStatus={item.sub_status} />
+                      <TypeBadge catalog={item.catalog_listing} logistic={item.logistic_type} />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <ItemStatusBadge status={item.status} subStatus={item.sub_status} />
-                    <TypeBadge catalog={item.catalog_listing} logistic={item.logistic_type} />
-                  </div>
-                </div>
-              </button>
+                </button>
+                {/* Trash button — hover-revealed */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmDeleteItem(item); }}
+                  disabled={deletingItemId === item.id}
+                  title="Fechar/excluir anúncio"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover/row:opacity-100 transition-all disabled:opacity-40">
+                  {deletingItemId === item.id
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Trash2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             ))}
           </div>
           {totalItems > 50 && (
@@ -862,6 +898,37 @@ export function CadastroPage() {
           setShowCreate(true);
         }}
       />
+
+      {/* ── Confirmation dialog ───────────────────────────────────────── */}
+      {confirmDeleteItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-red-500/30 rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Fechar anúncio?</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Esta ação fecha o anúncio no Mercado Livre</p>
+              </div>
+            </div>
+            <p className="text-sm text-foreground mb-1 font-medium line-clamp-2">{confirmDeleteItem.title}</p>
+            <p className="text-xs text-muted-foreground mb-5">
+              ⚠️ O anúncio será <strong>fechado</strong> no ML. Itens fechados não são visíveis para compradores, mas podem ser reativados manualmente no painel do ML.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDeleteItem(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleCloseItem}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors">
+                Sim, fechar anúncio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
