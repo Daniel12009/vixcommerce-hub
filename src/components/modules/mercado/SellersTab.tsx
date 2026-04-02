@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, ExternalLink, Package, AlertCircle, Crown, TrendingUp } from 'lucide-react';
+import { Search, ExternalLink, Package, AlertCircle, Crown, TrendingUp, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { mlSearch, extractKeywordFromTitle, saveSearchSnapshot } from './mlSearch';
 
@@ -93,9 +93,11 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('active');
-  const [rankingMap, setRankingMap] = useState<Record<string, any[]>>({});
+  const [rankingMap, setRankingMap] = useState<Record<string, any>>({});
   const [loadingRank, setLoadingRank] = useState<string | null>(null);
   const [openRanking, setOpenRanking] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<any | null>(null); // item to confirm deletion
 
   const filtered = useMemo(() => {
     return myItems.filter(item => {
@@ -133,6 +135,24 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
     } catch (err: any) {
       toast.error('Erro ao buscar ranking: ' + err.message);
     } finally { setLoadingRank(null); }
+  };
+
+  const handleDeleteConfirmed = async () => {
+    const item = confirmDelete;
+    if (!item) return;
+    setConfirmDelete(null);
+    setDeletingId(item.id);
+    try {
+      const res = await callMarketData('close_item', { item_id: item.id, account_id: item.account_id });
+      if (res?.error) throw new Error(res.error);
+      toast.success(`Anúncio "${item.title?.slice(0, 40)}..." fechado no ML.`);
+      // Remove from local state (the list will refresh on next load)
+      // Trigger parent reload if possible
+    } catch (err: any) {
+      toast.error(`Erro ao fechar anúncio: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (loadingItems) {
@@ -294,8 +314,19 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   )}
-                </div>
-              </div>
+
+                  {/* Trash — close/delete listing */}
+                  <button
+                    onClick={() => setConfirmDelete(item)}
+                    disabled={deletingId === item.id}
+                    title="Fechar anúncio no ML"
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-40">
+                    {deletingId === item.id
+                      ? <div className="w-4 h-4 border border-red-400 border-t-transparent rounded-full animate-spin" />
+                      : <Trash2 className="w-4 h-4" />}
+                  </button>
+                </div>{/* end actions flex */}
+              </div>{/* end row flex */}
 
               {isOpen && (
                 <div className="px-3 pb-3">
@@ -316,6 +347,37 @@ export function SellersTab({ myAccounts, myItems, mySellerIds, loadingItems, cal
         <div className="text-center py-10">
           <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
           <p className="text-sm text-muted-foreground">Nenhum produto encontrado.</p>
+        </div>
+      )}
+
+      {/* ── Confirmation dialog ─────────────────────────────────── */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card border border-red-500/30 rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Fechar anúncio?</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Esta ação fecha o anúncio no Mercado Livre</p>
+              </div>
+            </div>
+            <p className="text-sm text-foreground mb-1 font-medium line-clamp-2">{confirmDelete.title}</p>
+            <p className="text-xs text-muted-foreground mb-5">
+              ⚠️ O anúncio será <strong>fechado</strong> no ML. Itens fechados podem ser reativados manualmente no painel do Mercado Livre, mas não estão visíveis para compradores.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleDeleteConfirmed}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors">
+                Sim, fechar anúncio
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

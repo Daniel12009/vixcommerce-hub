@@ -372,6 +372,40 @@ Deno.serve(async (req: Request) => {
     }
 
 
+    // ── close_item — close (fechar) an ML listing ─────────────────────────────
+    if (action === 'close_item') {
+      const { item_id, account_id } = rest;
+      if (!item_id) throw new Error('item_id required');
+
+      // Fetch account creds
+      let accQuery = client.from('ml_accounts').select('id, access_token, refresh_token, token_expires_at, client_id, client_secret').eq('ativo', true);
+      if (account_id) accQuery = accQuery.eq('id', account_id);
+      const { data: closeAccs } = await accQuery.limit(1);
+      const closeAcc = closeAccs?.[0];
+      if (!closeAcc) throw new Error('No active ML account found');
+
+      // Refresh token if needed
+      const closeExpiry = closeAcc.token_expires_at ? new Date(closeAcc.token_expires_at) : null;
+      let closeToken = closeAcc.access_token;
+      if ((!closeExpiry || closeExpiry < new Date(Date.now() + 5 * 60 * 1000)) && closeAcc.refresh_token) {
+        const tr = await fetch('https://api.mercadolibre.com/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ grant_type: 'refresh_token', client_id: closeAcc.client_id, client_secret: closeAcc.client_secret, refresh_token: closeAcc.refresh_token }),
+        });
+        if (tr.ok) { const td = await tr.json(); closeToken = td.access_token; }
+      }
+
+      const mlRes = await fetch(`https://api.mercadolibre.com/items/${item_id}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${closeToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'closed' }),
+      });
+      const mlBody = await mlRes.json();
+      if (!mlRes.ok) throw new Error(`ML close failed [${mlRes.status}]: ${JSON.stringify(mlBody)}`);
+      return ok({ success: true, item_id, status: mlBody.status });
+    }
+
     throw new Error(`Unknown action: ${action}`);
 
   } catch (err: any) {
