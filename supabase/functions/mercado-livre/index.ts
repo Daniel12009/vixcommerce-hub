@@ -1535,7 +1535,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 3. Buscar visitas (1 MLB por vez, endpoint não aceita lote)
+      // 3. Buscar visitas e preço atualizado (1 MLB por vez)
       const visitCounts: Record<string, number> = {};
       const date_from_str = dateFrom.slice(0, 10);
       const date_to_str   = dateTo.slice(0, 10);
@@ -1558,6 +1558,15 @@ Deno.serve(async (req) => {
             } catch {
               visitCounts[mlb] = 0;
             }
+
+            try {
+              const priceUrl = `/items/${mlb}/sale_price?context=channel_marketplace`;
+              const pData = await mlFetch(account, priceUrl);
+              const promotionPrice = pData?.amount;
+              if (promotionPrice && itemDetails[mlb]) {
+                itemDetails[mlb].price = promotionPrice;
+              }
+            } catch { /* if sale_price fails, keep the original price fetched from /items */ }
           })
         );
       }
