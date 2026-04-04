@@ -1434,17 +1434,29 @@ Deno.serve(async (req) => {
       for (let i = 0; i < itemIds.length; i += 20) {
         const batch = itemIds.slice(i, i + 20).join(',');
         if (!batch) continue;
-        const batchData = await mlFetch(account, `/items?ids=${batch}&attributes=id,title,permalink,seller_custom_field,variations,price`);
+        const batchData = await mlFetch(account, `/items?ids=${batch}&attributes=id,title,permalink,seller_custom_field,variations,price,attributes`);
         for (const d of batchData) {
           if (d.code === 200 && d.body) {
             const b = d.body;
-            const skuVar = (b.variations || []).map((v: any) => {
-              const sa = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
-              return sa?.value_name || '';
-            }).filter(Boolean);
+
+            // Fix 2: SKU extraction — seller_custom_field > attributes SELLER_SKU > variations SELLER_SKU
+            let sku = b.seller_custom_field || '';
+            if (!sku) {
+              const attrSku = (b.attributes || []).find((a: any) => a.id === 'SELLER_SKU');
+              sku = attrSku?.value_name || '';
+            }
+            if (!sku) {
+              const skuVar = (b.variations || []).map((v: any) => {
+                const sa = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
+                return sa?.value_name || '';
+              }).filter(Boolean);
+              sku = skuVar[0] || '';
+            }
+            if (!sku) sku = 'SEM_SKU';
+
             itemDetails[b.id] = {
               title: b.title || '',
-              sku: b.seller_custom_field || skuVar[0] || '',
+              sku,
               price: b.price || 0,
               permalink: b.permalink || '',
             };
@@ -1491,27 +1503,37 @@ Deno.serve(async (req) => {
         hasMore = offset < (oData.paging?.total || 0);
       }
 
+      // Fix 3: Data Ref em formato BR
+      function formatDateBR(ds: string): string {
+        const [y, m, d] = ds.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      const dataRef = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
+
       // 5. Montar linhas
       const rows: any[][] = [];
-      const dataRef = new Date().toISOString().slice(0, 10);
       for (const itemId of itemIds) {
         const det = itemDetails[itemId] || {};
         const vis = visitCounts[itemId] || 0;
         const sales = salesCount[itemId] || { vendas: 0, canceladas: 0 };
-        const conv = vis > 0 ? ((sales.vendas / vis) * 100).toFixed(2) : '0.00';
+        // Fix 4: Conversão com vírgula
+        const convNum = vis > 0 ? ((sales.vendas / vis) * 100) : 0;
+        const convStr = convNum.toFixed(2).replace('.', ',') + '%';
+        // Fix 4: Preço formatado R$
+        const precoStr = `R$ ${(det.price || 0).toFixed(2).replace('.', ',')}`;
         rows.push([
           'Mercado Livre',    // Plataforma
           itemId,             // ID Anúncio
-          det.sku || '',      // SKU
+          det.sku || 'SEM_SKU', // SKU
           det.title || '',    // Título
-          det.price || 0,     // Preço
+          precoStr,           // Preço (R$ 1.234,56)
           vis,                // Visitas
           sales.vendas,       // Vendas
           sales.canceladas,   // Canceladas
-          `${conv}%`,         // Conversão %
+          convStr,            // Conversão % (7,08%)
           det.permalink || '',// Link
-          account.nome,       // Conta
-          dataRef,            // Data Ref
+          account.nome,       // Conta (nome completo)
+          dataRef,            // Data Ref (DD/MM/YYYY a DD/MM/YYYY)
         ]);
       }
 
