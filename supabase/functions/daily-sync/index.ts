@@ -211,6 +211,14 @@ Deno.serve(async (req) => {
     await sleep(2000);
   }
 
+  // ━━━ ESTOQUE TINY (JSchruber) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  try {
+    const r = await invokeFunction('tiny', { action: 'sync_estoque_tiny' });
+    log.push(`✅ Estoque Tiny: ${r.mensagem || r.error || 'ok'}`);
+  } catch (e: any) {
+    log.push(`❌ Erro Estoque Tiny: ${e.message}`);
+  }
+
   log.push(`✅ Ciclo daily-sync concluído. ${log.length} etapas processadas.`);
   console.log(log.join('\n'));
 

@@ -121,6 +121,40 @@ const SYNC_ACTIONS = [
     },
     color: 'bg-[hsl(30,100%,50%,0.15)]',
   },
+  {
+    id: 'tiny-tiktok',
+    label: '🎵 TikTok Vendas (via Tiny)',
+    description: 'Busca vendas TikTok via Tiny ERP → VENDASTK',
+    fn: 'tiny',
+    body: {
+      action: 'sync_vendas_marketplace',
+      plataforma: 'tiktok',
+      date_from: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
+      date_to: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
+    },
+    color: 'bg-[hsl(340,80%,55%,0.15)]',
+  },
+  {
+    id: 'tiny-temu',
+    label: '🛍️ Temu Vendas (via Tiny)',
+    description: 'Busca vendas Temu via Tiny ERP → VENDASTM',
+    fn: 'tiny',
+    body: {
+      action: 'sync_vendas_marketplace',
+      plataforma: 'temu',
+      date_from: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
+      date_to: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
+    },
+    color: 'bg-[hsl(200,80%,50%,0.15)]',
+  },
+  {
+    id: 'tiny-estoque',
+    label: '📦 Estoque Tiny (JSchruber)',
+    description: 'Busca saldo de todos os produtos ativos → ESTOQUE-TINY',
+    fn: 'tiny',
+    body: { action: 'sync_estoque_tiny' },
+    color: 'bg-[hsl(160,60%,40%,0.15)]',
+  },
 ];
 
 export function SyncTestPanel() {

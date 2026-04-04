@@ -119,13 +119,31 @@ function mapTinyStatus(situacao: string): string {
 async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' = 'append') {
   const url = Deno.env.get('SUPABASE_URL')!;
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const res = await fetch(`${url}/functions/v1/google-sheets`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`,
-    },
-    body: JSON.stringify({ action, spreadsheetId, range, values }),
+  const gsUrl = `${url}/functions/v1/google-sheets`;
+  const gsHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` };
+
+  // Normalize range: wrap tab name in single quotes (required for hyphens/spaces)
+  let normalizedRange = range;
+  const bangIdx = range.indexOf('!');
+  const rawTab = bangIdx > 0 ? range.slice(0, bangIdx).replace(/^'+|'+$/g, '') : '';
+  if (rawTab && bangIdx > 0) {
+    const cellRef = range.slice(bangIdx + 1);
+    normalizedRange = `'${rawTab}'!${cellRef}`;
+  }
+
+  // Auto-create sheet tab if it doesn't exist
+  if (rawTab) {
+    try {
+      await fetch(gsUrl, {
+        method: 'POST', headers: gsHeaders,
+        body: JSON.stringify({ action: 'create_sheet', spreadsheetId, sheetTitle: rawTab }),
+      });
+    } catch { /* tab may already exist — OK */ }
+  }
+
+  const res = await fetch(gsUrl, {
+    method: 'POST', headers: gsHeaders,
+    body: JSON.stringify({ action, spreadsheetId, range: normalizedRange, values }),
   });
   if (!res.ok) {
     const err = await res.text();
@@ -624,6 +642,69 @@ Deno.serve(async (req) => {
       const msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}`;
       console.log(`[SYNC] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: allRows.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ═══ SYNC ESTOQUE TINY (JSchruber → ESTOQUE-TINY) ═══════════════════
+    if (action === 'sync_estoque_tiny') {
+      const TINY_TOKEN = Deno.env.get('TINY_TOKEN_JSCHRUBER');
+      if (!TINY_TOKEN) throw new Error('TINY_TOKEN_JSCHRUBER não configurado');
+
+      const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
+      const SHEET_TAB = 'ESTOQUE-TINY';
+
+      const allProducts: any[][] = [];
+      let pagina = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const params = new URLSearchParams({
+          token: TINY_TOKEN,
+          formato: 'json',
+          situacao: 'A',
+          pagina: String(pagina),
+        });
+
+        const res = await fetch('https://api.tiny.com.br/api2/produtos.pesquisa.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+        });
+
+        const data = await res.json();
+        const produtos = data?.retorno?.produtos || [];
+
+        if (produtos.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        for (const pw of produtos) {
+          const p = pw.produto || pw;
+          const codigo = (p.codigo || '').trim();
+          const saldo = parseFloat(p.saldo || '0');
+          if (codigo && saldo > 0) {
+            allProducts.push([codigo, Math.round(saldo)]);
+          }
+        }
+
+        const totalPaginas = data?.retorno?.numero_paginas || 1;
+        pagina++;
+        hasMore = pagina <= totalPaginas;
+
+        // Rate limit
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      // Sobrescrever aba ESTOQUE-TINY
+      const header = ['SKU', 'TOTAL'];
+      const writeData = [header, ...allProducts];
+      await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, 'write');
+
+      const msg = `Estoque Tiny: ${allProducts.length} SKUs com saldo escritos em ${SHEET_TAB}`;
+      console.log(`[ESTOQUE-TINY] ${msg}`);
+      return new Response(JSON.stringify({ mensagem: msg, skus: allProducts.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
