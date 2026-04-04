@@ -59,6 +59,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
   performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
   ads: 'bg-[hsl(142,76%,36%,0.1)] text-[hsl(142,76%,36%)]',
+  compras: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
   devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
   'marketplace-dia': 'bg-[hsl(270,70%,55%,0.1)] text-[hsl(270,70%,55%)]',
   calculadora: 'bg-[hsl(220,70%,55%,0.1)] text-[hsl(220,70%,55%)]',
