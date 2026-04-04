@@ -1479,7 +1479,11 @@ Deno.serve(async (req) => {
         });
       }
 
-      const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const agoraBR = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Sao_Paulo'}));
+      agoraBR.setDate(agoraBR.getDate() - 1);
+      const defaultDate = `${agoraBR.getFullYear()}-${String(agoraBR.getMonth() + 1).padStart(2, '0')}-${String(agoraBR.getDate()).padStart(2, '0')}`;
+      
+      const dateFrom = reqDateFrom || defaultDate;
       const dateTo = reqDateTo || dateFrom;
       const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
       const contaLabel = (account.nome || '').trim().toUpperCase();
