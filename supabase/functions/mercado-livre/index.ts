@@ -1411,7 +1411,7 @@ Deno.serve(async (req) => {
       const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const dateTo = reqDateTo || dateFrom;
       const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
-      const contaLabel = (account.nome || '').toUpperCase().replace(/\s+/g, '');
+      const contaLabel = (account.nome || '').trim().toUpperCase();
       const sheetTab = reqSheetName || `PERF-${contaLabel}`;
 
       // 1. Buscar itens Full catálogo
@@ -1547,7 +1547,7 @@ Deno.serve(async (req) => {
       }
 
       const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
-      const contaLabel = (account.nome || '').toUpperCase().replace(/\s+/g, '');
+      const contaLabel = (account.nome || '').trim().toUpperCase();
       const sheetTab = reqSheetName || `V7-${contaLabel}`;
 
       // Últimos 7 dias
