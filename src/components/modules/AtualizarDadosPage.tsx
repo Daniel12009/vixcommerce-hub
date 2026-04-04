@@ -48,6 +48,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   devolucao: 'Devoluções',
   'marketplace-dia': 'Marketplace',
   calculadora: 'Calculadora',
+  compras: 'Compras',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
