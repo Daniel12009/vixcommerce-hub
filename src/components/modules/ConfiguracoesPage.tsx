@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileSpreadsheet, Users, Key, Wifi, Loader2, CheckCircle, PlugZap } from 'lucide-react';
+import { FileSpreadsheet, Users, Key, Wifi, Loader2, CheckCircle, PlugZap, Zap } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserManagementPage } from '@/components/auth/UserManagementPage';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PlanilhasConfigSection } from './PlanilhasConfigSection';
 import { ApiConfigSection } from './ApiConfigSection';
 import { MarketplaceSourceConfig } from './MarketplaceSourceConfig';
+import { SyncTestPanel } from './SyncTestPanel';
 
 export function ConfiguracoesPage() {
   const [tab, setTab] = useState('planilhas');
@@ -23,6 +24,7 @@ export function ConfiguracoesPage() {
           <TabsTrigger value="api"><Key className="w-4 h-4 mr-1.5" /> API / Tokens</TabsTrigger>
           <TabsTrigger value="usuarios"><Users className="w-4 h-4 mr-1.5" /> Usuários</TabsTrigger>
           <TabsTrigger value="fonte"><PlugZap className="w-4 h-4 mr-1.5" /> Fonte de Dados</TabsTrigger>
+          <TabsTrigger value="sync"><Zap className="w-4 h-4 mr-1.5" /> Sync Teste</TabsTrigger>
         </TabsList>
 
         {/* ═══ PLANILHAS TAB ═══ */}
@@ -43,6 +45,11 @@ export function ConfiguracoesPage() {
         {/* ═══ FONTE DE DADOS TAB ═══ */}
         <TabsContent value="fonte">
           <MarketplaceSourceConfig />
+        </TabsContent>
+
+        {/* ═══ SYNC TESTE TAB ═══ */}
+        <TabsContent value="sync">
+          <SyncTestPanel />
         </TabsContent>
       </Tabs>
     </div>
