@@ -84,6 +84,27 @@ function parseTinyDate(dateStr: string): string {
   return new Date().toISOString();
 }
 
+// ═══ COMISSÃO MARKETPLACE (tabela 2026) ═══════════════════════════════════
+// Se API retornar valor_comissao > 0, usar. Senão, usar esta tabela como fallback.
+function calcularComissao(plataforma: string, precoUnit: number, quantidade: number): number {
+  const totalItem = precoUnit * quantidade;
+  switch (plataforma.toLowerCase()) {
+    case 'shopee': {
+      // Tabela vigente março/2026 — por faixa de preço unitário
+      if (precoUnit < 8.00)   return totalItem * 0.50;
+      if (precoUnit < 80.00)  return (totalItem * 0.20) + (4.00 * quantidade);
+      if (precoUnit < 100.00) return (totalItem * 0.14) + (16.00 * quantidade);
+      if (precoUnit < 200.00) return (totalItem * 0.14) + (20.00 * quantidade);
+      return (totalItem * 0.14) + (26.00 * quantidade); // R$200+ (cap removido mar/2026)
+    }
+    case 'shein':   return totalItem * 0.16;
+    case 'amazon':  return totalItem * 0.11;
+    case 'tiktok':  return totalItem * 0.05;
+    case 'temu':    return totalItem * 0.18;
+    default:        return totalItem * 0.20;
+  }
+}
+
 function mapTinyStatus(situacao: string): string {
   const s = (situacao || '').toLowerCase();
   if (s.includes('faturado') || s.includes('pronto envio') || s.includes('enviado') || s.includes('entregue') || s.includes('aprovado')) {
@@ -93,6 +114,45 @@ function mapTinyStatus(situacao: string): string {
   if (s.includes('aberto') || s.includes('em andamento')) return 'payment_in_process';
   return s || 'unknown';
 }
+
+// Helper: chamar google-sheets edge function para append
+async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' = 'append') {
+  const url = Deno.env.get('SUPABASE_URL')!;
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const res = await fetch(`${url}/functions/v1/google-sheets`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({ action, spreadsheetId, range, values }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Sheets ${action} failed: ${err}`);
+  }
+  return res.json();
+}
+
+// Mapa de aba por plataforma
+const SHEET_MAP: Record<string, string> = {
+  shopee: 'Shopee_Vendas',
+  shein: 'Shopee_Vendas',
+  amazon: 'VENDASAZ',
+  tiktok: 'VENDASTK',
+  temu: 'VENDASTM',
+};
+
+// Mapa de nome de entrega por plataforma
+const DELIVERY_MAP: Record<string, string> = {
+  shopee: 'Shopee Xpress',
+  shein: 'Shein Logistics',
+  amazon: 'FBA',
+  tiktok: 'TikTok Shipping',
+  temu: 'Temu Logistics',
+};
+
+const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -438,6 +498,132 @@ Deno.serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ orders: allOrders }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ═══ SYNC VENDAS MARKETPLACE → GOOGLE SHEETS ═══════════════════════════
+    if (action === 'sync_vendas_marketplace') {
+      const body = await req.clone().then(r => r.json()).catch(() => ({}));
+      const { date_from, date_to, plataforma, spreadsheet_id, sheet_name } = body;
+
+      if (!date_from || !date_to || !plataforma) {
+        throw new Error('date_from, date_to e plataforma são obrigatórios');
+      }
+
+      const platLower = plataforma.toLowerCase();
+      const sheetTab = sheet_name || SHEET_MAP[platLower] || 'Shopee_Vendas';
+      const sheetId = spreadsheet_id || PLANILHA_MESTRA;
+      const platLabel = platLower === 'tiktok' ? 'TikTok Shop' :
+        platLower.charAt(0).toUpperCase() + platLower.slice(1);
+
+      const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      if (!accounts || accounts.length === 0) {
+        return new Response(JSON.stringify({ mensagem: 'Nenhuma conta Tiny ativa', linhas_escritas: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const allRows: any[][] = [];
+
+      for (const account of accounts) {
+        try {
+          let pagina = 1;
+          let hasMore = true;
+
+          while (hasMore) {
+            const data = await searchOrders(account.api_token, date_from, date_to, pagina);
+
+            if (data?.retorno?.status === 'Erro') {
+              if (data.retorno?.codigo_erro === '2') { hasMore = false; break; }
+              throw new Error(`Tiny error: ${data.retorno?.erros?.[0]?.erro || 'Unknown'}`);
+            }
+
+            const pedidos = data?.retorno?.pedidos || [];
+
+            for (const p of pedidos) {
+              const pedido = p.pedido;
+              const situacaoRaw = (pedido.situacao || '').toLowerCase();
+
+              // Ignorar cancelados
+              if (situacaoRaw.includes('cancelado')) continue;
+
+              const numEcom = (pedido.numero_ecommerce || '').toString();
+              const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
+
+              // Filtrar apenas marketplace desejado
+              if (!ecommerce.includes(platLower)) continue;
+
+              // Buscar detalhes
+              const orderId = pedido.id || pedido.numero;
+              let detail: any = null;
+              try { detail = await fetchOrderDetail(account.api_token, String(orderId)); } catch { /* skip */ }
+              const dp = detail || pedido;
+
+              const itens = dp.itens || [];
+              if (itens.length === 0) continue;
+
+              const dataVenda = (dp.data_pedido || '').replace(/-/g, '/');
+              const uf = dp.cliente?.uf || dp.cliente?.estado || '';
+
+              for (const itemWrapper of itens) {
+                const item = itemWrapper.item || itemWrapper;
+                const sku = item.codigo || '';
+                const qtd = parseInt(item.quantidade || '1');
+                const precoUnit = parseFloat(item.valor_unitario || '0');
+                const receita = precoUnit * qtd;
+
+                // Comissão: API tem prioridade, senão fallback
+                const comissaoApi = parseFloat(item.valor_comissao || '0');
+                const comissaoFinal = comissaoApi > 0
+                  ? comissaoApi
+                  : calcularComissao(platLower, precoUnit, qtd);
+
+                const frete = parseFloat(dp.valor_frete || '0');
+
+                // Linha no formato 19-colunas (col 0-18)
+                allRows.push([
+                  sku,                                      // 0  SKU PRINCIPAL
+                  sku,                                      // 1  SKU
+                  dataVenda,                                // 2  Data da venda
+                  dataVenda,                                // 3  EMISSAO
+                  `'${numEcom || orderId}`,                 // 4  N.º de venda
+                  platLabel,                                // 5  origem
+                  numEcom || '',                            // 6  # de anúncio
+                  'Padrão',                                 // 7  tipo de anuncio
+                  '',                                       // 8  Venda por publicidade
+                  DELIVERY_MAP[platLower] || 'Padrão',      // 9  Forma de entrega
+                  precoUnit,                                // 10 Preço unitário
+                  qtd,                                      // 11 Unidades
+                  receita,                                  // 12 Receita
+                  frete > 0 ? -frete : 0,                   // 13 Envio Seller
+                  0,                                        // 14 TARIFA
+                  -Math.abs(comissaoFinal),                  // 15 Tarifa de venda
+                  '',                                       // 16 ADS
+                  account.nome,                             // 17 conta
+                  uf,                                       // 18 Estado
+                ]);
+              }
+            }
+
+            const totalPaginas = data?.retorno?.numero_paginas || 1;
+            pagina++;
+            hasMore = pagina <= totalPaginas;
+          }
+        } catch (err) {
+          console.error(`[SYNC] Erro Tiny ${platLabel} ${account.nome}:`, err);
+        }
+      }
+
+      // Escrever no Google Sheets
+      if (allRows.length > 0) {
+        await invokeSheets(sheetId, `${sheetTab}!A:S`, allRows, 'append');
+      }
+
+      const msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}`;
+      console.log(`[SYNC] ${msg}`);
+      return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: allRows.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

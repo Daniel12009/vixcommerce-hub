@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { FileSpreadsheet, Users, Key, Wifi, Loader2, CheckCircle } from 'lucide-react';
+import { FileSpreadsheet, Users, Key, Wifi, Loader2, CheckCircle, PlugZap } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserManagementPage } from '@/components/auth/UserManagementPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { supabase } from '@/integrations/supabase/client';
 import { PlanilhasConfigSection } from './PlanilhasConfigSection';
 import { ApiConfigSection } from './ApiConfigSection';
+import { MarketplaceSourceConfig } from './MarketplaceSourceConfig';
 
 export function ConfiguracoesPage() {
   const [tab, setTab] = useState('planilhas');
@@ -21,6 +22,7 @@ export function ConfiguracoesPage() {
           <TabsTrigger value="planilhas"><FileSpreadsheet className="w-4 h-4 mr-1.5" /> Planilhas</TabsTrigger>
           <TabsTrigger value="api"><Key className="w-4 h-4 mr-1.5" /> API / Tokens</TabsTrigger>
           <TabsTrigger value="usuarios"><Users className="w-4 h-4 mr-1.5" /> Usuários</TabsTrigger>
+          <TabsTrigger value="fonte"><PlugZap className="w-4 h-4 mr-1.5" /> Fonte de Dados</TabsTrigger>
         </TabsList>
 
         {/* ═══ PLANILHAS TAB ═══ */}
@@ -36,6 +38,11 @@ export function ConfiguracoesPage() {
         {/* ═══ USUÁRIOS TAB ═══ */}
         <TabsContent value="usuarios">
           <UserManagementPage onBack={() => setTab('planilhas')} />
+        </TabsContent>
+
+        {/* ═══ FONTE DE DADOS TAB ═══ */}
+        <TabsContent value="fonte">
+          <MarketplaceSourceConfig />
         </TabsContent>
       </Tabs>
     </div>

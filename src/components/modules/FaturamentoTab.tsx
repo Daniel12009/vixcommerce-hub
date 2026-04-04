@@ -63,7 +63,7 @@ export function FaturamentoTab() {
 
   const [filterDias, setFilterDias] = useState(30);
   const [filterConta, setFilterConta] = useState('all');
-  const [filterCanal, setFilterCanal] = useState<'all' | 'varejo' | 'atacado'>('all');
+  const [filterCanal, setFilterCanal] = useState<'all' | 'marketplace' | 'atacado'>('all');
   const [sortField, setSortField] = useState('faturamento');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -311,10 +311,10 @@ export function FaturamentoTab() {
         <div className="flex items-center gap-1.5">
           <label className="text-xs text-muted-foreground font-medium">Canal:</label>
           <div className="flex rounded-lg overflow-hidden border border-border text-xs">
-            {(['all', 'varejo', 'atacado'] as const).map(v => (
-              <button key={v} onClick={() => setFilterCanal(v)}
-                className={`px-3 py-1.5 capitalize transition-colors ${filterCanal === v ? 'bg-indigo-600 text-white' : 'bg-card text-muted-foreground hover:text-foreground'}`}>
-                {v === 'all' ? 'Todos' : v.charAt(0).toUpperCase() + v.slice(1)}
+            {(['all', 'marketplace', 'atacado'] as const).map(v => (
+              <button key={v} onClick={() => setFilterCanal(v as any)}
+                className={`px-3 py-1.5 transition-colors ${filterCanal === v ? 'bg-indigo-600 text-white' : 'bg-card text-muted-foreground hover:text-foreground'}`}>
+                {v === 'all' ? 'Todos' : v === 'marketplace' ? 'Marketplaces' : 'Atacado'}
               </button>
             ))}
           </div>

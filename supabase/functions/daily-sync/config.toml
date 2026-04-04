@@ -1,0 +1,2 @@
+[functions.daily-sync]
+verify_jwt = false

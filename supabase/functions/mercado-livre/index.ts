@@ -115,13 +115,31 @@ async function mlFetchWrite(account: any, path: string, method: 'PUT' | 'POST', 
   try { return JSON.parse(text); } catch { return {}; }
 }
 
+// Helper: chamar google-sheets edge function
+async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' = 'append') {
+  const url = Deno.env.get('SUPABASE_URL')!;
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const res = await fetch(`${url}/functions/v1/google-sheets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({ action, spreadsheetId, range, values }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Sheets ${action} failed: ${err}`);
+  }
+  return res.json();
+}
+
+const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { action, account_id, sku, item_id, fields, description_text, new_item, query, category_id, promotion_id, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, query, category_id, promotion_id, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget, spreadsheet_id: reqSpreadsheetId, sheet_name: reqSheetName, sheet_name_prefix: reqSheetPrefix, ad_type: reqAdType } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -1178,6 +1196,552 @@ Deno.serve(async (req) => {
       });
       const text = await res.text();
       return new Response(text || '{"ok":true}', { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ═══ SYNC VENDAS ML → GOOGLE SHEETS ═══════════════════════════════════════
+    if (action === 'sync_vendas') {
+      if (!account_id) throw new Error('account_id is required');
+      const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Conta ML não encontrada');
+      const account = accounts[0];
+
+      let sellerId = account.seller_id;
+      if (!sellerId) {
+        const me = await mlFetch(account, '/users/me');
+        sellerId = me.id;
+        await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
+          method: 'PATCH', body: JSON.stringify({ seller_id: String(sellerId) }),
+        });
+      }
+
+      const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const dateTo = reqDateTo || dateFrom;
+      const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
+      const sheetTab = reqSheetName || 'VendasML';
+
+      // Convert dates to ISO for ML API
+      const isoFrom = `${dateFrom}T00:00:00.000-03:00`;
+      const isoTo = `${dateTo}T23:59:59.999-03:00`;
+
+      const allRows: any[][] = [];
+      let offset = 0;
+      const limit = 50;
+      let hasMore = true;
+
+      // Cache de shipments para evitar chamadas duplicadas
+      const shipmentCache: Record<string, any> = {};
+
+      while (hasMore) {
+        const ordersData = await mlFetch(
+          account,
+          `/orders/search?seller=${sellerId}&order.date_created.from=${encodeURIComponent(isoFrom)}&order.date_created.to=${encodeURIComponent(isoTo)}&sort=date_asc&limit=${limit}&offset=${offset}`
+        );
+        const results = ordersData.results || [];
+        const total = ordersData.paging?.total || 0;
+
+        for (const order of results) {
+          // Ignorar cancelados
+          if (order.status === 'cancelled') continue;
+
+          const orderItems = order.order_items || [];
+          if (orderItems.length === 0) continue;
+
+          // Pack ID logic
+          const packId = order.pack_id;
+          const isMultiItem = orderItems.length > 1;
+
+          // Buscar shipment para dados de frete
+          const shipmentId = order.shipping?.id;
+          let shipmentData: any = null;
+          if (shipmentId) {
+            if (shipmentCache[shipmentId]) {
+              shipmentData = shipmentCache[shipmentId];
+            } else {
+              try {
+                shipmentData = await mlFetch(account, `/shipments/${shipmentId}`);
+                shipmentCache[shipmentId] = shipmentData;
+              } catch { /* fallback */ }
+            }
+          }
+
+          const logisticType = shipmentData?.logistic_type || order.shipping?.logistic_type || '';
+          const city = shipmentData?.sender_address?.city?.name ||
+                       shipmentData?.origin?.shipping_address?.city?.name || '';
+          const shipCost = shipmentData?.cost || 0;
+          const buyerState = shipmentData?.receiver_address?.state?.name ||
+                            order.shipping?.receiver_address?.state?.name || '';
+
+          // Data da venda em formato BR (DD/MM/YYYY)
+          const dateCreated = new Date(order.date_created);
+          const spDate = new Date(dateCreated.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+          const dataVenda = `${String(spDate.getDate()).padStart(2, '0')}/${String(spDate.getMonth() + 1).padStart(2, '0')}/${spDate.getFullYear()}`;
+
+          // Tipo de anúncio
+          const listingType = orderItems[0]?.item?.listing_type_id || '';
+          const tipoAnuncio = listingType === 'gold_pro' ? 'Premium' :
+            listingType === 'gold_special' ? 'Clássico' : listingType || 'Padrão';
+
+          for (const oi of orderItems) {
+            const itemData = oi.item || {};
+            const qty = oi.quantity || 1;
+            const unitPrice = oi.unit_price || 0;
+            const valorItem = unitPrice * qty;
+            const saleFee = oi.sale_fee || 0;
+            const sku = itemData.seller_sku || itemData.seller_custom_field || '';
+
+            // ID do pedido (col 4)
+            let pedidoId: string;
+            if (packId && !isMultiItem) {
+              pedidoId = String(packId);
+            } else {
+              pedidoId = String(order.id);
+            }
+
+            // Frete (col 13) — regras completas ML
+            let frete = 0;
+            const isFlex = logisticType.toLowerCase().includes('flex');
+            const isFull = logisticType.toLowerCase().includes('fulfillment') ||
+                          logisticType.toLowerCase().includes('full');
+            const isCuritiba = city.toLowerCase().includes('curitiba');
+
+            if (isFlex) {
+              if (isCuritiba) {
+                frete = valorItem <= 79 ? 0 : -8.01;
+              } else {
+                frete = valorItem <= 79 ? -5.00 : -12.81;
+              }
+            } else if (isFull) {
+              frete = valorItem < 79 ? 0 : (shipCost > 0 ? -shipCost : 0);
+            } else {
+              // Coleta, Agência, Padrão
+              if (valorItem < 79) {
+                frete = 0;
+              } else if (shipCost > 0) {
+                frete = -shipCost;
+              } else {
+                frete = 0;
+              }
+            }
+
+            // Comissão ML (col 15): sale_fee × quantidade
+            const comissao = -(Math.abs(saleFee) * qty);
+
+            // Tarifa fixa (col 14)
+            const tarifa = oi.listing_fee || 0;
+
+            allRows.push([
+              sku,                                      // 0  SKU PRINCIPAL
+              sku,                                      // 1  SKU
+              dataVenda,                                // 2  Data da venda
+              dataVenda,                                // 3  EMISSAO
+              `'${pedidoId}`,                           // 4  N.º de venda
+              'Mercado Livre',                          // 5  origem
+              itemData.id || '',                        // 6  # de anúncio
+              tipoAnuncio,                              // 7  tipo de anuncio
+              '',                                       // 8  Venda por publicidade
+              logisticType || 'Padrão',                 // 9  Forma de entrega
+              unitPrice,                                // 10 Preço unitário
+              qty,                                      // 11 Unidades
+              valorItem,                                // 12 Receita
+              frete,                                    // 13 Envio Seller
+              tarifa > 0 ? -tarifa : 0,                 // 14 TARIFA
+              comissao,                                 // 15 Tarifa de venda
+              '',                                       // 16 ADS
+              account.nome,                             // 17 conta
+              buyerState,                               // 18 Estado
+            ]);
+          }
+        }
+
+        offset += limit;
+        hasMore = offset < total;
+      }
+
+      // Escrever no Google Sheets
+      if (allRows.length > 0) {
+        await invokeSheets(sheetId, `${sheetTab}!A:S`, allRows, 'append');
+      }
+
+      const msg = `ML Vendas ${account.nome}: ${allRows.length} linhas escritas em ${sheetTab} (${dateFrom})`;
+      console.log(`[SYNC] ${msg}`);
+      return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: allRows.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ═══ PERFORMANCE CATÁLOGO ML → GOOGLE SHEETS ═══════════════════════════
+    if (action === 'get_performance_catalog') {
+      if (!account_id) throw new Error('account_id is required');
+      const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Conta ML não encontrada');
+      const account = accounts[0];
+
+      let sellerId = account.seller_id;
+      if (!sellerId) {
+        const me = await mlFetch(account, '/users/me');
+        sellerId = me.id;
+        await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
+          method: 'PATCH', body: JSON.stringify({ seller_id: String(sellerId) }),
+        });
+      }
+
+      const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const dateTo = reqDateTo || dateFrom;
+      const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
+      const contaLabel = (account.nome || '').toUpperCase().replace(/\s+/g, '');
+      const sheetTab = reqSheetName || `PERF-${contaLabel}`;
+
+      // 1. Buscar itens Full catálogo
+      let itemIds: string[] = [];
+      let searchOffset = 0;
+      let searchHasMore = true;
+      while (searchHasMore) {
+        const searchData = await mlFetch(account,
+          `/users/${sellerId}/items/search?status=active&logistic_type=fulfillment&catalog_listing=true&limit=50&offset=${searchOffset}`
+        );
+        itemIds = itemIds.concat(searchData.results || []);
+        searchOffset += 50;
+        searchHasMore = searchOffset < (searchData.paging?.total || 0);
+      }
+
+      console.log(`[PERF] ${account.nome}: ${itemIds.length} itens catálogo Full`);
+
+      // 2. Buscar detalhes em batches de 20
+      const itemDetails: Record<string, any> = {};
+      for (let i = 0; i < itemIds.length; i += 20) {
+        const batch = itemIds.slice(i, i + 20).join(',');
+        if (!batch) continue;
+        const batchData = await mlFetch(account, `/items?ids=${batch}&attributes=id,title,permalink,seller_custom_field,variations,price`);
+        for (const d of batchData) {
+          if (d.code === 200 && d.body) {
+            const b = d.body;
+            const skuVar = (b.variations || []).map((v: any) => {
+              const sa = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
+              return sa?.value_name || '';
+            }).filter(Boolean);
+            itemDetails[b.id] = {
+              title: b.title || '',
+              sku: b.seller_custom_field || skuVar[0] || '',
+              price: b.price || 0,
+              permalink: b.permalink || '',
+            };
+          }
+        }
+      }
+
+      // 3. Buscar visitas
+      const visitCounts: Record<string, number> = {};
+      for (let i = 0; i < itemIds.length; i += 50) {
+        const batch = itemIds.slice(i, i + 50).join(',');
+        try {
+          const vData = await mlFetch(account, `/items/visits?ids=${batch}&date_from=${dateFrom}&date_to=${dateTo}`);
+          for (const [itemId, visits] of Object.entries(vData || {})) {
+            const totalVisits = Array.isArray(visits) ? visits.reduce((s: number, v: any) => s + (v.total || 0), 0) : 0;
+            visitCounts[itemId] = totalVisits;
+          }
+        } catch { /* visits API optional */ }
+      }
+
+      // 4. Buscar vendas do período
+      const salesCount: Record<string, { vendas: number; canceladas: number }> = {};
+      const isoFrom = `${dateFrom}T00:00:00.000-03:00`;
+      const isoTo = `${dateTo}T23:59:59.999-03:00`;
+      let offset = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const oData = await mlFetch(account,
+          `/orders/search?seller=${sellerId}&order.date_created.from=${encodeURIComponent(isoFrom)}&order.date_created.to=${encodeURIComponent(isoTo)}&limit=50&offset=${offset}`
+        );
+        for (const o of (oData.results || [])) {
+          for (const oi of (o.order_items || [])) {
+            const mlb = oi.item?.id;
+            if (!mlb) continue;
+            if (!salesCount[mlb]) salesCount[mlb] = { vendas: 0, canceladas: 0 };
+            if (o.status === 'cancelled') {
+              salesCount[mlb].canceladas += oi.quantity || 1;
+            } else {
+              salesCount[mlb].vendas += oi.quantity || 1;
+            }
+          }
+        }
+        offset += 50;
+        hasMore = offset < (oData.paging?.total || 0);
+      }
+
+      // 5. Montar linhas
+      const rows: any[][] = [];
+      const dataRef = new Date().toISOString().slice(0, 10);
+      for (const itemId of itemIds) {
+        const det = itemDetails[itemId] || {};
+        const vis = visitCounts[itemId] || 0;
+        const sales = salesCount[itemId] || { vendas: 0, canceladas: 0 };
+        const conv = vis > 0 ? ((sales.vendas / vis) * 100).toFixed(2) : '0.00';
+        rows.push([
+          'Mercado Livre',    // Plataforma
+          itemId,             // ID Anúncio
+          det.sku || '',      // SKU
+          det.title || '',    // Título
+          det.price || 0,     // Preço
+          vis,                // Visitas
+          sales.vendas,       // Vendas
+          sales.canceladas,   // Canceladas
+          `${conv}%`,         // Conversão %
+          det.permalink || '',// Link
+          account.nome,       // Conta
+          dataRef,            // Data Ref
+        ]);
+      }
+
+      // 6. OVERWRITE (não append) na aba PERF-{CONTA}
+      if (rows.length > 0) {
+        // Header
+        const header = ['Plataforma', 'ID Anúncio', 'SKU', 'Título', 'Preço', 'Visitas', 'Vendas', 'Canceladas', 'Conversão %', 'Link', 'Conta', 'Data Ref'];
+        await invokeSheets(sheetId, `${sheetTab}!A1`, [header, ...rows], 'write');
+      }
+
+      const msg = `Performance ${account.nome}: ${rows.length} itens em ${sheetTab}`;
+      console.log(`[PERF] ${msg}`);
+      return new Response(JSON.stringify({ mensagem: msg, itens_processados: rows.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ═══ VENDAS FULL 7 DIAS (V7) → GOOGLE SHEETS ══════════════════════════
+    if (action === 'get_vendas_full_7d') {
+      if (!account_id) throw new Error('account_id is required');
+      const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Conta ML não encontrada');
+      const account = accounts[0];
+
+      let sellerId = account.seller_id;
+      if (!sellerId) {
+        const me = await mlFetch(account, '/users/me');
+        sellerId = me.id;
+        await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
+          method: 'PATCH', body: JSON.stringify({ seller_id: String(sellerId) }),
+        });
+      }
+
+      const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
+      const contaLabel = (account.nome || '').toUpperCase().replace(/\s+/g, '');
+      const sheetTab = reqSheetName || `V7-${contaLabel}`;
+
+      // Últimos 7 dias
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const isoFrom = sevenDaysAgo.toISOString();
+      const isoTo = now.toISOString();
+
+      // Buscar pedidos paginados
+      const skuSales: Record<string, number> = {};
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const oData = await mlFetch(account,
+          `/orders/search?seller=${sellerId}&order.date_created.from=${encodeURIComponent(isoFrom)}&order.date_created.to=${encodeURIComponent(isoTo)}&limit=50&offset=${offset}`
+        );
+
+        for (const o of (oData.results || [])) {
+          if (o.status === 'cancelled') continue;
+
+          // Verificar se é fulfilled (Full)
+          const logType = o.shipping?.logistic_type || '';
+          const isFull = logType.toLowerCase().includes('fulfillment') || logType.toLowerCase().includes('full');
+          if (!isFull) continue;
+
+          for (const oi of (o.order_items || [])) {
+            const sku = oi.item?.seller_sku || oi.item?.seller_custom_field || '';
+            const qty = oi.quantity || 1;
+            if (sku) {
+              skuSales[sku] = (skuSales[sku] || 0) + qty;
+            } else {
+              // Para itens sem SKU resolvido, usar MLB como fallback
+              const mlbId = oi.item?.id || 'SEM_SKU';
+              skuSales[mlbId] = (skuSales[mlbId] || 0) + qty;
+            }
+          }
+        }
+
+        offset += 50;
+        hasMore = offset < (oData.paging?.total || 0);
+      }
+
+      // Resolver SKUs que vieram como MLB IDs
+      const unresolvedIds = Object.keys(skuSales).filter(k => k.startsWith('MLB'));
+      if (unresolvedIds.length > 0) {
+        for (let i = 0; i < unresolvedIds.length; i += 20) {
+          const batch = unresolvedIds.slice(i, i + 20).join(',');
+          try {
+            const batchData = await mlFetch(account, `/items?ids=${batch}&attributes=id,seller_custom_field,variations`);
+            for (const d of batchData) {
+              if (d.code === 200 && d.body) {
+                const skuVar = (d.body.variations || []).map((v: any) => {
+                  const sa = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
+                  return sa?.value_name || '';
+                }).filter(Boolean);
+                const resolvedSku = d.body.seller_custom_field || skuVar[0] || d.body.id;
+                if (resolvedSku !== d.body.id) {
+                  const qty = skuSales[d.body.id] || 0;
+                  delete skuSales[d.body.id];
+                  skuSales[resolvedSku] = (skuSales[resolvedSku] || 0) + qty;
+                }
+              }
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      // Montar linhas — SOBRESCREVE
+      const dataRef = new Date().toISOString().slice(0, 10);
+      const header = ['Conta', 'SKU', 'Unidades Vendidas (7d)', 'Data Ref'];
+      const rows: any[][] = Object.entries(skuSales)
+        .sort((a, b) => b[1] - a[1])
+        .map(([sku, qty]) => [account.nome, sku, qty, dataRef]);
+
+      if (rows.length > 0) {
+        await invokeSheets(sheetId, `${sheetTab}!A1`, [header, ...rows], 'write');
+      }
+
+      const msg = `V7 ${account.nome}: ${rows.length} SKUs em ${sheetTab}`;
+      console.log(`[V7] ${msg}`);
+      return new Response(JSON.stringify({ mensagem: msg, skus_processados: rows.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ═══ ADS FULL REPORT → GOOGLE SHEETS ════════════════════════════════════
+    if (action === 'get_ads_full_report') {
+      if (!account_id) throw new Error('account_id is required');
+      const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Conta ML não encontrada');
+      const account = accounts[0];
+
+      const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const dateTo = reqDateTo || dateFrom;
+      const adType = reqAdType || 'product_ads';
+      const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
+      const sheetAds = reqSheetName || 'ADS';
+      const sheetTotal = reqSheetPrefix || 'ADS-TOTAL-ML';
+
+      // Discover advertiser_id
+      let token = account.access_token;
+      if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+        token = await refreshToken(account);
+      }
+
+      const productId = adType === 'product_ads' ? 'PADS' :
+                        adType === 'brand_ads' ? 'BADS' : 'DISPLAY';
+      const apiVersion = adType === 'product_ads' ? '2' : '1';
+
+      const advRes = await fetch(`${ML_API}/advertising/advertisers?product_id=${productId}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
+      });
+      const advData = await advRes.json();
+      const mlbAdv = (advData?.advertisers || []).find((a: any) => a.site_id === 'MLB');
+
+      if (!mlbAdv) {
+        return new Response(JSON.stringify({ mensagem: `${adType} não habilitado para ${account.nome}`, linhas_ads: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const advId = mlbAdv.advertiser_id;
+      const siteId = mlbAdv.site_id;
+
+      const detailedRows: any[][] = [];
+      const summaryRows: any[][] = [];
+      const metricsFields = 'clicks,prints,cost,direct_amount,direct_items_quantity,total_amount';
+
+      // Loop dia a dia (obrigatório para ADS ML API)
+      const startDate = new Date(`${dateFrom}T12:00:00`);
+      const endDate = new Date(`${dateTo}T12:00:00`);
+
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dayStr = d.toISOString().slice(0, 10);
+        let dailyCost = 0;
+
+        try {
+          // Fetch ads for this specific day
+          const adsUrl = `${ML_API}/advertising/${siteId}/advertisers/${advId}/product_ads/ads/search?limit=50&offset=0&date_from=${dayStr}&date_to=${dayStr}&metrics=${metricsFields}&sort_by=cost&sort=desc`;
+          const adsRes = await fetch(adsUrl, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Api-Version': apiVersion },
+          });
+
+          if (adsRes.status === 401) {
+            token = await refreshToken(account);
+            const retryRes = await fetch(adsUrl, {
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Api-Version': apiVersion },
+            });
+            if (!retryRes.ok) continue;
+            var adsData = await retryRes.json();
+          } else if (!adsRes.ok) {
+            continue;
+          } else {
+            var adsData = await adsRes.json();
+          }
+
+          for (const ad of (adsData?.results || [])) {
+            const m = ad.metrics || {};
+            const investimento = m.cost || 0;
+            const receita = m.total_amount || m.direct_amount || 0;
+            const vendas = m.direct_items_quantity || 0;
+            const cliques = m.clicks || 0;
+            const impressoes = m.prints || 0;
+            const acos = receita > 0 ? ((investimento / receita) * 100).toFixed(2) : '0';
+            const roas = investimento > 0 ? (receita / investimento).toFixed(2) : '0';
+
+            dailyCost += investimento;
+
+            detailedRows.push([
+              adType === 'product_ads' ? 'PADS' : adType === 'brand_ads' ? 'BADS' : 'DISPLAY',
+              dayStr,                               // Data Ref
+              account.nome,                         // Conta
+              '',                                   // Campanha (optional)
+              ad.campaign_id || '',                  // ID Campanha
+              ad.item_id || '',                      // ID Anúncio
+              ad.title || '',                        // Título
+              investimento,                         // Investimento
+              receita,                              // Receita
+              vendas,                               // Vendas (Qtd)
+              `${acos}%`,                           // ACOS
+              roas,                                 // ROAS
+              cliques,                              // Cliques
+              impressoes,                           // Impressões
+              new Date().toISOString().slice(0, 19), // Ult. Atualização
+            ]);
+          }
+        } catch (err) {
+          console.error(`[ADS] Erro dia ${dayStr} ${account.nome}:`, err);
+        }
+
+        // Resumo diário
+        if (dailyCost > 0) {
+          summaryRows.push([dayStr, account.nome, dailyCost]);
+        }
+      }
+
+      // Escrever nas sheets
+      if (detailedRows.length > 0) {
+        await invokeSheets(sheetId, `${sheetAds}!A:O`, detailedRows, 'append');
+      }
+      if (summaryRows.length > 0) {
+        await invokeSheets(sheetId, `${sheetTotal}!A:C`, summaryRows, 'append');
+      }
+
+      const msg = `ADS ${account.nome}: ${detailedRows.length} linhas detalhadas, ${summaryRows.length} resumos`;
+      console.log(`[ADS-SYNC] ${msg}`);
+      return new Response(JSON.stringify({
+        mensagem: msg,
+        linhas_ads: detailedRows.length,
+        linhas_resumo: summaryRows.length,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     throw new Error(`Unknown action: ${action}`);
