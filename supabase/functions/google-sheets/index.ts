@@ -144,6 +144,21 @@ Deno.serve(async (req) => {
         throw new Error(`Sheets API update_cell failed [${res.status}]: ${err}`);
       }
       result = await res.json();
+    } else if (action === 'clear') {
+      // Clear a specific range (or entire sheet if range is just tab name)
+      const res = await fetch(
+        `${baseUrl}/values/${encodeURIComponent(range)}:clear`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({}),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Sheets API clear failed [${res.status}]: ${err}`);
+      }
+      result = await res.json();
     } else if (action === 'create_sheet') {
       // Create a new sheet tab if it doesn't exist
       const title = sheetTitle || 'VIX_BACKUP';

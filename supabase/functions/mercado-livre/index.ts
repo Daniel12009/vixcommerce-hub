@@ -115,6 +115,36 @@ async function mlFetchWrite(account: any, path: string, method: 'PUT' | 'POST', 
   try { return JSON.parse(text); } catch { return {}; }
 }
 
+async function invokeGsFunction(action: string, payload: any) {
+  const url = Deno.env.get('SUPABASE_URL')!;
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const gsUrl = `${url}/functions/v1/google-sheets`;
+  
+  // Normalize range logic for clear/read
+  let normalizedRange = payload.range;
+  if (normalizedRange) {
+    const bangIdx = normalizedRange.indexOf('!');
+    const rawTab = bangIdx > 0 ? normalizedRange.slice(0, bangIdx).replace(/^'+|'+$/g, '') : normalizedRange.replace(/^'+|'+$/g, '');
+    if (rawTab && bangIdx > 0) {
+      const cellRef = normalizedRange.slice(bangIdx + 1);
+      normalizedRange = `'${rawTab}'!${cellRef}`;
+    } else if (rawTab) {
+      normalizedRange = `'${rawTab}'`;
+    }
+  }
+
+  const res = await fetch(gsUrl, {
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({ action, ...payload, range: normalizedRange }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Sheets ${action} failed: ${err}`);
+  }
+  return res.json();
+}
+
 // Helper: chamar google-sheets edge function
 async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' = 'append') {
   const url = Deno.env.get('SUPABASE_URL')!;
@@ -1268,12 +1298,51 @@ Deno.serve(async (req) => {
           const orderItems = order.order_items || [];
           if (orderItems.length === 0) continue;
 
+          // Data da venda em formato BR (DD/MM/YYYY)
+          const dateCreated = new Date(order.date_created);
+          const spDate = new Date(dateCreated.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+          
+          // Verificar fuso BR
+          const dateStrFormat = `${spDate.getFullYear()}-${String(spDate.getMonth() + 1).padStart(2, '0')}-${String(spDate.getDate()).padStart(2, '0')}`;
+          if (dateStrFormat < dateFrom || dateStrFormat > dateTo) {
+            continue;
+          }
+          
+          const dataVenda = `${String(spDate.getDate()).padStart(2, '0')}/${String(spDate.getMonth() + 1).padStart(2, '0')}/${spDate.getFullYear()}`;
+          const dateClosed = new Date(order.date_closed || order.date_created);
+          const spDateClosed = new Date(dateClosed.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+          const dataEmissao = `${String(spDateClosed.getDate()).padStart(2, '0')}/${String(spDateClosed.getMonth() + 1).padStart(2, '0')}/${spDateClosed.getFullYear()}`;
+
           // Pack ID logic
-          const packId = order.pack_id;
-          const isMultiItem = orderItems.length > 1;
+          const vid = order.id;
+          const pid = order.pack_id;
+          let idReferencia = String(vid);
+
+          if (pid) {
+            // Conta items com esse pack_id no lote local (mesma order logic fallback) - ou API total
+            const qtdNoPack = results.filter((o: any) => o.pack_id === pid).length;
+            if (qtdNoPack === 1) {
+              idReferencia = String(pid); // pack único -> usa pack_id
+            }            
+          }
+          
+          const col4 = `'${idReferencia}`;
 
           // Buscar shipment para dados de frete
-          const shipmentId = order.shipping?.id;
+          let shipmentId = order.shipping?.id;
+          if (!shipmentId && pid) {
+            try {
+              const pData = await mlFetch(account, `/packs/${pid}`);
+              shipmentId = pData.shipment?.id;
+            } catch { /* ignore */ }
+          }
+          if (!shipmentId && !pid) {
+            try {
+              const osData = await mlFetch(account, `/orders/${vid}/shipments`);
+              shipmentId = osData.shipments?.[0]?.id;
+            } catch { /* ignore */ }
+          }
+          
           let shipmentData: any = null;
           if (shipmentId) {
             if (shipmentCache[shipmentId]) {
@@ -1286,22 +1355,31 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Frete params
+          const free_shipping = shipmentData?.free_shipping || false;
+          const cost_opt = shipmentData?.shipping_option?.cost || 0;
+          const list_cost = shipmentData?.shipping_option?.list_cost || 0;
+          const base_cost = shipmentData?.base_cost || 0;
+
+          let custo_api = 0;
+          if (free_shipping) {
+            custo_api = cost_opt;
+          } else {
+            const ref = list_cost > 0 ? list_cost : base_cost;
+            if (ref > 0) custo_api = Math.max(0, ref - cost_opt);
+          }
+
           const logisticType = shipmentData?.logistic_type || order.shipping?.logistic_type || '';
-          const city = shipmentData?.sender_address?.city?.name ||
-                       shipmentData?.origin?.shipping_address?.city?.name || '';
-          const shipCost = shipmentData?.cost || 0;
-          const buyerState = shipmentData?.receiver_address?.state?.name ||
-                            order.shipping?.receiver_address?.state?.name || '';
-
-          // Data da venda em formato BR (DD/MM/YYYY)
-          const dateCreated = new Date(order.date_created);
-          const spDate = new Date(dateCreated.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-          const dataVenda = `${String(spDate.getDate()).padStart(2, '0')}/${String(spDate.getMonth() + 1).padStart(2, '0')}/${spDate.getFullYear()}`;
-
-          // Tipo de anúncio
-          const listingType = orderItems[0]?.item?.listing_type_id || '';
-          const tipoAnuncio = listingType === 'gold_pro' ? 'Premium' :
-            listingType === 'gold_special' ? 'Clássico' : listingType || 'Padrão';
+          const tags = shipmentData?.tags || [];
+          const mode = shipmentData?.mode || '';
+          const city = shipmentData?.receiver_address?.city?.name || order.shipping?.receiver_address?.city?.name || '';
+          const buyerState = shipmentData?.receiver_address?.state?.name || shipmentData?.receiver_address?.city?.state_name || order.shipping?.receiver_address?.state?.name || '';
+          
+          let tipo_log = 'Mercado Envios';
+          if (logisticType === 'fulfillment') tipo_log = 'Mercado Envios Full';
+          else if (['self_service', 'flex'].includes(logisticType) || tags.includes('self_service_in') || mode === 'me1') tipo_log = 'Mercado Envios Flex';
+          else if (logisticType === 'cross_docking') tipo_log = 'Mercado Envios Coleta';
+          else if (['drop_off', 'xd_drop_off'].includes(logisticType)) tipo_log = 'Mercado Envios Agência';
 
           for (const oi of orderItems) {
             const itemData = oi.item || {};
@@ -1309,65 +1387,58 @@ Deno.serve(async (req) => {
             const unitPrice = oi.unit_price || 0;
             const valorItem = unitPrice * qty;
             const saleFee = oi.sale_fee || 0;
-            const sku = itemData.seller_sku || itemData.seller_custom_field || '';
+            const sku = itemData.seller_custom_field || itemData.seller_sku || itemData.id || '';
+            
+            // Tipo de anúncio
+            const listingType = oi.item?.listing_type_id || itemData.listing_type_id || '';
+            const tipoAnuncio = listingType.includes('gold_special') ? 'Clássico' : 'Premium';
 
-            // ID do pedido (col 4)
-            let pedidoId: string;
-            if (packId && !isMultiItem) {
-              pedidoId = String(packId);
-            } else {
-              pedidoId = String(order.id);
+            // Verificar se é Full pelo node_id do item se não for flex
+            if (tipo_log !== 'Mercado Envios Flex') {
+              const node = oi.item?.stock?.node_id || itemData.stock?.node_id;
+              if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
-
-            // Frete (col 13) — regras completas ML
-            let frete = 0;
-            const isFlex = logisticType.toLowerCase().includes('flex');
-            const isFull = logisticType.toLowerCase().includes('fulfillment') ||
-                          logisticType.toLowerCase().includes('full');
+            
+            // Frete do item
+            let custo_calc = 0;
             const isCuritiba = city.toLowerCase().includes('curitiba');
 
-            if (isFlex) {
+            if (tipo_log === 'Mercado Envios Flex') {
               if (isCuritiba) {
-                frete = valorItem <= 79 ? 0 : -8.01;
+                custo_calc = valorItem <= 79.00 ? 0 : 8.01;
               } else {
-                frete = valorItem <= 79 ? -5.00 : -12.81;
+                custo_calc = valorItem <= 79.00 ? 5.00 : 12.81;
               }
-            } else if (isFull) {
-              frete = valorItem < 79 ? 0 : (shipCost > 0 ? -shipCost : 0);
+            } else if (tipo_log === 'Mercado Envios Full') {
+              custo_calc = valorItem < 79.00 ? 0 : custo_api;
             } else {
-              // Coleta, Agência, Padrão
-              if (valorItem < 79) {
-                frete = 0;
-              } else if (shipCost > 0) {
-                frete = -shipCost;
-              } else {
-                frete = 0;
-              }
+              custo_calc = valorItem < 79.00 ? 0 : custo_api;
             }
 
-            // Comissão ML (col 15): sale_fee × quantidade
-            const comissao = -(Math.abs(saleFee) * qty);
+            if (tipo_log !== 'Mercado Envios Flex' && custo_api === 0) custo_calc = 0;
+            if (custo_calc > 0) custo_calc = custo_calc * -1;
+            custo_calc = Math.round(custo_calc * 100) / 100;
 
-            // Tarifa fixa (col 14)
-            const tarifa = oi.listing_fee || 0;
+            // Comissão ML (col 15): sale_fee × quantidade
+            const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
 
             allRows.push([
               sku,                                      // 0  SKU PRINCIPAL
               sku,                                      // 1  SKU
               dataVenda,                                // 2  Data da venda
-              dataVenda,                                // 3  EMISSAO
-              `'${pedidoId}`,                           // 4  N.º de venda
+              dataEmissao,                              // 3  EMISSAO
+              col4,                                     // 4  N.º de venda
               'Mercado Livre',                          // 5  origem
               itemData.id || '',                        // 6  # de anúncio
               tipoAnuncio,                              // 7  tipo de anuncio
               '',                                       // 8  Venda por publicidade
-              logisticType || 'Padrão',                 // 9  Forma de entrega
+              tipo_log,                                 // 9  Forma de entrega
               unitPrice,                                // 10 Preço unitário
               qty,                                      // 11 Unidades
               valorItem,                                // 12 Receita
-              frete,                                    // 13 Envio Seller
-              tarifa > 0 ? -tarifa : 0,                 // 14 TARIFA
-              comissao,                                 // 15 Tarifa de venda
+              custo_calc,                               // 13 Envio Seller
+              0,                                        // 14 TARIFA
+              comissao,                                 // 15 Tarifa de venda e impostos
               '',                                       // 16 ADS
               account.nome,                             // 17 conta
               buyerState,                               // 18 Estado
@@ -1537,11 +1608,23 @@ Deno.serve(async (req) => {
         ]);
       }
 
-      // 6. OVERWRITE (não append) na aba PERF-{CONTA}
+      // 6. Condicional APPEND (escrever header apenas se aba estiver vazia)
       if (rows.length > 0) {
-        // Header
+        let isAbaEmpty = true;
+        try {
+          const res = await invokeGsFunction('read', {
+            spreadsheetId: sheetId,
+            range: `${sheetTab}!A1:A1`
+          });
+          if (res.values && res.values.length > 0 && res.values[0] && res.values[0][0]) {
+            isAbaEmpty = false;
+          }
+        } catch { /* assume empty if error (sheet might not exist yet) */ }
+
         const header = ['Plataforma', 'ID Anúncio', 'SKU', 'Título', 'Preço', 'Visitas', 'Vendas', 'Canceladas', 'Conversão %', 'Link', 'Conta', 'Data Ref'];
-        await invokeSheets(sheetId, `${sheetTab}!A1`, [header, ...rows], 'write');
+        const finalValues = isAbaEmpty ? [header, ...rows] : rows;
+        
+        await invokeSheets(sheetId, `${sheetTab}!A:L`, finalValues, 'append');
       }
 
       const msg = `Performance ${account.nome}: ${rows.length} itens em ${sheetTab}`;
@@ -1572,11 +1655,13 @@ Deno.serve(async (req) => {
       const contaLabel = (account.nome || '').trim().toUpperCase();
       const sheetTab = reqSheetName || `V7-${contaLabel}`;
 
-      // Últimos 7 dias
-      const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const isoFrom = sevenDaysAgo.toISOString();
-      const isoTo = now.toISOString();
+      // Últimos 7 dias (fuso BR)
+      const agoraBR = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Sao_Paulo'}));
+      const dateFromDT = new Date(agoraBR);
+      dateFromDT.setDate(dateFromDT.getDate() - 7);
+
+      const isoFrom = `${dateFromDT.toISOString().slice(0,10)}T00:00:00.000-03:00`;
+      const isoTo = `${agoraBR.toISOString().slice(0,10)}T23:59:59.999-03:00`;
 
       // Buscar pedidos paginados
       const skuSales: Record<string, number> = {};
@@ -1597,13 +1682,13 @@ Deno.serve(async (req) => {
           if (!isFull) continue;
 
           for (const oi of (o.order_items || [])) {
-            const sku = oi.item?.seller_sku || oi.item?.seller_custom_field || '';
+            const sku = oi.item?.seller_sku || oi.item?.id || '';
             const qty = oi.quantity || 1;
-            if (sku) {
+            if (sku && !sku.startsWith('MLB')) {
               skuSales[sku] = (skuSales[sku] || 0) + qty;
             } else {
-              // Para itens sem SKU resolvido, usar MLB como fallback
-              const mlbId = oi.item?.id || 'SEM_SKU';
+              // Para itens sem SKU ou se a chave inicial for MLB
+              const mlbId = sku.startsWith('MLB') ? sku : (oi.item?.id || 'SEM_SKU');
               skuSales[mlbId] = (skuSales[mlbId] || 0) + qty;
             }
           }
@@ -1639,13 +1724,22 @@ Deno.serve(async (req) => {
       }
 
       // Montar linhas — SOBRESCREVE
-      const dataRef = new Date().toISOString().slice(0, 10);
+      const agora = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Sao_Paulo'}));
+      const dataRef = `${String(agora.getDate()).padStart(2, '0')}/${String(agora.getMonth() + 1).padStart(2, '0')}/${agora.getFullYear()}`;
+      
       const header = ['Conta', 'SKU', 'Unidades Vendidas (7d)', 'Data Ref'];
       const rows: any[][] = Object.entries(skuSales)
         .sort((a, b) => b[1] - a[1])
         .map(([sku, qty]) => [account.nome, sku, qty, dataRef]);
 
       if (rows.length > 0) {
+        try {
+          await invokeGsFunction('clear', {
+            spreadsheetId: sheetId,
+            range: sheetTab
+          });
+        } catch { /* ignora erro de clear se aba não existir */ }
+
         await invokeSheets(sheetId, `${sheetTab}!A1`, [header, ...rows], 'write');
       }
 
