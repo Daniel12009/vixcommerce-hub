@@ -673,6 +673,10 @@ Deno.serve(async (req) => {
         });
 
         const data = await res.json();
+        if (data?.retorno?.status === 'Erro' || data?.retorno?.status === 'ERRO') {
+          throw new Error(`API Tiny Erro: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
+        }
+
         const produtos = data?.retorno?.produtos || [];
 
         if (produtos.length === 0) {
@@ -683,9 +687,28 @@ Deno.serve(async (req) => {
         for (const pw of produtos) {
           const p = pw.produto || pw;
           const codigo = (p.codigo || '').trim();
-          const saldo = parseFloat(p.saldo || '0');
-          if (codigo && saldo > 0) {
-            allProducts.push([codigo, Math.round(saldo)]);
+          if (!codigo) continue;
+
+          // Obter estoque detalhado para este produto (Tiny não retorna na pesquisa)
+          try {
+            const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
+            const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: stockParams.toString(),
+            });
+            const sData = await sRes.json();
+            const saldoStr = sData?.retorno?.produto?.saldo;
+            const saldo = parseFloat(saldoStr || '0');
+
+            if (saldo > 0) {
+              allProducts.push([codigo, Math.round(saldo)]);
+            }
+
+            // Rate limit (Tiny is strict)
+            await new Promise(r => setTimeout(r, 200));
+          } catch (err) {
+            console.error(`Erro buscando estoque do ID ${p.id}:`, err);
           }
         }
 
