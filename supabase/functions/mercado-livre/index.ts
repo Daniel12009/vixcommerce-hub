@@ -1535,17 +1535,31 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 3. Buscar visitas
+      // 3. Buscar visitas (1 MLB por vez, endpoint não aceita lote)
       const visitCounts: Record<string, number> = {};
-      for (let i = 0; i < itemIds.length; i += 50) {
-        const batch = itemIds.slice(i, i + 50).join(',');
-        try {
-          const vData = await mlFetch(account, `/items/visits?ids=${batch}&date_from=${dateFrom}&date_to=${dateTo}`);
-          for (const [itemId, visits] of Object.entries(vData || {})) {
-            const totalVisits = Array.isArray(visits) ? visits.reduce((s: number, v: any) => s + (v.total || 0), 0) : 0;
-            visitCounts[itemId] = totalVisits;
-          }
-        } catch { /* visits API optional */ }
+      const date_from_str = dateFrom.slice(0, 10);
+      const date_to_str   = dateTo.slice(0, 10);
+
+      const batchSize = 20;
+      for (let i = 0; i < itemIds.length; i += batchSize) {
+        const batch = itemIds.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async (mlb) => {
+            try {
+              const url = `/items/visits?ids=${mlb}&date_from=${date_from_str}&date_to=${date_to_str}`;
+              const vData = await mlFetch(account, url);
+              if (Array.isArray(vData)) {
+                visitCounts[mlb] = vData[0]?.total_visits || 0;
+              } else if (typeof vData === 'object') {
+                visitCounts[mlb] = vData.total_visits || 0;
+              } else {
+                visitCounts[mlb] = 0;
+              }
+            } catch {
+              visitCounts[mlb] = 0;
+            }
+          })
+        );
       }
 
       // 4. Buscar vendas do período
