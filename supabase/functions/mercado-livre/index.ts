@@ -119,10 +119,31 @@ async function mlFetchWrite(account: any, path: string, method: 'PUT' | 'POST', 
 async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' = 'append') {
   const url = Deno.env.get('SUPABASE_URL')!;
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const res = await fetch(`${url}/functions/v1/google-sheets`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-    body: JSON.stringify({ action, spreadsheetId, range, values }),
+  const gsUrl = `${url}/functions/v1/google-sheets`;
+  const gsHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` };
+
+  // Normalize range: wrap tab name in single quotes (required for hyphens/spaces)
+  let normalizedRange = range;
+  const bangIdx = range.indexOf('!');
+  const rawTab = bangIdx > 0 ? range.slice(0, bangIdx).replace(/^'+|'+$/g, '') : '';
+  if (rawTab && bangIdx > 0) {
+    const cellRef = range.slice(bangIdx + 1);
+    normalizedRange = `'${rawTab}'!${cellRef}`;
+  }
+
+  // Auto-create sheet tab if it doesn't exist
+  if (rawTab) {
+    try {
+      await fetch(gsUrl, {
+        method: 'POST', headers: gsHeaders,
+        body: JSON.stringify({ action: 'create_sheet', spreadsheetId, sheetTitle: rawTab }),
+      });
+    } catch { /* tab may already exist — OK */ }
+  }
+
+  const res = await fetch(gsUrl, {
+    method: 'POST', headers: gsHeaders,
+    body: JSON.stringify({ action, spreadsheetId, range: normalizedRange, values }),
   });
   if (!res.ok) {
     const err = await res.text();
