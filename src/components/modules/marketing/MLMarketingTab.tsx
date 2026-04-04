@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Megaphone, TrendingUp, DollarSign, RefreshCw, Loader2, BarChart3, Target, Eye, MousePointerClick, Clock, Filter, Edit3, X, Save, Calendar, ChevronRight, AlertTriangle, Info } from 'lucide-react';
+import { Megaphone, TrendingUp, DollarSign, RefreshCw, Loader2, BarChart3, Target, Eye, MousePointerClick, Clock, Filter, Edit3, X, Save, Calendar, ChevronRight, AlertTriangle, Info, ShoppingCart } from 'lucide-react';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { formatBRL, formatPercent } from '@/lib/utils-vix';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell } from 'recharts';
