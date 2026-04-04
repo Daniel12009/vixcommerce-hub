@@ -1,0 +1,2 @@
+[functions.estoque-full-upload]
+verify_jwt = false

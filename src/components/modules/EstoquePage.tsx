@@ -9,6 +9,7 @@ import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { EnviosTab } from './EnviosTab';
 import { ExpedicaoTab } from './ExpedicaoTab';
 import { EmTransitoTab } from './EmTransitoTab';
+import { EstoqueFullUpload } from './EstoqueFullUpload';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, PieChart, Pie, Legend } from 'recharts';
 
 interface MergedStockRow {
@@ -322,6 +323,7 @@ export function EstoquePage() {
           <TabsTrigger value="expedicao-api">📦 Expedição (API)</TabsTrigger>
           <TabsTrigger value="em-transito">✈️ Em Trânsito (API)</TabsTrigger>
           <TabsTrigger value="envios">🚚 Envios (Planilha ML)</TabsTrigger>
+          <TabsTrigger value="importar-full">📤 Importar Full</TabsTrigger>
           <TabsTrigger value="transferencias">🔄 Transferências</TabsTrigger>
         </TabsList>
 
@@ -544,6 +546,10 @@ export function EstoquePage() {
 
         <TabsContent value="envios">
           <EnviosTab />
+        </TabsContent>
+
+        <TabsContent value="importar-full" className="mt-0">
+          <EstoqueFullUpload />
         </TabsContent>
 
         <TabsContent value="transferencias">
