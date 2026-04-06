@@ -172,12 +172,21 @@ export function EstoquePage() {
       tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
     });
 
-    return (estoqueFullItems || []).map(item => {
+    // Group by SKU+Conta to avoid duplicates
+    const grouped = new Map<string, { fullML: number; entradaPendente: number; emTransferencia: number; conta: string; sku: string }>();
+    (estoqueFullItems || []).forEach(item => {
       const sku = item.sku?.trim().toUpperCase() || '';
       const conta = item.conta || '';
-      const fullML = Number(item.aptasParaVenda || 0);
-      const entradaPendente = Number(item.entradaPendente || 0);
-      const emTransferencia = Number(item.emTransferencia || 0);
+      const key = `${sku}||${conta}`;
+      const cur = grouped.get(key) || { fullML: 0, entradaPendente: 0, emTransferencia: 0, conta, sku };
+      cur.fullML += Number(item.aptasParaVenda || 0);
+      cur.entradaPendente += Number(item.entradaPendente || 0);
+      cur.emTransferencia += Number(item.emTransferencia || 0);
+      grouped.set(key, cur);
+    });
+
+    return Array.from(grouped.values()).map(item => {
+      const { sku, conta, fullML, entradaPendente, emTransferencia } = item;
       const tinyLocal = tinyMap.get(sku) || 0;
       const vmd = vmdBySku.get(sku) || 0;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
