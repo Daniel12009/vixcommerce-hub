@@ -1328,24 +1328,12 @@ Deno.serve(async (req) => {
           
           const col4 = `'${idReferencia}`;
 
-          // Fetch full order details FIRST (search may lack shipment.id and listing_type_id)
-          let orderDetail: any = null;
-          try {
-            orderDetail = await mlFetch(account, `/orders/${vid}`);
-          } catch { /* use search data */ }
-
-          // Buscar shipment para dados de frete
-          let shipmentId = orderDetail?.shipping?.id || order.shipping?.id;
+          // Buscar shipment para dados de frete (idêntico ao Python consultar_frete)
+          let shipmentId = order.shipping?.id;
           if (!shipmentId && pid) {
             try {
               const pData = await mlFetch(account, `/packs/${pid}`);
               shipmentId = pData.shipment?.id;
-            } catch { /* ignore */ }
-          }
-          if (!shipmentId && !pid) {
-            try {
-              const osData = await mlFetch(account, `/orders/${vid}/shipments`);
-              shipmentId = osData.shipments?.[0]?.id;
             } catch { /* ignore */ }
           }
           
@@ -1361,48 +1349,35 @@ Deno.serve(async (req) => {
             }
           }
 
-          // ═══ FRETE: Idêntico ao Python consultar_frete ═══
-          // custo_vendedor = list_cost - cost; if < 0.01: 0
-          const list_cost = shipmentData?.shipping_option?.list_cost || 0;
-          const cost_opt = shipmentData?.shipping_option?.cost || 0;
-          let custo_vendedor = list_cost - cost_opt;
+          // ═══ FRETE (Python: consultar_frete) ═══
+          // custo_vendedor = etiqueta_total - pago_pelo_comprador
+          const etiqueta_total = parseFloat(shipmentData?.shipping_option?.list_cost || 0) || 0;
+          const pago_pelo_comprador = parseFloat(shipmentData?.shipping_option?.cost || 0) || 0;
+          let custo_vendedor = etiqueta_total - pago_pelo_comprador;
           if (custo_vendedor < 0.01) custo_vendedor = 0;
 
-          // Construir mapa custos_por_item (igual ao Python: dividir igualmente por shipping_items)
+          // custos_por_item: dividir igualmente por len(shipping_items) (Python exato)
           const custos_por_item: Record<string, number> = {};
-          const shippingItems: any[] = shipmentData?.shipping_items || [];
-          if (shippingItems.length > 0 && custo_vendedor > 0) {
-            const valor_por_item = custo_vendedor / shippingItems.length;
-            for (const it of shippingItems) {
+          const items_shipping: any[] = shipmentData?.shipping_items || [];
+          if (items_shipping.length > 0 && custo_vendedor > 0) {
+            const valor_por_item = custo_vendedor / items_shipping.length;
+            for (const it of items_shipping) {
               custos_por_item[String(it.id)] = valor_por_item;
             }
           }
 
-          const logisticType = shipmentData?.logistic_type || orderDetail?.shipping?.logistic_type || order.shipping?.logistic_type || '';
+          // Logistic type (Python: consultar_frete)
+          const logisticType = shipmentData?.logistic_type || '';
           const tags = shipmentData?.tags || [];
           const mode = shipmentData?.mode || '';
-          const city = shipmentData?.receiver_address?.city?.name || order.shipping?.receiver_address?.city?.name || '';
-          const buyerState = shipmentData?.receiver_address?.state?.name || shipmentData?.receiver_address?.city?.state_name || order.shipping?.receiver_address?.state?.name || '';
+          const cidade_dest = shipmentData?.receiver_address?.city?.name || '';
+          const buyerState = shipmentData?.receiver_address?.state?.name || shipmentData?.receiver_address?.city?.state_name || '';
           
           let tipo_log = 'Mercado Envios';
           if (logisticType === 'fulfillment') tipo_log = 'Mercado Envios Full';
           else if (['self_service', 'flex'].includes(logisticType) || tags.includes('self_service_in') || mode === 'me1') tipo_log = 'Mercado Envios Flex';
           else if (logisticType === 'cross_docking') tipo_log = 'Mercado Envios Coleta';
           else if (['drop_off', 'xd_drop_off'].includes(logisticType)) tipo_log = 'Mercado Envios Agência';
-
-          // Buscar listing_type_id dos items via API batch (orders/search não retorna)
-          const uniqueItemIds = [...new Set(orderItems.map((oi: any) => oi.item?.id).filter(Boolean))];
-          const itemListingTypes: Record<string, string> = {};
-          if (uniqueItemIds.length > 0) {
-            try {
-              const batchData = await mlFetch(account, `/items?ids=${uniqueItemIds.join(',')}&attributes=id,listing_type_id`);
-              for (const d of (Array.isArray(batchData) ? batchData : [])) {
-                if (d.code === 200 && d.body) {
-                  itemListingTypes[d.body.id] = d.body.listing_type_id || '';
-                }
-              }
-            } catch { /* fallback */ }
-          }
 
           for (const oi of orderItems) {
             const itemData = oi.item || {};
@@ -1411,22 +1386,33 @@ Deno.serve(async (req) => {
             const valorItem = unitPrice * qty;
             const saleFee = oi.sale_fee || 0;
             const sku = itemData.seller_custom_field || itemData.seller_sku || itemData.id || '';
-            const mlId = itemData.id || '';
+            const mlId = String(itemData.id || '');
             
-            // Tipo de anúncio — items batch API > order_item > order detail
-            const detailOi = orderDetail?.order_items?.find((fo: any) => (fo.item?.id === mlId));
-            const listingType = itemListingTypes[mlId] || oi.listing_type_id || detailOi?.listing_type_id || '';
+            // Tipo de anúncio — direto do order_item (Python: item.get('listing_type_id'))
+            const listingType = String(oi.listing_type_id || '');
             const tipoAnuncio = listingType.includes('gold_special') ? 'Clássico' : 'Premium';
 
-            // Verificar se é Full pelo node_id
+            // Full check pelo node_id (Python: item.get('stock', {}).get('node_id'))
             if (tipo_log !== 'Mercado Envios Flex') {
-              const node = oi.item?.stock?.node_id || itemData.stock?.node_id;
+              const node = oi.stock?.node_id || itemData.stock?.node_id;
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
             
-            // ═══ FRETE POR ITEM (idêntico ao Python) ═══
-            // custos_por_item[ml_id] → custo deste item (dividido igualmente)
-            const custo_calc = custos_por_item[mlId] ? Math.round(-custos_por_item[mlId] * 100) / 100 : 0;
+            // ═══ FRETE POR ITEM (Python: dict_custos.get(str(ml_id), 0.0)) ═══
+            let custo_calc = 0;
+            if (tipo_log === 'Mercado Envios Flex') {
+              const cidade_limpa = String(cidade_dest).trim().toLowerCase();
+              if (cidade_limpa.includes('curitiba')) {
+                custo_calc = valorItem <= 79.00 ? 0 : 8.01;
+              } else {
+                custo_calc = valorItem <= 79.00 ? 5.00 : 12.81;
+              }
+            } else {
+              custo_calc = custos_por_item[mlId] || 0;
+            }
+            // Negativo e arredondado (Python: round(custo_calc * -1, 2))
+            custo_calc = Math.round(custo_calc * -1 * 100) / 100;
+            if (custo_calc === -0) custo_calc = 0;
 
             // Comissão ML (col 15): sale_fee × quantidade
             const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
