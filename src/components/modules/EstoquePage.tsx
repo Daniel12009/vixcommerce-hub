@@ -211,27 +211,21 @@ export function EstoquePage() {
   const skusEntradaPendente = mergedData.filter(r => r.entradaPendente > 0).length;
   const skusEmTransferencia = mergedData.filter(r => r.emTransferencia > 0).length;
 
-  // Health per account
+  // Health per account — use deduplicated perAccountData
   const accountHealth = useMemo(() => {
     const map = new Map<string, { total: number; ruptura: number; critico: number; ok: number; totalFull: number }>();
-    (estoqueFullItems || []).forEach(item => {
-      if (!item.conta) return;
-      const sku = item.sku?.trim().toUpperCase();
-      if (!sku) return;
-      const entry = map.get(item.conta) || { total: 0, ruptura: 0, critico: 0, ok: 0, totalFull: 0 };
+    perAccountData.forEach(row => {
+      if (!row.conta) return;
+      const entry = map.get(row.conta) || { total: 0, ruptura: 0, critico: 0, ok: 0, totalFull: 0 };
       entry.total++;
-      entry.totalFull += Number(item.aptasParaVenda || 0);
-      const fullML = Number(item.aptasParaVenda || 0);
-      const vmd = vmdBySku.get(sku) || 0;
-      const cob = vmd > 0 ? fullML / vmd : 999;
-      const skuCob = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
-      if (fullML <= 0) entry.ruptura++;
-      else if (cob < skuCob) entry.critico++;
+      entry.totalFull += row.fullML;
+      if (row.status === 'ruptura') entry.ruptura++;
+      else if (row.status === 'critico') entry.critico++;
       else entry.ok++;
-      map.set(item.conta, entry);
+      map.set(row.conta, entry);
     });
     return map;
-  }, [estoqueFullItems, vmdBySku, diasCoberturaAlvo, skuCoberturaOverrides]);
+  }, [perAccountData]);
 
   // Charts data
   const statusDistribution = useMemo(() => [
