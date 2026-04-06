@@ -172,12 +172,21 @@ export function EstoquePage() {
       tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
     });
 
-    return (estoqueFullItems || []).map(item => {
+    // Group by SKU+Conta to avoid duplicates
+    const grouped = new Map<string, { fullML: number; entradaPendente: number; emTransferencia: number; conta: string; sku: string }>();
+    (estoqueFullItems || []).forEach(item => {
       const sku = item.sku?.trim().toUpperCase() || '';
       const conta = item.conta || '';
-      const fullML = Number(item.aptasParaVenda || 0);
-      const entradaPendente = Number(item.entradaPendente || 0);
-      const emTransferencia = Number(item.emTransferencia || 0);
+      const key = `${sku}||${conta}`;
+      const cur = grouped.get(key) || { fullML: 0, entradaPendente: 0, emTransferencia: 0, conta, sku };
+      cur.fullML += Number(item.aptasParaVenda || 0);
+      cur.entradaPendente += Number(item.entradaPendente || 0);
+      cur.emTransferencia += Number(item.emTransferencia || 0);
+      grouped.set(key, cur);
+    });
+
+    return Array.from(grouped.values()).map(item => {
+      const { sku, conta, fullML, entradaPendente, emTransferencia } = item;
       const tinyLocal = tinyMap.get(sku) || 0;
       const vmd = vmdBySku.get(sku) || 0;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
@@ -511,6 +520,7 @@ export function EstoquePage() {
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('emTransferencia')}>Transf.{sortIcon('emTransferencia')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('sugestaoEnvio')}>Sugestão{sortIcon('sugestaoEnvio')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('coberturaDias')}>Cobert.{sortIcon('coberturaDias')}</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Cobert. Alvo</th>
                         <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Status</th>
                       </tr>
                     </thead>
@@ -526,15 +536,18 @@ export function EstoquePage() {
                           <td className="px-3 py-2.5 text-right text-muted-foreground">{row.entradaPendente || '—'}</td>
                           <td className="px-3 py-2.5 text-right text-muted-foreground">{row.emTransferencia || '—'}</td>
                           <td className={`px-3 py-2.5 text-right font-semibold ${row.sugestaoEnvio > 0 ? 'text-[hsl(var(--vix-danger))]' : 'text-[hsl(var(--vix-success))]'}`}>{row.sugestaoEnvio > 0 ? `-${row.sugestaoEnvio}` : '0'}</td>
-                          <td className={`px-3 py-2.5 text-right font-medium ${row.coberturaDias <= 0 ? 'text-[hsl(var(--vix-danger))]' : row.coberturaDias < diasCoberturaAlvo ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-success))]'}`}>
+                          <td className={`px-3 py-2.5 text-right font-medium ${row.coberturaDias <= 0 ? 'text-[hsl(var(--vix-danger))]' : row.coberturaDias < (row.customCobertura ?? diasCoberturaAlvo) ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-success))]'}`}>
                             {row.coberturaDias >= 999 ? '∞' : `${row.coberturaDias}d`}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-muted-foreground font-medium">
+                            {row.customCobertura ?? diasCoberturaAlvo}d
                             {row.customCobertura && <span className="text-[9px] text-[hsl(var(--vix-info))] ml-0.5">⚙</span>}
                           </td>
                           <td className="px-3 py-2.5 text-center">{statusBadge(row.status)}</td>
                         </tr>
                       ))}
                       {displayData.length === 0 && (
-                        <tr><td colSpan={11} className="py-8 text-center text-muted-foreground text-sm">{searchTerm || filterStatus !== 'all' ? 'Nenhum SKU encontrado com os filtros aplicados' : 'Nenhum dado disponível'}</td></tr>
+                        <tr><td colSpan={12} className="py-8 text-center text-muted-foreground text-sm">{searchTerm || filterStatus !== 'all' ? 'Nenhum SKU encontrado com os filtros aplicados' : 'Nenhum dado disponível'}</td></tr>
                       )}
                     </tbody>
                   </table>
