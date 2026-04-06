@@ -328,18 +328,6 @@ async function processarVendaMLSingle(
       } catch { /* ignorar */ }
     }
 
-    if (!sid && !pid) {
-      try {
-        const rs = await fetch(`${ML_API}/orders/${vid}/shipments`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (rs.ok) {
-          const sData = await rs.json();
-          const shipments = sData.shipments || [];
-          if (shipments.length > 0) sid = shipments[0].id;
-        }
-      } catch { /* ignorar */ }
-    }
 
     const { custosPorItem, estado: estadoFrete, tipo_log: tipoLogInicial, cidade_dest } =
       await consultarFrete(sid, token, account);
