@@ -315,13 +315,7 @@ async function processarVendaMLSingle(
     const pid = venda.pack_id;
     let sid = venda.shipping?.id;
 
-    let id_referencia_pedido = String(vid);
-    if (pid) {
-      const qtd_no_carrinho = contagemPacks[String(pid)] || 0;
-      if (qtd_no_carrinho === 1) {
-        id_referencia_pedido = String(pid);
-      }
-    }
+    const id_referencia_pedido = pid ? String(pid) : String(vid);
 
     if (!sid && pid) {
       try {
