@@ -372,7 +372,7 @@ async function processarVendaMLSingle(
       if (!estado) estado = 'Não Identificado';
 
       const fee = parseFloat(String(item.sale_fee ?? 0)) || 0;
-      const fee_total_neg = fee > 0 ? -1 * (fee * qtd) : (fee * qtd);
+      const fee_total_neg = -1 * (fee * qtd);
 
       // Bug fix: prefixar datas com apóstrofo para forçar texto no Sheets
       const data_criacao = `'${formatarDataBR(venda.date_created || '')}`;
