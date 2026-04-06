@@ -1356,12 +1356,15 @@ Deno.serve(async (req) => {
           }
 
           // Frete params
-          const free_shipping = shipmentData?.free_shipping || false;
           const cost_opt = shipmentData?.shipping_option?.cost || 0;
           const list_cost = shipmentData?.shipping_option?.list_cost || 0;
           const base_cost = shipmentData?.base_cost || 0;
+          // cost_components.ratio is the actual seller shipping cost charged by ML
+          const ratio_cost = shipmentData?.cost_components?.ratio || 0;
 
+          // custo_api fallback (for Flex or when ratio is not available)
           let custo_api = 0;
+          const free_shipping = shipmentData?.free_shipping || false;
           if (free_shipping) {
             custo_api = cost_opt;
           } else {
@@ -1399,23 +1402,22 @@ Deno.serve(async (req) => {
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
             
-            // Frete do item
+            // Frete do item — usa cost_components.ratio (custo real cobrado pelo ML)
             let custo_calc = 0;
             const isCuritiba = city.toLowerCase().includes('curitiba');
 
             if (tipo_log === 'Mercado Envios Flex') {
+              // Flex mantém regra própria (não tem ratio confiável)
               if (isCuritiba) {
                 custo_calc = valorItem <= 79.00 ? 0 : 8.01;
               } else {
                 custo_calc = valorItem <= 79.00 ? 5.00 : 12.81;
               }
-            } else if (tipo_log === 'Mercado Envios Full') {
-              custo_calc = valorItem < 79.00 ? 0 : custo_api;
             } else {
-              custo_calc = valorItem < 79.00 ? 0 : custo_api;
+              // Full, Coleta, Agência — usar ratio real da API
+              custo_calc = ratio_cost > 0 ? ratio_cost : custo_api;
             }
 
-            if (tipo_log !== 'Mercado Envios Flex' && custo_api === 0) custo_calc = 0;
             if (custo_calc > 0) custo_calc = custo_calc * -1;
             custo_calc = Math.round(custo_calc * 100) / 100;
 
