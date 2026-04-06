@@ -71,21 +71,22 @@ Deno.serve(async (req) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: any[][] = utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // Log das primeiras 5 linhas para debug
-    for (let i = 0; i < Math.min(rows.length, 5); i++) {
-      console.log(`[estoque-full-upload] Row ${i}:`, JSON.stringify(rows[i]?.slice(0, 15)));
-    }
-
-    // Encontrar a linha de cabeçalho
-    const HEADER_KEYWORDS = ['sku', 'publicación', 'publicacao', 'título', 'titulo', 'stock', 'disponible', 'tamaño', 'tamanho'];
+    // ML Full export: cabeçalho nas linhas 10-11 (merged), dados a partir da linha 13 (index 12)
+    // Colunas fixas do export ML:
+    // A=Código ML, B=Código universal, C=SKU, D=# Anúncio, E=Agrupador, F=Produto, G=Tamanho,
+    // H=Tipo de produto, I=Status do anúncio, J=Oferece Full, K=Vendas últimos 30 dias,
+    // L=Unidades que afetam métrica, M=Entrada pendente, N=Em transferência, ...
+    
+    // Buscar header row dinamicamente (procura nas primeiras 15 linhas)
+    const HEADER_KEYWORDS = ['sku', 'produto', 'tamanho', 'status do anúncio', 'código ml', 'entrada pendente'];
     let headerRowIdx = -1;
     let headers: string[] = [];
-    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
       const row = rows[i];
       if (!row) continue;
       const rowStrs = row.map((c: any) => String(c ?? '').trim());
       const rowLower = rowStrs.map(s => s.toLowerCase());
-      // Match if at least 2 header keywords are found in this row
       const matches = HEADER_KEYWORDS.filter(kw => rowLower.some(h => h.includes(kw)));
       if (matches.length >= 2) {
         headerRowIdx = i;
@@ -94,40 +95,53 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Se não achou por keywords, usa fallback fixo: cabeçalho na linha 10 (index 9)
     if (headerRowIdx < 0) {
-      // Fallback: tenta cada linha procurando pelo menos 1 keyword
-      for (let i = 0; i < Math.min(rows.length, 10); i++) {
-        const row = rows[i];
-        if (!row) continue;
-        const rowStrs = row.map((c: any) => String(c ?? '').trim());
-        const rowLower = rowStrs.map(s => s.toLowerCase());
-        if (HEADER_KEYWORDS.some(kw => rowLower.some(h => h.includes(kw)))) {
-          headerRowIdx = i;
-          headers = rowStrs;
-          break;
+      // Tenta linhas 9, 10, 11 como possíveis cabeçalhos
+      for (const tryIdx of [9, 10, 11]) {
+        if (tryIdx < rows.length && rows[tryIdx]) {
+          const rowStrs = rows[tryIdx].map((c: any) => String(c ?? '').trim());
+          if (rowStrs.some(h => h.toLowerCase().includes('sku') || h.toLowerCase().includes('produto'))) {
+            headerRowIdx = tryIdx;
+            headers = rowStrs;
+            break;
+          }
         }
       }
     }
 
-    if (headerRowIdx < 0) {
-      throw new Error(`Cabeçalho não encontrado nas 10 primeiras linhas. Primeiras linhas: ${JSON.stringify(rows.slice(0, 3).map(r => r?.slice(0, 8)))}`);
+    // Log para debug
+    console.log(`[estoque-full-upload] headerRowIdx=${headerRowIdx}, headers=${JSON.stringify(headers?.slice(0, 15))}`);
+    for (let i = 0; i < Math.min(rows.length, 3); i++) {
+      console.log(`[estoque-full-upload] Row ${i}:`, JSON.stringify(rows[i]?.slice(0, 8)));
     }
 
-    console.log(`[estoque-full-upload] Header na linha ${headerRowIdx}:`, JSON.stringify(headers));
+    // Mapear colunas pelo nome do cabeçalho
+    let colSku = findCol(headers, 'sku');
+    const colTamanho = findCol(headers, 'tamaño', 'tamanho');
+    const colStatus = findCol(headers, 'status do anúncio', 'status', 'estado');
+    const colEntradaPendente = findCol(headers, 'entrada pendente', 'entrada pendiente');
+    const colTransferencia = findCol(headers, 'em transferência', 'en transferencia', 'transferencia', 'transferência');
+    const colDevolucao = findCol(headers, 'devolvidas pelo comprador', 'devueltas', 'devolv');
+    const colAptas = findCol(headers, 'aptas para venda', 'aptas para la venta', 'aptas');
+    const colEspacioFull = findCol(headers, 'unidades que ocupan espacio en full', 'espacio en full', 'espaço full', 'ocupan espacio');
 
-    // Mapear colunas pelo nome
-    const colSku = findCol(headers, 'sku');
-    const colTamanho = findCol(headers, 'tamaño', 'tamanho', 'size');
-    const colStatus = findCol(headers, 'estado de la publicación', 'status', 'estado');
-    const colEntradaPendente = findCol(headers, 'entrada pendiente', 'entrada pendente', 'inbound');
-    const colTransferencia = findCol(headers, 'en transferencia', 'em transferência', 'transferencia');
-    const colDevolucao = findCol(headers, 'devueltas por el comprador', 'devolvidas pelo comprador', 'devolv');
-    const colAptas = findCol(headers, 'aptas para la venta', 'aptas para venda', 'aptas');
-    const colEspacioFull = findCol(headers, 'unidades que ocupan espacio en full', 'espacio en full', 'espaço full');
-
-    if (colSku < 0) {
-      throw new Error(`Coluna "SKU" não encontrada no cabeçalho. Colunas encontradas: ${headers.join(', ')}`);
+    // Fallback: se não achou cabeçalho nem SKU, usa índices fixos do export padrão ML
+    if (headerRowIdx < 0 || colSku < 0) {
+      console.log('[estoque-full-upload] Usando mapeamento fixo do export ML');
+      headerRowIdx = 11; // dados começam na linha 13 (index 12), header é 12 (index 11)
+      colSku = 3; // Coluna D = SKU
     }
+
+    // Pular linhas vazias entre header e dados (ex: linha 12 pode ser vazia)
+    let dataStartIdx = headerRowIdx + 1;
+    while (dataStartIdx < rows.length) {
+      const row = rows[dataStartIdx];
+      if (row && row.some((c: any) => c != null && String(c).trim() !== '')) break;
+      dataStartIdx++;
+    }
+
+    console.log(`[estoque-full-upload] colSku=${colSku}, dataStart=${dataStartIdx}`);
 
     const dadosNovos: any[][] = [];
 
