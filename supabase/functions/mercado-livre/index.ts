@@ -1421,6 +1421,8 @@ Deno.serve(async (req) => {
             if (custo_calc > 0) custo_calc = custo_calc * -1;
             custo_calc = Math.round(custo_calc * 100) / 100;
 
+            console.log(`[FRETE DEBUG] SKU=${sku} valor=${valorItem} tipo=${tipo_log} ratio=${ratio_cost} custo_api=${custo_api} base_cost=${base_cost} cost_opt=${cost_opt} list_cost=${list_cost} => custo_calc=${custo_calc}`);
+
             // Comissão ML (col 15): sale_fee × quantidade
             const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
 
