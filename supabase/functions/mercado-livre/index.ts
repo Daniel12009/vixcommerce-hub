@@ -250,10 +250,22 @@ async function consultarFrete(
 
     const d = await res.json();
 
-    // Python doc 27: etiqueta_total = list_cost, pago = cost, custo = etiqueta - pago
+    // Debug log para verificar valores da API
+    console.log('[FRETE]', shipId, {
+      list_cost: d.shipping_option?.list_cost,
+      cost: d.shipping_option?.cost,
+      base_cost: d.base_cost,
+      free_shipping: d.free_shipping,
+      shipping_items: d.shipping_items?.length,
+    });
+
     const etiqueta_total = parseFloat(String(d.shipping_option?.list_cost ?? 0)) || 0;
     const pago_pelo_comprador = parseFloat(String(d.shipping_option?.cost ?? 0)) || 0;
-    let custo_vendedor = etiqueta_total - pago_pelo_comprador;
+    const base_cost = parseFloat(String(d.base_cost ?? 0)) || 0;
+
+    // Se list_cost = 0, usar base_cost como fallback
+    const referencia = etiqueta_total > 0 ? etiqueta_total : base_cost;
+    let custo_vendedor = Math.max(0, referencia - pago_pelo_comprador);
     if (custo_vendedor < 0.01) custo_vendedor = 0;
 
     // Dividir por item (dict)
@@ -299,7 +311,8 @@ async function processarVendaMLSingle(
   dtIni: Date,
   dtFim: Date,
   contagemPacks: Record<string, number>,
-  sellerId: string | number
+  sellerId: string | number,
+  listingTypeMap: Record<string, string> = {}
 ): Promise<any[][]> {
   try {
     if (venda.status === 'cancelled') return [];
@@ -408,8 +421,9 @@ async function processarVendaMLSingle(
       const data_fechamento = `'${formatarDataBR(venda.date_closed || '')}`;
       const id_venda_str = `'${id_referencia_pedido}`;
 
-      const listing_type_id = item.listing_type_id || item.item?.listing_type_id || item.item?.listing_type?.id || '';
-      console.log('[listing_type_id]', item.listing_type_id, item.item?.listing_type_id, 'final:', listing_type_id);
+      // Prioridade: batch lookup > order_item > item.item
+      const listing_type_id = listingTypeMap[ml_id] || item.listing_type_id || item.item?.listing_type_id || item.item?.listing_type?.id || '';
+      console.log('[listing_type_id]', ml_id, 'map:', listingTypeMap[ml_id], 'item:', item.listing_type_id, 'final:', listing_type_id);
 
       linhas.push([
         sku,
@@ -1582,13 +1596,41 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Batch lookup listing_type_id via /items API
+      const mlIdsUnicos = new Set<string>();
+      for (const v of todasVendas) {
+        for (const oi of (v.order_items || [])) {
+          if (oi.item?.id) mlIdsUnicos.add(oi.item.id);
+        }
+      }
+      const listingTypeMap: Record<string, string> = {};
+      const mlIdsList = Array.from(mlIdsUnicos);
+      for (let i = 0; i < mlIdsList.length; i += 20) {
+        const chunk = mlIdsList.slice(i, i + 20).join(',');
+        try {
+          const res = await fetch(
+            `${ML_API}/items?ids=${chunk}&attributes=id,listing_type_id`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            for (const it of data) {
+              if (it.code === 200 && it.body) {
+                listingTypeMap[it.body.id] = it.body.listing_type_id || '';
+              }
+            }
+          }
+        } catch { /* ignora */ }
+      }
+      console.log(`[SYNC] listingTypeMap: ${Object.keys(listingTypeMap).length} itens mapeados`);
+
       const loteLinhas: any[][] = [];
       const BATCH = 10;
 
       for (let i = 0; i < todasVendas.length; i += BATCH) {
         const batch = todasVendas.slice(i, i + BATCH);
         const batchResults = await Promise.all(
-          batch.map(venda => processarVendaMLSingle(venda, token, account, dtIni, dtFim, contagemPacks, sellerId))
+          batch.map(venda => processarVendaMLSingle(venda, token, account, dtIni, dtFim, contagemPacks, sellerId, listingTypeMap))
         );
         for (const linhas of batchResults) {
           if (linhas.length > 0) loteLinhas.push(...linhas);
