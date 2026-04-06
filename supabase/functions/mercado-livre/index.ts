@@ -1392,8 +1392,8 @@ Deno.serve(async (req) => {
             const saleFee = oi.sale_fee || 0;
             const sku = itemData.seller_custom_field || itemData.seller_sku || itemData.id || '';
             
-            // Tipo de anúncio
-            const listingType = oi.item?.listing_type_id || itemData.listing_type_id || '';
+            // Tipo de anúncio — listing_type_id está no nível do order_item, não dentro de item
+            const listingType = oi.listing_type_id || oi.item?.listing_type_id || itemData.listing_type_id || '';
             const tipoAnuncio = listingType.includes('gold_special') ? 'Clássico' : 'Premium';
 
             // Verificar se é Full pelo node_id do item se não for flex
