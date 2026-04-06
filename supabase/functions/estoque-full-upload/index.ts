@@ -119,13 +119,13 @@ Deno.serve(async (req) => {
       const row = rows[i];
       if (!row || row.length === 0) continue;
 
-      const skuRaw = row[colSku] != null ? String(row[colSku]).trim() : '';
+      const skuRaw = row[COL.sku] != null ? String(row[COL.sku]).trim() : '';
       if (!skuRaw || ['', 'nan', 'sku', 'none'].includes(skuRaw.toLowerCase())) continue;
 
       const sku = skuRaw.endsWith('.0') ? skuRaw.slice(0, -2) : skuRaw;
 
-      const tamanho = colTamanho >= 0 && row[colTamanho] != null ? String(row[colTamanho]).trim() : '-';
-      const status = colStatus >= 0 && row[colStatus] != null ? String(row[colStatus]).trim() : '-';
+      const tamanho = row[COL.tamanho] != null ? String(row[COL.tamanho]).trim() : '-';
+      const status = row[COL.status] != null ? String(row[COL.status]).trim() : '-';
 
       dadosNovos.push([
         dataHoje,
@@ -133,11 +133,11 @@ Deno.serve(async (req) => {
         sku,
         ['', 'nan', 'none'].includes(tamanho.toLowerCase()) ? '-' : tamanho,
         ['', 'nan', 'none'].includes(status.toLowerCase()) ? '-' : status,
-        colEntradaPendente >= 0 ? getInt(row[colEntradaPendente]) : 0,
-        colTransferencia >= 0 ? getInt(row[colTransferencia]) : 0,
-        colDevolucao >= 0 ? getInt(row[colDevolucao]) : 0,
-        colAptas >= 0 ? getInt(row[colAptas]) : 0,
-        colEspacioFull >= 0 ? getInt(row[colEspacioFull]) : 0,
+        getInt(row[COL.entradaPend]),
+        getInt(row[COL.transferencia]),
+        getInt(row[COL.devolucao]),
+        getInt(row[COL.aptas]),
+        getInt(row[COL.espacioFull]),
       ]);
     }
 
