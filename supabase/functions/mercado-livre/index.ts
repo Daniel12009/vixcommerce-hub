@@ -1292,151 +1292,164 @@ Deno.serve(async (req) => {
         const total = ordersData.paging?.total || 0;
 
         for (const order of results) {
-          // Ignorar cancelados
+          // Python: if venda.get('status') == 'cancelled': return []
           if (order.status === 'cancelled') continue;
 
           const orderItems = order.order_items || [];
           if (orderItems.length === 0) continue;
 
-          // Data da venda em formato BR (DD/MM/YYYY)
+          // Python: formatar_data_br(venda.get('date_created'))
           const dateCreated = new Date(order.date_created);
           const spDate = new Date(dateCreated.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
           
-          // Verificar fuso BR
           const dateStrFormat = `${spDate.getFullYear()}-${String(spDate.getMonth() + 1).padStart(2, '0')}-${String(spDate.getDate()).padStart(2, '0')}`;
-          if (dateStrFormat < dateFrom || dateStrFormat > dateTo) {
-            continue;
-          }
+          if (dateStrFormat < dateFrom || dateStrFormat > dateTo) continue;
           
           const dataVenda = `${String(spDate.getDate()).padStart(2, '0')}/${String(spDate.getMonth() + 1).padStart(2, '0')}/${spDate.getFullYear()}`;
           const dateClosed = new Date(order.date_closed || order.date_created);
           const spDateClosed = new Date(dateClosed.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
           const dataEmissao = `${String(spDateClosed.getDate()).padStart(2, '0')}/${String(spDateClosed.getMonth() + 1).padStart(2, '0')}/${spDateClosed.getFullYear()}`;
 
-          // Pack ID logic
+          // Python: vid = venda.get('id'); pid = venda.get('pack_id')
           const vid = order.id;
           const pid = order.pack_id;
-          let idReferencia = String(vid);
+          // Python: id_referencia_pedido = str(pid) if pid else str(vid)
+          const id_referencia_pedido = pid ? String(pid) : String(vid);
+          const col4 = `'${id_referencia_pedido}`;
 
-          if (pid) {
-            // Conta items com esse pack_id no lote local (mesma order logic fallback) - ou API total
-            const qtdNoPack = results.filter((o: any) => o.pack_id === pid).length;
-            if (qtdNoPack === 1) {
-              idReferencia = String(pid); // pack único -> usa pack_id
-            }            
-          }
-          
-          const col4 = `'${idReferencia}`;
-
-          // Buscar shipment para dados de frete (idêntico ao Python consultar_frete)
-          let shipmentId = order.shipping?.id;
-          if (!shipmentId && pid) {
+          // Python: sid = venda.get('shipping', {}).get('id')
+          let sid = order.shipping?.id;
+          // Python: if not sid and pid: rp = session.get(f".../packs/{pid}")
+          if (!sid && pid) {
             try {
               const pData = await mlFetch(account, `/packs/${pid}`);
-              shipmentId = pData.shipment?.id;
+              sid = pData?.shipment?.id;
             } catch { /* ignore */ }
           }
-          
-          let shipmentData: any = null;
-          if (shipmentId) {
-            if (shipmentCache[shipmentId]) {
-              shipmentData = shipmentCache[shipmentId];
+
+          // ═══ Python: dict_custos, estado, tipo_log, cidade_dest = consultar_frete(sid, headers) ═══
+          let dict_custos: Record<string, number> = {};
+          let estado = '';
+          let tipo_log = 'Mercado Envios';
+          let cidade_dest = '';
+
+          if (sid) {
+            let shipmentData: any = null;
+            if (shipmentCache[sid]) {
+              shipmentData = shipmentCache[sid];
             } else {
               try {
-                shipmentData = await mlFetch(account, `/shipments/${shipmentId}`);
-                shipmentCache[shipmentId] = shipmentData;
-              } catch { /* fallback */ }
+                shipmentData = await mlFetch(account, `/shipments/${sid}`);
+                shipmentCache[sid] = shipmentData;
+              } catch { /* ignore */ }
+            }
+
+            if (shipmentData) {
+              // Python: etiqueta_total = float(d.get('shipping_option', {}).get('list_cost', 0) or 0)
+              const etiqueta_total = parseFloat(String(shipmentData?.shipping_option?.list_cost ?? 0)) || 0;
+              // Python: pago_pelo_comprador = float(d.get('shipping_option', {}).get('cost', 0) or 0)
+              const pago_pelo_comprador = parseFloat(String(shipmentData?.shipping_option?.cost ?? 0)) || 0;
+              // Python: custo_vendedor = etiqueta_total - pago_pelo_comprador
+              let custo_vendedor = etiqueta_total - pago_pelo_comprador;
+              // Python: if custo_vendedor < 0.01: custo_vendedor = 0.0
+              if (custo_vendedor < 0.01) custo_vendedor = 0;
+
+              // Python: items_shipping = d.get('shipping_items', [])
+              const items_shipping = shipmentData?.shipping_items || [];
+              if (items_shipping.length > 0 && custo_vendedor > 0) {
+                // Python: valor_por_item = custo_vendedor / len(items_shipping)
+                const valor_por_item = custo_vendedor / items_shipping.length;
+                for (const it of items_shipping) {
+                  // Python: custos_por_item[str(it.get('id'))] = valor_por_item
+                  dict_custos[String(it.id)] = valor_por_item;
+                }
+              }
+
+              // Python: rec = d.get('receiver_address', {})
+              const rec = shipmentData?.receiver_address || {};
+              // Python: est_sigla = rec.get('state', {}).get('name') or rec.get('city', {}).get('state_name') or ""
+              const est_sigla = rec?.state?.name || rec?.city?.state_name || '';
+              estado = est_sigla;
+              // Python: cidade = rec.get('city', {}).get('name', '')
+              cidade_dest = rec?.city?.name || '';
+
+              // Python: ltype = d.get('logistic_type')
+              const ltype = shipmentData?.logistic_type || '';
+              const shTags = shipmentData?.tags || [];
+              const shMode = shipmentData?.mode || '';
+              
+              // Python: tipo = "Mercado Envios" / if-elif chain
+              if (ltype === 'fulfillment') tipo_log = 'Mercado Envios Full';
+              else if (['self_service', 'flex'].includes(ltype) || shTags.includes('self_service_in') || shMode === 'me1') tipo_log = 'Mercado Envios Flex';
+              else if (ltype === 'cross_docking') tipo_log = 'Mercado Envios Coleta';
+              else if (['drop_off', 'xd_drop_off'].includes(ltype)) tipo_log = 'Mercado Envios Agência';
             }
           }
 
-          // ═══ FRETE (Python: consultar_frete) ═══
-          // custo_vendedor = etiqueta_total - pago_pelo_comprador
-          const etiqueta_total = parseFloat(shipmentData?.shipping_option?.list_cost || 0) || 0;
-          const pago_pelo_comprador = parseFloat(shipmentData?.shipping_option?.cost || 0) || 0;
-          let custo_vendedor = etiqueta_total - pago_pelo_comprador;
-          if (custo_vendedor < 0.01) custo_vendedor = 0;
+          // Python: for item in venda.get('order_items', []):
+          for (const item of orderItems) {
+            // Python: item_obj = item.get('item', {})
+            const item_obj = item.item || {};
+            // Python: ml_id = item_obj.get('id')
+            const ml_id = item_obj.id || '';
+            // Python: sku = item_obj.get('seller_custom_field') or item_obj.get('seller_sku') or ml_id
+            const sku = item_obj.seller_custom_field || item_obj.seller_sku || ml_id;
 
-          // custos_por_item: dividir igualmente por len(shipping_items) (Python exato)
-          const custos_por_item: Record<string, number> = {};
-          const items_shipping: any[] = shipmentData?.shipping_items || [];
-          if (items_shipping.length > 0 && custo_vendedor > 0) {
-            const valor_por_item = custo_vendedor / items_shipping.length;
-            for (const it of items_shipping) {
-              custos_por_item[String(it.id)] = valor_por_item;
-            }
-          }
+            // Python: preco = float(item.get('unit_price', 0))
+            const preco = parseFloat(String(item.unit_price ?? 0)) || 0;
+            // Python: qtd = int(item.get('quantity', 1))
+            const qtd = parseInt(String(item.quantity ?? 1)) || 1;
+            // Python: valor_total_item = preco * qtd
+            const valor_total_item = preco * qtd;
 
-          // Logistic type (Python: consultar_frete)
-          const logisticType = shipmentData?.logistic_type || '';
-          const tags = shipmentData?.tags || [];
-          const mode = shipmentData?.mode || '';
-          const cidade_dest = shipmentData?.receiver_address?.city?.name || '';
-          const buyerState = shipmentData?.receiver_address?.state?.name || shipmentData?.receiver_address?.city?.state_name || '';
-          
-          let tipo_log = 'Mercado Envios';
-          if (logisticType === 'fulfillment') tipo_log = 'Mercado Envios Full';
-          else if (['self_service', 'flex'].includes(logisticType) || tags.includes('self_service_in') || mode === 'me1') tipo_log = 'Mercado Envios Flex';
-          else if (logisticType === 'cross_docking') tipo_log = 'Mercado Envios Coleta';
-          else if (['drop_off', 'xd_drop_off'].includes(logisticType)) tipo_log = 'Mercado Envios Agência';
-
-          for (const oi of orderItems) {
-            const itemData = oi.item || {};
-            const qty = oi.quantity || 1;
-            const unitPrice = oi.unit_price || 0;
-            const valorItem = unitPrice * qty;
-            const saleFee = oi.sale_fee || 0;
-            const sku = itemData.seller_custom_field || itemData.seller_sku || itemData.id || '';
-            const mlId = String(itemData.id || '');
-            
-            // Tipo de anúncio — direto do order_item (Python: item.get('listing_type_id'))
-            const listingType = String(oi.listing_type_id || '');
-            const tipoAnuncio = listingType.includes('gold_special') ? 'Clássico' : 'Premium';
-
-            // Full check pelo node_id (Python: item.get('stock', {}).get('node_id'))
+            // Python: if tipo_log != 'Mercado Envios Flex': node = item.get('stock', {}).get('node_id')
             if (tipo_log !== 'Mercado Envios Flex') {
-              const node = oi.stock?.node_id || itemData.stock?.node_id;
+              const node = item.stock?.node_id;
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
-            
-            // ═══ FRETE POR ITEM (Python: dict_custos.get(str(ml_id), 0.0)) ═══
+
+            // Python: custo_calc = 0.0
             let custo_calc = 0;
             if (tipo_log === 'Mercado Envios Flex') {
+              // Python: cidade_limpa = str(cidade_dest).strip().lower()
               const cidade_limpa = String(cidade_dest).trim().toLowerCase();
               if (cidade_limpa.includes('curitiba')) {
-                custo_calc = valorItem <= 79.00 ? 0 : 8.01;
+                custo_calc = valor_total_item <= 79.00 ? 0 : 8.01;
               } else {
-                custo_calc = valorItem <= 79.00 ? 5.00 : 12.81;
+                custo_calc = valor_total_item <= 79.00 ? 5.00 : 12.81;
               }
             } else {
-              custo_calc = custos_por_item[mlId] || 0;
+              // Python: custo_calc = dict_custos.get(str(ml_id), 0.0)
+              custo_calc = dict_custos[String(ml_id)] || 0;
             }
-            // Negativo e arredondado (Python: round(custo_calc * -1, 2))
-            custo_calc = Math.round(custo_calc * -1 * 100) / 100;
-            if (custo_calc === -0) custo_calc = 0;
 
-            // Comissão ML (col 15): sale_fee × quantidade
-            const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
+            // Python: fee = float(item.get('sale_fee', 0))
+            const fee = parseFloat(String(item.sale_fee ?? 0)) || 0;
+            // Python: fee_total_neg = -1 * (fee * qtd)
+            const fee_total_neg = -1 * (fee * qtd);
 
+            // Python: linhas.append([...])
             allRows.push([
-              sku,                                      // 0  SKU PRINCIPAL
-              sku,                                      // 1  SKU
-              dataVenda,                                // 2  Data da venda
-              dataEmissao,                              // 3  EMISSAO
-              col4,                                     // 4  N.º de venda
-              'Mercado Livre',                          // 5  origem
-              itemData.id || '',                        // 6  # de anúncio
-              tipoAnuncio,                              // 7  tipo de anuncio
-              '',                                       // 8  Venda por publicidade
-              tipo_log,                                 // 9  Forma de entrega
-              unitPrice,                                // 10 Preço unitário
-              qty,                                      // 11 Unidades
-              valorItem,                                // 12 Receita
-              custo_calc,                               // 13 Envio Seller
-              0,                                        // 14 TARIFA
-              comissao,                                 // 15 Tarifa de venda e impostos
-              '',                                       // 16 ADS
-              account.nome,                             // 17 conta
-              buyerState,                               // 18 Estado
+              sku,                                                    // 0  sku
+              sku,                                                    // 1  sku
+              dataVenda,                                              // 2  formatar_data_br(date_created)
+              dataEmissao,                                            // 3  formatar_data_br(date_closed)
+              col4,                                                   // 4  f"'{id_referencia_pedido}"
+              'Mercado Livre',                                        // 5  "Mercado Livre"
+              ml_id,                                                  // 6  ml_id
+              // Python: "Clássico" if 'gold_special' in str(item.get('listing_type_id')) else "Premium"
+              String(item.listing_type_id || '').includes('gold_special') ? 'Clássico' : 'Premium',
+              '',                                                     // 8  ""
+              tipo_log,                                               // 9  tipo_log
+              preco,                                                  // 10 preco
+              qtd,                                                    // 11 qtd
+              valor_total_item,                                       // 12 valor_total_item
+              Math.round(custo_calc * -1 * 100) / 100,               // 13 round(custo_calc * -1, 2)
+              0,                                                      // 14 0
+              Math.round(fee_total_neg * 100) / 100,                  // 15 fee_total_neg
+              '',                                                     // 16 ""
+              account.nome,                                           // 17 venda.get('seller',{}).get('nickname')
+              estado,                                                 // 18 estado
             ]);
           }
         }
