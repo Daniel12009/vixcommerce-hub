@@ -1328,8 +1328,14 @@ Deno.serve(async (req) => {
           
           const col4 = `'${idReferencia}`;
 
+          // Fetch full order details FIRST (search may lack shipment.id and listing_type_id)
+          let orderDetail: any = null;
+          try {
+            orderDetail = await mlFetch(account, `/orders/${vid}`);
+          } catch { /* use search data */ }
+
           // Buscar shipment para dados de frete
-          let shipmentId = order.shipping?.id;
+          let shipmentId = orderDetail?.shipping?.id || order.shipping?.id;
           if (!shipmentId && pid) {
             try {
               const pData = await mlFetch(account, `/packs/${pid}`);
@@ -1358,9 +1364,25 @@ Deno.serve(async (req) => {
           // Frete: list_cost (custo total etiqueta) - cost (pago pelo comprador) = custo seller
           const list_cost = shipmentData?.shipping_option?.list_cost || 0;
           const cost_opt = shipmentData?.shipping_option?.cost || 0;
-          const envio_seller = list_cost - cost_opt; // Custo real do seller
+          const envio_seller = list_cost - cost_opt; // Custo TOTAL do seller para este shipment
 
-          const logisticType = shipmentData?.logistic_type || order.shipping?.logistic_type || '';
+          // Para carrinho (pack): calcular valor total de TODOS os itens do pack
+          // para distribuir o frete proporcionalmente por valor
+          let totalPackValue = 0;
+          if (pid) {
+            const packOrders = results.filter((o: any) => o.pack_id === pid && o.status !== 'cancelled');
+            for (const po of packOrders) {
+              for (const poi of (po.order_items || [])) {
+                totalPackValue += (poi.unit_price || 0) * (poi.quantity || 1);
+              }
+            }
+          }
+          // Se não é pack, totalPackValue = valor desta order
+          if (!pid || totalPackValue === 0) {
+            totalPackValue = orderItems.reduce((s: number, i: any) => s + (i.unit_price || 0) * (i.quantity || 1), 0);
+          }
+
+          const logisticType = shipmentData?.logistic_type || orderDetail?.shipping?.logistic_type || order.shipping?.logistic_type || '';
           const tags = shipmentData?.tags || [];
           const mode = shipmentData?.mode || '';
           const city = shipmentData?.receiver_address?.city?.name || order.shipping?.receiver_address?.city?.name || '';
@@ -1371,12 +1393,6 @@ Deno.serve(async (req) => {
           else if (['self_service', 'flex'].includes(logisticType) || tags.includes('self_service_in') || mode === 'me1') tipo_log = 'Mercado Envios Flex';
           else if (logisticType === 'cross_docking') tipo_log = 'Mercado Envios Coleta';
           else if (['drop_off', 'xd_drop_off'].includes(logisticType)) tipo_log = 'Mercado Envios Agência';
-
-          // Fetch full order details (search results may lack listing_type_id and other fields)
-          let orderDetail: any = null;
-          try {
-            orderDetail = await mlFetch(account, `/orders/${vid}`);
-          } catch { /* use search data */ }
 
           for (const oi of orderItems) {
             const itemData = oi.item || {};
@@ -1397,8 +1413,12 @@ Deno.serve(async (req) => {
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
             
-            // Frete: -(list_cost - cost) — mesmo valor em todas as linhas do pedido
-            const custo_calc = envio_seller > 0 ? Math.round(-envio_seller * 100) / 100 : 0;
+            // Frete por item: proporcional ao valor do item no pack/order
+            // envio_seller * (valorItem / totalPackValue) → sem duplicação
+            let custo_calc = 0;
+            if (envio_seller > 0 && totalPackValue > 0) {
+              custo_calc = Math.round(-envio_seller * (valorItem / totalPackValue) * 100) / 100;
+            }
 
             // Comissão ML (col 15): sale_fee × quantidade
             const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
