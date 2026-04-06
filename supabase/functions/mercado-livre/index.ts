@@ -1355,22 +1355,10 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Frete params
-          const cost_opt = shipmentData?.shipping_option?.cost || 0;
+          // Frete: list_cost (custo total etiqueta) - cost (pago pelo comprador) = custo seller
           const list_cost = shipmentData?.shipping_option?.list_cost || 0;
-          const base_cost = shipmentData?.base_cost || 0;
-          // cost_components.ratio is the actual seller shipping cost charged by ML
-          const ratio_cost = shipmentData?.cost_components?.ratio || 0;
-
-          // custo_api fallback (for Flex or when ratio is not available)
-          let custo_api = 0;
-          const free_shipping = shipmentData?.free_shipping || false;
-          if (free_shipping) {
-            custo_api = cost_opt;
-          } else {
-            const ref = list_cost > 0 ? list_cost : base_cost;
-            if (ref > 0) custo_api = Math.max(0, ref - cost_opt);
-          }
+          const cost_opt = shipmentData?.shipping_option?.cost || 0;
+          const envio_seller = list_cost - cost_opt; // Custo real do seller
 
           const logisticType = shipmentData?.logistic_type || order.shipping?.logistic_type || '';
           const tags = shipmentData?.tags || [];
@@ -1409,38 +1397,8 @@ Deno.serve(async (req) => {
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
             
-            // Frete do item — usa cost_components.ratio (custo real cobrado pelo ML)
-            let custo_calc = 0;
-            const isCuritiba = city.toLowerCase().includes('curitiba');
-
-            if (tipo_log === 'Mercado Envios Flex') {
-              // Flex mantém regra própria (não tem ratio confiável)
-              if (isCuritiba) {
-                custo_calc = valorItem <= 79.00 ? 0 : 8.01;
-              } else {
-                custo_calc = valorItem <= 79.00 ? 5.00 : 12.81;
-              }
-            } else {
-              // Full, Coleta, Agência — usar ratio real da API
-              // Fallback chain: ratio > custo_api > (base_cost - cost_opt)
-              if (ratio_cost > 0) {
-                custo_calc = ratio_cost;
-              } else if (custo_api > 0) {
-                custo_calc = custo_api;
-              } else if (base_cost > 0 && base_cost > cost_opt) {
-                custo_calc = base_cost - cost_opt;
-              }
-              if (custo_calc === 0 && shipmentData) {
-                console.warn(`[FRETE] SKU=${sku} valor=${valorItem} shipment=${shipmentData?.id || 'N/A'} — ratio=${ratio_cost} custo_api=${custo_api} base=${base_cost} opt=${cost_opt} => 0 (sem custo encontrado)`);
-              }
-            }
-
-            if (custo_calc > 0) custo_calc = custo_calc * -1;
-            custo_calc = Math.round(custo_calc * 100) / 100;
-
-            if (!shipmentData) {
-              console.warn(`[FRETE] SKU=${sku} valor=${valorItem} orderId=${vid} — sem shipmentData (frete=0)`);
-            }
+            // Frete: -(list_cost - cost) — mesmo valor em todas as linhas do pedido
+            const custo_calc = envio_seller > 0 ? Math.round(-envio_seller * 100) / 100 : 0;
 
             // Comissão ML (col 15): sale_fee × quantidade
             const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
