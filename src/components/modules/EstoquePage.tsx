@@ -77,6 +77,8 @@ export function EstoquePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'ruptura' | 'critico' | 'ok'>('all');
   const [filterConta, setFilterConta] = useState<string>('all');
+  const [editingAlvoSku, setEditingAlvoSku] = useState<string | null>(null);
+  const [tempAlvoValue, setTempAlvoValue] = useState('');
 
   // Coverage change popup
   const [showCoberturaPopup, setShowCoberturaPopup] = useState(false);
