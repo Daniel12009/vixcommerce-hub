@@ -1384,6 +1384,12 @@ Deno.serve(async (req) => {
           else if (logisticType === 'cross_docking') tipo_log = 'Mercado Envios Coleta';
           else if (['drop_off', 'xd_drop_off'].includes(logisticType)) tipo_log = 'Mercado Envios Agência';
 
+          // Fetch full order details (search results may lack listing_type_id and other fields)
+          let orderDetail: any = null;
+          try {
+            orderDetail = await mlFetch(account, `/orders/${vid}`);
+          } catch { /* use search data */ }
+
           for (const oi of orderItems) {
             const itemData = oi.item || {};
             const qty = oi.quantity || 1;
@@ -1392,8 +1398,9 @@ Deno.serve(async (req) => {
             const saleFee = oi.sale_fee || 0;
             const sku = itemData.seller_custom_field || itemData.seller_sku || itemData.id || '';
             
-            // Tipo de anúncio — listing_type_id está no nível do order_item, não dentro de item
-            const listingType = oi.listing_type_id || oi.item?.listing_type_id || itemData.listing_type_id || '';
+            // Tipo de anúncio — busca listing_type_id do detalhe do pedido (search não retorna)
+            const detailOi = orderDetail?.order_items?.find((fo: any) => (fo.item?.id === itemData.id));
+            const listingType = oi.listing_type_id || detailOi?.listing_type_id || oi.item?.listing_type_id || '';
             const tipoAnuncio = listingType.includes('gold_special') ? 'Clássico' : 'Premium';
 
             // Verificar se é Full pelo node_id do item se não for flex
