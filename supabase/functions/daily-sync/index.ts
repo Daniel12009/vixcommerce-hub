@@ -60,6 +60,22 @@ async function restGet(path: string): Promise<any[]> {
   return res.ok ? await res.json() : [];
 }
 
+async function sendTelegramMessage(text: string) {
+  const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+  const chatId = Deno.env.get('TELEGRAM_CHAT_ID');
+  if (!token || !chatId) return;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    });
+  } catch (e) {
+    console.error('Telegram notification error:', e);
+  }
+}
+
 async function getEnabledModules(): Promise<Record<string, boolean>> {
   try {
     const res = await fetch(
@@ -235,7 +251,12 @@ Deno.serve(async (req) => {
   }
 
   log.push(`✅ daily-sync concluído. ${stepCount} etapas processadas.`);
-  console.log(log.join('\n'));
+  const finalLogText = log.join('\n');
+  console.log(finalLogText);
+
+  // Send Telegram summary
+  const summaryMessage = `<b>🤖 Sincronização Diária Concluída</b>\n\n<pre>${finalLogText}</pre>`;
+  await sendTelegramMessage(summaryMessage);
 
   return new Response(JSON.stringify({ sucesso: true, log }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
