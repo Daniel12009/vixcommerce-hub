@@ -401,21 +401,37 @@ export function EstoquePage() {
               )}
 
               {/* Delay Alert Box */}
-              {skusRuptura > 0 && (
-                <div className="bg-[hsl(var(--vix-danger)/0.05)] border border-[hsl(var(--vix-danger)/0.2)] rounded-xl p-4 mb-4 animate-fade-in">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="w-4 h-4 text-[hsl(var(--vix-danger))]" />
-                    <span className="text-sm font-semibold text-[hsl(var(--vix-danger))]">⚠️ {skusRuptura} SKUs em ruptura</span>
+              {skusRuptura > 0 && (() => {
+                // Group rupture SKUs by account
+                const rupturaByAccount = new Map<string, string[]>();
+                perAccountData.filter(r => r.status === 'ruptura').forEach(r => {
+                  const conta = r.conta || 'Sem conta';
+                  const list = rupturaByAccount.get(conta) || [];
+                  list.push(r.sku);
+                  rupturaByAccount.set(conta, list);
+                });
+                return (
+                  <div className="bg-[hsl(var(--vix-danger)/0.05)] border border-[hsl(var(--vix-danger)/0.2)] rounded-xl p-4 mb-4 animate-fade-in">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Clock className="w-4 h-4 text-[hsl(var(--vix-danger))]" />
+                      <span className="text-sm font-semibold text-[hsl(var(--vix-danger))]">⚠️ {skusRuptura} SKUs em ruptura</span>
+                    </div>
+                    <div className="space-y-2.5">
+                      {Array.from(rupturaByAccount.entries()).map(([conta, skus]) => (
+                        <div key={conta}>
+                          <p className="text-xs font-semibold text-foreground mb-1">{conta} <span className="text-muted-foreground font-normal">— {skus.length} em ruptura</span></p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {skus.slice(0, 15).map(sku => (
+                              <span key={`${conta}-${sku}`} className="px-2 py-0.5 rounded-full bg-[hsl(var(--vix-danger)/0.1)] text-[hsl(var(--vix-danger))] text-[10px] font-mono font-semibold">{sku}</span>
+                            ))}
+                            {skus.length > 15 && <span className="text-[10px] text-muted-foreground self-center">+{skus.length - 15} mais</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-2">Itens com estoque Full zerado que precisam de reposição urgente:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {mergedData.filter(r => r.status === 'ruptura').slice(0, 20).map(r => (
-                      <span key={r.sku} className="px-2 py-0.5 rounded-full bg-[hsl(var(--vix-danger)/0.1)] text-[hsl(var(--vix-danger))] text-[10px] font-mono font-semibold">{r.sku}</span>
-                    ))}
-                    {skusRuptura > 20 && <span className="text-[10px] text-muted-foreground self-center">+{skusRuptura - 20} mais</span>}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Charts Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
