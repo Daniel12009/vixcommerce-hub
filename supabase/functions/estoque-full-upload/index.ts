@@ -40,11 +40,20 @@ async function callGoogleSheets(action: string, body: object) {
   return res.json();
 }
 
+// Encontra o índice de uma coluna pelo nome (case-insensitive, parcial)
+function findCol(headers: string[], ...keywords: string[]): number {
+  for (const kw of keywords) {
+    const kwLower = kw.toLowerCase();
+    const idx = headers.findIndex(h => h.toLowerCase().includes(kwLower));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    // Recebe multipart/form-data com o arquivo + conta
     const formData = await req.formData();
     const contaKey = String(formData.get('conta') || '').trim().toLowerCase();
     const file = formData.get('file') as File | null;
@@ -54,29 +63,63 @@ Deno.serve(async (req) => {
     if (!file.name.endsWith('.xlsx')) throw new Error('Somente arquivos .xlsx são aceitos.');
 
     const nomeConta = formatarNomeConta(contaKey);
-    const dataHoje = new Date().toLocaleDateString('pt-BR'); // DD/MM/YYYY
+    const dataHoje = new Date().toLocaleDateString('pt-BR');
 
-    // Ler o arquivo Excel no Deno usando a lib xlsx (CDN)
     const { read, utils } = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
     const buffer = await file.arrayBuffer();
     const wb = read(buffer, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    // header: 1 = retorna como array de arrays (sem nomes de colunas)
     const rows: any[][] = utils.sheet_to_json(ws, { header: 1, defval: null });
+
+    // Encontrar a linha de cabeçalho (procura a primeira linha que contenha "SKU")
+    let headerRowIdx = -1;
+    let headers: string[] = [];
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      const row = rows[i];
+      if (!row) continue;
+      const rowStrs = row.map((c: any) => String(c ?? '').trim());
+      if (rowStrs.some(h => h.toLowerCase() === 'sku' || h.toLowerCase().includes('sku del'))) {
+        headerRowIdx = i;
+        headers = rowStrs;
+        break;
+      }
+    }
+
+    if (headerRowIdx < 0) {
+      // Fallback: usar linha 2 (index 2) como cabeçalho
+      headerRowIdx = 2;
+      headers = (rows[headerRowIdx] || []).map((c: any) => String(c ?? '').trim());
+    }
+
+    console.log('[estoque-full-upload] Headers encontrados:', JSON.stringify(headers));
+
+    // Mapear colunas pelo nome
+    const colSku = findCol(headers, 'sku');
+    const colTamanho = findCol(headers, 'tamaño', 'tamanho', 'size');
+    const colStatus = findCol(headers, 'estado de la publicación', 'status', 'estado');
+    const colEntradaPendente = findCol(headers, 'entrada pendiente', 'entrada pendente', 'inbound');
+    const colTransferencia = findCol(headers, 'en transferencia', 'em transferência', 'transferencia');
+    const colDevolucao = findCol(headers, 'devueltas por el comprador', 'devolvidas pelo comprador', 'devolv');
+    const colAptas = findCol(headers, 'aptas para la venta', 'aptas para venda', 'aptas');
+    const colEspacioFull = findCol(headers, 'unidades que ocupan espacio en full', 'espacio en full', 'espaço full');
+
+    if (colSku < 0) {
+      throw new Error(`Coluna "SKU" não encontrada no cabeçalho. Colunas encontradas: ${headers.join(', ')}`);
+    }
 
     const dadosNovos: any[][] = [];
 
-    for (let i = 3; i < rows.length; i++) {
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
       const row = rows[i];
       if (!row || row.length === 0) continue;
 
-      const skuRaw = row[3] != null ? String(row[3]).trim() : '';
+      const skuRaw = row[colSku] != null ? String(row[colSku]).trim() : '';
       if (!skuRaw || ['', 'nan', 'sku', 'none'].includes(skuRaw.toLowerCase())) continue;
 
       const sku = skuRaw.endsWith('.0') ? skuRaw.slice(0, -2) : skuRaw;
 
-      const tamanho = row[7] != null ? String(row[7]).trim() : '-';
-      const status = row[9] != null ? String(row[9]).trim() : '-';
+      const tamanho = colTamanho >= 0 && row[colTamanho] != null ? String(row[colTamanho]).trim() : '-';
+      const status = colStatus >= 0 && row[colStatus] != null ? String(row[colStatus]).trim() : '-';
 
       dadosNovos.push([
         dataHoje,
@@ -84,18 +127,18 @@ Deno.serve(async (req) => {
         sku,
         ['', 'nan', 'none'].includes(tamanho.toLowerCase()) ? '-' : tamanho,
         ['', 'nan', 'none'].includes(status.toLowerCase()) ? '-' : status,
-        getInt(row[13]), // Entrada pendente
-        getInt(row[14]), // Em transferência
-        getInt(row[15]), // Devolvidas pelo comprador
-        getInt(row[16]), // Aptas para venda
-        getInt(row[21]), // Unidades que ocupan espacio en Full
+        colEntradaPendente >= 0 ? getInt(row[colEntradaPendente]) : 0,
+        colTransferencia >= 0 ? getInt(row[colTransferencia]) : 0,
+        colDevolucao >= 0 ? getInt(row[colDevolucao]) : 0,
+        colAptas >= 0 ? getInt(row[colAptas]) : 0,
+        colEspacioFull >= 0 ? getInt(row[colEspacioFull]) : 0,
       ]);
     }
 
     if (dadosNovos.length === 0) {
       return new Response(JSON.stringify({
         sucesso: false,
-        mensagem: 'Nenhum dado encontrado a partir da 4ª linha. Verifique o arquivo.',
+        mensagem: 'Nenhum dado encontrado. Verifique se o arquivo tem a coluna SKU.',
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -117,15 +160,12 @@ Deno.serve(async (req) => {
       'Aptas para venda', 'Unidades que ocupan espacio en Full'
     ];
 
-    // Remover cabeçalho e linhas da conta atual (preserva outras contas)
     const linhasAnteriores = dadosExistentes
-      .slice(1) // pula cabeçalho
+      .slice(1)
       .filter(row => row[1] !== nomeConta);
 
-    // Resultado final: cabeçalho + outras contas + novas linhas
     const dadosFinais = [cabecalho, ...linhasAnteriores, ...dadosNovos];
 
-    // Sobrescrever a aba inteira
     await callGoogleSheets('write', {
       spreadsheetId: SHEET_ID,
       range: `${NOME_ABA}!A1`,
@@ -134,7 +174,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       sucesso: true,
-      mensagem: `✅ ${dadosNovos.length} linhas de ${nomeConta} salvas na aba ${NOME_ABA}.`,
+      mensagem: `✅ ${dadosNovos.length} SKUs de ${nomeConta} salvos na aba ${NOME_ABA}.`,
       linhas: dadosNovos.length,
       conta: nomeConta,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
