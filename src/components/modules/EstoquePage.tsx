@@ -373,7 +373,11 @@ export function EstoquePage() {
                     const pct = healthPercent(h);
                     const color = pct >= 80 ? 'hsl(var(--vix-success))' : pct >= 50 ? 'hsl(var(--vix-warning))' : 'hsl(var(--vix-danger))';
                     return (
-                      <div key={conta} className="bg-card border border-border rounded-xl p-4 animate-fade-in">
+                      <div
+                        key={conta}
+                        onClick={() => { setFilterConta(filterConta === conta ? 'all' : conta); }}
+                        className={`bg-card border rounded-xl p-4 animate-fade-in cursor-pointer transition-all hover:shadow-md ${filterConta === conta ? 'border-primary ring-2 ring-primary/20' : 'border-border'}`}
+                      >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <Shield className="w-4 h-4" style={{ color }} />
