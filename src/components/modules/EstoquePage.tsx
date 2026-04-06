@@ -520,6 +520,7 @@ export function EstoquePage() {
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('emTransferencia')}>Transf.{sortIcon('emTransferencia')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('sugestaoEnvio')}>Sugestão{sortIcon('sugestaoEnvio')}</th>
                         <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('coberturaDias')}>Cobert.{sortIcon('coberturaDias')}</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Cobert. Alvo</th>
                         <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Status</th>
                       </tr>
                     </thead>
