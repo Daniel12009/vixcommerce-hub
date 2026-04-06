@@ -77,6 +77,8 @@ export function EstoquePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'ruptura' | 'critico' | 'ok'>('all');
   const [filterConta, setFilterConta] = useState<string>('all');
+  const [editingAlvoSku, setEditingAlvoSku] = useState<string | null>(null);
+  const [tempAlvoValue, setTempAlvoValue] = useState('');
 
   // Coverage change popup
   const [showCoberturaPopup, setShowCoberturaPopup] = useState(false);
@@ -539,9 +541,44 @@ export function EstoquePage() {
                           <td className={`px-3 py-2.5 text-right font-medium ${row.coberturaDias <= 0 ? 'text-[hsl(var(--vix-danger))]' : row.coberturaDias < (row.customCobertura ?? diasCoberturaAlvo) ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-success))]'}`}>
                             {row.coberturaDias >= 999 ? '∞' : `${row.coberturaDias}d`}
                           </td>
-                          <td className="px-3 py-2.5 text-right text-muted-foreground font-medium">
-                            {row.customCobertura ?? diasCoberturaAlvo}d
-                            {row.customCobertura && <span className="text-[9px] text-[hsl(var(--vix-info))] ml-0.5">⚙</span>}
+                          <td className="px-3 py-2.5 text-right">
+                            {editingAlvoSku === row.sku ? (
+                              <span className="inline-flex items-center gap-1">
+                                <input
+                                  type="number" min={1} max={90}
+                                  value={tempAlvoValue}
+                                  onChange={e => setTempAlvoValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      const v = parseInt(tempAlvoValue);
+                                      if (v > 0) {
+                                        setSkuCoberturaOverrides(prev => ({ ...prev, [row.sku]: v }));
+                                        toast.success(`Cobertura de ${row.sku} → ${v}d`);
+                                      }
+                                      setEditingAlvoSku(null);
+                                    } else if (e.key === 'Escape') setEditingAlvoSku(null);
+                                  }}
+                                  onBlur={() => {
+                                    const v = parseInt(tempAlvoValue);
+                                    if (v > 0) {
+                                      setSkuCoberturaOverrides(prev => ({ ...prev, [row.sku]: v }));
+                                    }
+                                    setEditingAlvoSku(null);
+                                  }}
+                                  autoFocus
+                                  className="w-14 h-6 text-center text-xs bg-muted border border-primary rounded px-1"
+                                />
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => { setEditingAlvoSku(row.sku); setTempAlvoValue(String(row.customCobertura ?? diasCoberturaAlvo)); }}
+                                className="inline-flex items-center gap-1 text-muted-foreground font-medium hover:text-primary transition-colors group"
+                              >
+                                {row.customCobertura ?? diasCoberturaAlvo}d
+                                {row.customCobertura && <span className="text-[9px] text-[hsl(var(--vix-info))]">⚙</span>}
+                                <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            )}
                           </td>
                           <td className="px-3 py-2.5 text-center">{statusBadge(row.status)}</td>
                         </tr>
