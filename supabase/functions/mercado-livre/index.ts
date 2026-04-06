@@ -250,22 +250,10 @@ async function consultarFrete(
 
     const d = await res.json();
 
-    // Debug log para verificar valores da API
-    console.log('[FRETE]', shipId, {
-      list_cost: d.shipping_option?.list_cost,
-      cost: d.shipping_option?.cost,
-      base_cost: d.base_cost,
-      free_shipping: d.free_shipping,
-      shipping_items: d.shipping_items?.length,
-    });
-
+    // CÁLCULO REAL: Custo total da etiqueta - Valor pago pelo comprador
     const etiqueta_total = parseFloat(String(d.shipping_option?.list_cost ?? 0)) || 0;
     const pago_pelo_comprador = parseFloat(String(d.shipping_option?.cost ?? 0)) || 0;
-    const base_cost = parseFloat(String(d.base_cost ?? 0)) || 0;
-
-    // Se list_cost = 0, usar base_cost como fallback
-    const referencia = etiqueta_total > 0 ? etiqueta_total : base_cost;
-    let custo_vendedor = Math.max(0, referencia - pago_pelo_comprador);
+    let custo_vendedor = etiqueta_total - pago_pelo_comprador;
     if (custo_vendedor < 0.01) custo_vendedor = 0;
 
     // Dividir por item (dict)
