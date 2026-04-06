@@ -120,6 +120,19 @@ Deno.serve(async (req) => {
       const tamanho = row[COL.tamanho] != null ? String(row[COL.tamanho]).trim() : '-';
       const status = row[COL.status] != null ? String(row[COL.status]).trim() : '-';
 
+      const entradaPend = getInt(row[COL.entradaPend]);
+      const transferencia = getInt(row[COL.transferencia]);
+      const devolucao = getInt(row[COL.devolucao]);
+      const aptas = getInt(row[COL.aptas]);
+      const espacioFull = getInt(row[COL.espacioFull]);
+
+      // Filtro: se status é N/A e TODAS as colunas numéricas são 0, pula
+      const statusNorm = status.toLowerCase();
+      if ((statusNorm === 'n/a' || statusNorm === 'na' || statusNorm === '-') &&
+          entradaPend === 0 && transferencia === 0 && devolucao === 0 && aptas === 0 && espacioFull === 0) {
+        continue;
+      }
+
       dadosNovos.push([
         dataHoje,
         nomeConta,
