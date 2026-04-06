@@ -1415,13 +1415,25 @@ Deno.serve(async (req) => {
               }
             } else {
               // Full, Coleta, Agência — usar ratio real da API
-              custo_calc = ratio_cost > 0 ? ratio_cost : custo_api;
+              // Fallback chain: ratio > custo_api > (base_cost - cost_opt)
+              if (ratio_cost > 0) {
+                custo_calc = ratio_cost;
+              } else if (custo_api > 0) {
+                custo_calc = custo_api;
+              } else if (base_cost > 0 && base_cost > cost_opt) {
+                custo_calc = base_cost - cost_opt;
+              }
+              if (custo_calc === 0 && shipmentData) {
+                console.warn(`[FRETE] SKU=${sku} valor=${valorItem} shipment=${shipmentData?.id || 'N/A'} — ratio=${ratio_cost} custo_api=${custo_api} base=${base_cost} opt=${cost_opt} => 0 (sem custo encontrado)`);
+              }
             }
 
             if (custo_calc > 0) custo_calc = custo_calc * -1;
             custo_calc = Math.round(custo_calc * 100) / 100;
 
-            console.log(`[FRETE DEBUG] SKU=${sku} valor=${valorItem} tipo=${tipo_log} ratio=${ratio_cost} custo_api=${custo_api} base_cost=${base_cost} cost_opt=${cost_opt} list_cost=${list_cost} => custo_calc=${custo_calc}`);
+            if (!shipmentData) {
+              console.warn(`[FRETE] SKU=${sku} valor=${valorItem} orderId=${vid} — sem shipmentData (frete=0)`);
+            }
 
             // Comissão ML (col 15): sale_fee × quantidade
             const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
