@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
 
     const dadosNovos: any[][] = [];
 
-    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+    for (let i = dataStartIdx; i < rows.length; i++) {
       const row = rows[i];
       if (!row || row.length === 0) continue;
 
