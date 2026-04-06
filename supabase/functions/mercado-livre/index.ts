@@ -1362,42 +1362,34 @@ Deno.serve(async (req) => {
           }
 
           // ═══ FRETE: Lógica por item usando cost_components ═══
-          // Hierarquia: cost_components.ratio (verdade) > shipping_option.cost > 0
-          // Se list_cost == cost → custo seller = 0
           const list_cost = shipmentData?.shipping_option?.list_cost || 0;
           const cost_opt = shipmentData?.shipping_option?.cost || 0;
           const ratio_total = shipmentData?.cost_components?.ratio || 0;
           const shippingItems: any[] = shipmentData?.shipping_items || [];
 
-          // Determinar se o seller tem custo zero (ML pagou ou promo)
-          const sellerCostZero = (list_cost > 0 && list_cost === cost_opt) || (!shipmentData);
+          // sellerCostZero SÓ se list_cost == cost (ML cobriu) — NÃO quando shipmentData é null
+          const sellerCostZero = shipmentData && list_cost > 0 && list_cost === cost_opt;
 
-          // Construir mapa de custo por item_id para carrinho
-          // Se houver múltiplos shipping_items, dividir ratio proporcional ao peso/valor
+          // Construir mapa de custo por item_id para carrinho (múltiplos shipping_items)
           const itemRatioMap: Record<string, number> = {};
           if (shippingItems.length > 1 && ratio_total > 0) {
-            // Carrinho: dividir ratio proporcional ao valor de cada shipping_item
-            // (ML não detalha ratio por item, usamos proporção por valor)
             let totalShipItemValue = 0;
             for (const si of shippingItems) {
               const siQty = si.quantity || 1;
-              // Buscar preço do item no pedido ou pack
               const matchingOrder = results.find((o: any) => 
                 (o.order_items || []).some((oi: any) => oi.item?.id === si.id)
               );
               const matchingOi = matchingOrder?.order_items?.find((oi: any) => oi.item?.id === si.id);
               const siValue = (matchingOi?.unit_price || 0) * siQty;
               totalShipItemValue += siValue;
-              itemRatioMap[si.id] = siValue; // temporário: guarda valor
+              itemRatioMap[si.id] = siValue;
             }
-            // Converter valores em proporções do ratio total
             if (totalShipItemValue > 0) {
               for (const id of Object.keys(itemRatioMap)) {
                 itemRatioMap[id] = Math.round(ratio_total * (itemRatioMap[id] / totalShipItemValue) * 100) / 100;
               }
             }
           } else if (shippingItems.length === 1 && ratio_total > 0) {
-            // Item único: ratio integral
             itemRatioMap[shippingItems[0].id] = ratio_total;
           }
 
@@ -1432,22 +1424,26 @@ Deno.serve(async (req) => {
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
             
-            // Frete por item: buscar ratio por item_id no mapa
-            // Hierarquia: itemRatioMap[item_id] > ratio_total (item único) > shipping_option.cost > 0
+            // ═══ FRETE POR ITEM ═══
+            // 1. Se sellerCostZero (list_cost == cost): 0
+            // 2. itemRatioMap[mlbId] (carrinho proporcional)
+            // 3. ratio_total direto (item único ou sem shipping_items)
+            // 4. list_cost - cost_opt (fallback final se existe diferença)
+            // 5. 0 (sem dados)
             let custo_calc = 0;
-            if (!sellerCostZero) {
+            if (sellerCostZero) {
+              custo_calc = 0; // ML cobriu o frete
+            } else {
               const mlbId = itemData.id || '';
               if (itemRatioMap[mlbId] !== undefined) {
-                // Carrinho: ratio específico deste item (proporcional)
                 custo_calc = -itemRatioMap[mlbId];
-              } else if (shippingItems.length <= 1 && ratio_total > 0) {
-                // Item único com ratio: usar ratio integral
+              } else if (ratio_total > 0) {
+                // ratio existe mas item não está no mapa (shipping_items vazio ou não bateu)
                 custo_calc = -ratio_total;
-              } else if (ratio_total === 0 && cost_opt > 0 && list_cost !== cost_opt) {
-                // Sem ratio mas tem cost diferente de list_cost: usar cost como fallback
-                custo_calc = -cost_opt;
+              } else if (list_cost > 0 && list_cost !== cost_opt) {
+                // Sem ratio: usar diferença list_cost - cost
+                custo_calc = -(list_cost - cost_opt);
               }
-              // Se ratio_total == 0 e list_cost == cost_opt → custo seller = 0 (já é 0)
             }
             custo_calc = Math.round(custo_calc * 100) / 100;
 
