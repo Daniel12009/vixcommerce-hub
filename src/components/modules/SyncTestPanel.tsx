@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { Play, Loader2, CheckCircle, XCircle, Clock, Zap, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Play, Loader2, CheckCircle, XCircle, Clock, Zap, RefreshCw, Settings2, Power } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface LogEntry {
   timestamp: string;
@@ -23,6 +25,20 @@ async function callEdgeFunction(name: string, body: object): Promise<any> {
   });
   return res.json();
 }
+
+// Modules that can be toggled for automation
+const AUTOMATION_MODULES = [
+  { key: 'ml_vendas', label: '📊 ML Vendas', description: 'Sincroniza vendas do Mercado Livre (dia anterior) → VendasML', group: 'Mercado Livre' },
+  { key: 'ml_performance', label: '📈 ML Performance Catálogo', description: 'Visitas e conversão dos anúncios Full → PERF-{CONTA}', group: 'Mercado Livre' },
+  { key: 'ml_v7', label: '📦 ML Vendas Full 7 Dias', description: 'Vendas últimos 7 dias agrupadas por SKU → V7-{CONTA}', group: 'Mercado Livre' },
+  { key: 'ml_ads', label: '💰 ML ADS Report', description: 'Product ADS do dia anterior → ADS + ADS-TOTAL-ML', group: 'Mercado Livre' },
+  { key: 'shopee_vendas', label: '🛒 Shopee Vendas', description: 'Vendas Shopee (API ou Tiny) → Shopee_Vendas', group: 'Shopee' },
+  { key: 'tiny_shein', label: '👗 Shein Vendas', description: 'Vendas Shein via Tiny ERP → Shopee_Vendas', group: 'Tiny ERP' },
+  { key: 'tiny_amazon', label: '📦 Amazon Vendas', description: 'Vendas Amazon via Tiny ERP → VENDASAZ', group: 'Tiny ERP' },
+  { key: 'tiny_tiktok', label: '🎵 TikTok Vendas', description: 'Vendas TikTok via Tiny ERP → VENDASTK', group: 'Tiny ERP' },
+  { key: 'tiny_temu', label: '🛍️ Temu Vendas', description: 'Vendas Temu via Tiny ERP → VENDASTM', group: 'Tiny ERP' },
+  { key: 'tiny_estoque', label: '📦 Estoque Tiny', description: 'Saldo de todos os produtos ativos → ESTOQUE-TINY', group: 'Tiny ERP' },
+];
 
 const SYNC_ACTIONS = [
   {
@@ -157,7 +173,140 @@ const SYNC_ACTIONS = [
   },
 ];
 
-export function SyncTestPanel() {
+// ─── Automation Config Section ───────────────────────────────────────
+function AutomationConfig() {
+  const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const loadConfig = async () => {
+    try {
+      const { data } = await supabase
+        .from('app_data')
+        .select('data_value')
+        .eq('data_key', 'daily_sync_modules')
+        .maybeSingle();
+      if (data?.data_value && typeof data.data_value === 'object') {
+        setEnabledModules(data.data_value as Record<string, boolean>);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar config:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleModule = async (key: string, enabled: boolean) => {
+    const updated = { ...enabledModules, [key]: enabled };
+    setEnabledModules(updated);
+    setSaving(true);
+    try {
+      await supabase.from('app_data').upsert({
+        data_key: 'daily_sync_modules',
+        data_value: updated as any,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'data_key' });
+      toast.success(`${enabled ? 'Ativado' : 'Desativado'}: ${AUTOMATION_MODULES.find(m => m.key === key)?.label}`);
+    } catch (e: any) {
+      toast.error('Erro ao salvar configuração');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const enabledCount = Object.values(enabledModules).filter(Boolean).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Group modules
+  const groups = AUTOMATION_MODULES.reduce((acc, mod) => {
+    if (!acc[mod.group]) acc[mod.group] = [];
+    acc[mod.group].push(mod);
+    return acc;
+  }, {} as Record<string, typeof AUTOMATION_MODULES>);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-accent/10">
+            <Settings2 className="w-5 h-5 text-accent-foreground" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">Automação Diária</h2>
+            <p className="text-sm text-muted-foreground">
+              Ative os módulos que devem rodar automaticamente todos os dias às <strong>06:00 (Brasília)</strong>.
+              Cada módulo roda com intervalo de 2 minutos entre si.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+          <Power className="w-3.5 h-3.5" />
+          {enabledCount} ativo{enabledCount !== 1 ? 's' : ''}
+        </div>
+      </div>
+
+      {/* Status */}
+      <div className="p-4 rounded-xl border border-border bg-card">
+        <div className="flex items-center gap-3">
+          <div className={`w-3 h-3 rounded-full ${enabledCount > 0 ? 'bg-[hsl(var(--vix-success))] animate-pulse' : 'bg-muted-foreground/30'}`} />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {enabledCount > 0
+                ? `Cron ativo — ${enabledCount} módulo${enabledCount !== 1 ? 's' : ''} rodando diariamente às 06:00`
+                : 'Cron inativo — nenhum módulo habilitado'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Intervalo entre módulos: 2 minutos • Horário: Brasília (UTC-3)
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Module Groups */}
+      {Object.entries(groups).map(([group, modules]) => (
+        <div key={group} className="rounded-xl border border-border overflow-hidden">
+          <div className="px-4 py-2.5 bg-muted/30 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground">{group}</h3>
+          </div>
+          <div className="divide-y divide-border">
+            {modules.map(mod => (
+              <div key={mod.key} className="flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors">
+                <div className="flex-1 min-w-0 mr-4">
+                  <p className="text-sm font-medium text-foreground">{mod.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{mod.description}</p>
+                </div>
+                <Switch
+                  checked={!!enabledModules[mod.key]}
+                  onCheckedChange={(checked) => toggleModule(mod.key, checked)}
+                  disabled={saving}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <p className="text-xs text-muted-foreground text-center">
+        As alterações são salvas automaticamente. O daily-sync lerá os módulos ativos ao executar.
+      </p>
+    </div>
+  );
+}
+
+// ─── Manual Test Section ─────────────────────────────────────────────
+function ManualTestSection() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [mlAccounts, setMlAccounts] = useState<any[]>([]);
@@ -194,7 +343,6 @@ export function SyncTestPanel() {
         addLog(`❌ ${action.label}: ${result.error}`, 'error');
         toast.error(result.error);
       } else if (result.log) {
-        // daily-sync returns a log array
         for (const line of result.log) {
           addLog(line, line.includes('❌') ? 'error' : 'ok');
         }
@@ -211,26 +359,24 @@ export function SyncTestPanel() {
     }
   };
 
-  // Load accounts on first render
   if (!loaded) loadAccounts();
 
   return (
-    <div className="animate-fade-in max-w-4xl mx-auto">
+    <div>
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-1">
           <div className="p-2 rounded-lg bg-primary/10">
             <Zap className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-foreground">Teste de Sincronização</h2>
+            <h2 className="text-xl font-bold text-foreground">Teste Manual</h2>
             <p className="text-sm text-muted-foreground">
-              Execute ações do daily-sync manualmente para validar antes de ativar o pg_cron.
+              Execute ações do daily-sync manualmente para validar antes de ativar a automação.
             </p>
           </div>
         </div>
       </div>
 
-      {/* ML Account Selector */}
       {mlAccounts.length > 0 && (
         <div className="mb-4 p-4 bg-card border border-border rounded-xl">
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Conta ML para testes individuais</label>
@@ -246,7 +392,6 @@ export function SyncTestPanel() {
         </div>
       )}
 
-      {/* Action Buttons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
         {SYNC_ACTIONS.map(action => {
           const isRunning = running === action.id;
@@ -309,6 +454,32 @@ export function SyncTestPanel() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────
+export function SyncTestPanel() {
+  return (
+    <div className="animate-fade-in max-w-4xl mx-auto">
+      <Tabs defaultValue="automacao" className="space-y-6">
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger value="automacao">
+            <Settings2 className="w-4 h-4 mr-1.5" /> Automação
+          </TabsTrigger>
+          <TabsTrigger value="manual">
+            <Zap className="w-4 h-4 mr-1.5" /> Teste Manual
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="automacao">
+          <AutomationConfig />
+        </TabsContent>
+
+        <TabsContent value="manual">
+          <ManualTestSection />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
