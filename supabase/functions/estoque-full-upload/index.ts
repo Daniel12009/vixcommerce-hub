@@ -139,11 +139,11 @@ Deno.serve(async (req) => {
         sku,
         ['', 'nan', 'none'].includes(tamanho.toLowerCase()) ? '-' : tamanho,
         ['', 'nan', 'none'].includes(status.toLowerCase()) ? '-' : status,
-        getInt(row[COL.entradaPend]),
-        getInt(row[COL.transferencia]),
-        getInt(row[COL.devolucao]),
-        getInt(row[COL.aptas]),
-        getInt(row[COL.espacioFull]),
+        entradaPend,
+        transferencia,
+        devolucao,
+        aptas,
+        espacioFull,
       ]);
     }
 
