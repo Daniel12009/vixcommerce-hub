@@ -1361,28 +1361,21 @@ Deno.serve(async (req) => {
             }
           }
 
-          // ═══ FRETE: Lógica idêntica ao Python que funcionava ═══
-          // custo_final = list_cost - cost; if custo_final <= 0: custo_final = ratio
+          // ═══ FRETE: Idêntico ao Python consultar_frete ═══
+          // custo_vendedor = list_cost - cost; if < 0.01: 0
           const list_cost = shipmentData?.shipping_option?.list_cost || 0;
           const cost_opt = shipmentData?.shipping_option?.cost || 0;
-          let custo_frete_total = list_cost - cost_opt;
-          if (custo_frete_total <= 0) {
-            custo_frete_total = shipmentData?.cost_components?.ratio || 0;
-          }
+          let custo_vendedor = list_cost - cost_opt;
+          if (custo_vendedor < 0.01) custo_vendedor = 0;
 
-          // Para carrinho (pack com múltiplos orders): calcular valor total do pack
-          // para dividir frete proporcionalmente
-          let totalPackValue = 0;
-          if (pid) {
-            const packOrders = results.filter((o: any) => o.pack_id === pid && o.status !== 'cancelled');
-            for (const po of packOrders) {
-              for (const poi of (po.order_items || [])) {
-                totalPackValue += (poi.unit_price || 0) * (poi.quantity || 1);
-              }
+          // Construir mapa custos_por_item (igual ao Python: dividir igualmente por shipping_items)
+          const custos_por_item: Record<string, number> = {};
+          const shippingItems: any[] = shipmentData?.shipping_items || [];
+          if (shippingItems.length > 0 && custo_vendedor > 0) {
+            const valor_por_item = custo_vendedor / shippingItems.length;
+            for (const it of shippingItems) {
+              custos_por_item[String(it.id)] = valor_por_item;
             }
-          }
-          if (!pid || totalPackValue <= 0) {
-            totalPackValue = orderItems.reduce((s: number, i: any) => s + (i.unit_price || 0) * (i.quantity || 1), 0);
           }
 
           const logisticType = shipmentData?.logistic_type || orderDetail?.shipping?.logistic_type || order.shipping?.logistic_type || '';
@@ -1397,7 +1390,7 @@ Deno.serve(async (req) => {
           else if (logisticType === 'cross_docking') tipo_log = 'Mercado Envios Coleta';
           else if (['drop_off', 'xd_drop_off'].includes(logisticType)) tipo_log = 'Mercado Envios Agência';
 
-          // Buscar listing_type_id dos items via API (orders/search não retorna)
+          // Buscar listing_type_id dos items via API batch (orders/search não retorna)
           const uniqueItemIds = [...new Set(orderItems.map((oi: any) => oi.item?.id).filter(Boolean))];
           const itemListingTypes: Record<string, string> = {};
           if (uniqueItemIds.length > 0) {
@@ -1408,7 +1401,7 @@ Deno.serve(async (req) => {
                   itemListingTypes[d.body.id] = d.body.listing_type_id || '';
                 }
               }
-            } catch { /* fallback to order detail */ }
+            } catch { /* fallback */ }
           }
 
           for (const oi of orderItems) {
@@ -1418,24 +1411,22 @@ Deno.serve(async (req) => {
             const valorItem = unitPrice * qty;
             const saleFee = oi.sale_fee || 0;
             const sku = itemData.seller_custom_field || itemData.seller_sku || itemData.id || '';
+            const mlId = itemData.id || '';
             
-            // Tipo de anúncio — busca do items API ou order detail
-            const detailOi = orderDetail?.order_items?.find((fo: any) => (fo.item?.id === itemData.id));
-            const listingType = itemListingTypes[itemData.id] || oi.listing_type_id || detailOi?.listing_type_id || '';
+            // Tipo de anúncio — items batch API > order_item > order detail
+            const detailOi = orderDetail?.order_items?.find((fo: any) => (fo.item?.id === mlId));
+            const listingType = itemListingTypes[mlId] || oi.listing_type_id || detailOi?.listing_type_id || '';
             const tipoAnuncio = listingType.includes('gold_special') ? 'Clássico' : 'Premium';
 
-            // Verificar se é Full pelo node_id do item se não for flex
+            // Verificar se é Full pelo node_id
             if (tipo_log !== 'Mercado Envios Flex') {
               const node = oi.item?.stock?.node_id || itemData.stock?.node_id;
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
             
-            // ═══ FRETE POR ITEM ═══
-            // Proporcional ao valor do item dentro do pack/order
-            let custo_calc = 0;
-            if (custo_frete_total > 0 && totalPackValue > 0) {
-              custo_calc = Math.round(-(custo_frete_total * (valorItem / totalPackValue)) * 100) / 100;
-            }
+            // ═══ FRETE POR ITEM (idêntico ao Python) ═══
+            // custos_por_item[ml_id] → custo deste item (dividido igualmente)
+            const custo_calc = custos_por_item[mlId] ? Math.round(-custos_por_item[mlId] * 100) / 100 : 0;
 
             // Comissão ML (col 15): sale_fee × quantidade
             const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
