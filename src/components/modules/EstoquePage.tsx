@@ -536,8 +536,11 @@ export function EstoquePage() {
                           <td className="px-3 py-2.5 text-right text-muted-foreground">{row.entradaPendente || '—'}</td>
                           <td className="px-3 py-2.5 text-right text-muted-foreground">{row.emTransferencia || '—'}</td>
                           <td className={`px-3 py-2.5 text-right font-semibold ${row.sugestaoEnvio > 0 ? 'text-[hsl(var(--vix-danger))]' : 'text-[hsl(var(--vix-success))]'}`}>{row.sugestaoEnvio > 0 ? `-${row.sugestaoEnvio}` : '0'}</td>
-                          <td className={`px-3 py-2.5 text-right font-medium ${row.coberturaDias <= 0 ? 'text-[hsl(var(--vix-danger))]' : row.coberturaDias < diasCoberturaAlvo ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-success))]'}`}>
+                          <td className={`px-3 py-2.5 text-right font-medium ${row.coberturaDias <= 0 ? 'text-[hsl(var(--vix-danger))]' : row.coberturaDias < (row.customCobertura ?? diasCoberturaAlvo) ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-success))]'}`}>
                             {row.coberturaDias >= 999 ? '∞' : `${row.coberturaDias}d`}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-muted-foreground font-medium">
+                            {row.customCobertura ?? diasCoberturaAlvo}d
                             {row.customCobertura && <span className="text-[9px] text-[hsl(var(--vix-info))] ml-0.5">⚙</span>}
                           </td>
                           <td className="px-3 py-2.5 text-center">{statusBadge(row.status)}</td>
