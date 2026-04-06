@@ -71,77 +71,47 @@ Deno.serve(async (req) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: any[][] = utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // ML Full export: cabeçalho nas linhas 10-11 (merged), dados a partir da linha 13 (index 12)
-    // Colunas fixas do export ML:
-    // A=Código ML, B=Código universal, C=SKU, D=# Anúncio, E=Agrupador, F=Produto, G=Tamanho,
-    // H=Tipo de produto, I=Status do anúncio, J=Oferece Full, K=Vendas últimos 30 dias,
-    // L=Unidades que afetam métrica, M=Entrada pendente, N=Em transferência, ...
-    
-    // Buscar header row dinamicamente (procura nas primeiras 15 linhas)
-    const HEADER_KEYWORDS = ['sku', 'produto', 'tamanho', 'status do anúncio', 'código ml', 'entrada pendente'];
-    let headerRowIdx = -1;
-    let headers: string[] = [];
-    
-    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    // ML Full export structure (from screenshot):
+    // A(0)=Código ML, B(1)=Código universal, C(2)=SKU, D(3)=# Anúncio, 
+    // E(4)=Agrupador de variações, F(5)=Produto, G(6)=Tamanho,
+    // H(7)=Tipo de produto, I(8)=Status do anúncio, J(9)=Oferece Full,
+    // K(10)=Vendas últimos 30 dias, L(11)=Unidades que afetam métrica,
+    // M(12)=Entrada pendente, N(13)=Em transferência, O(14)=Devolvidas pelo comprador,
+    // P(15)=Aptas para venda, ... U(20)=Unidades que ocupan espacio en Full
+    // Header is on rows 10-11 (merged), data starts row 13 (index 12)
+
+    // Use fixed mapping based on known ML export structure
+    // SKU = column C (index 2)
+    const COL = {
+      sku: 2,         // C
+      tamanho: 6,     // G
+      status: 8,      // I - Status do anúncio
+      entradaPend: 12, // M - Entrada pendente
+      transferencia: 13, // N - Em transferência
+      devolucao: 14,  // O - Devolvidas pelo comprador
+      aptas: 15,      // P - Aptas para venda
+      espacioFull: 20, // U - Unidades que ocupan espacio en Full
+    };
+
+    // Find data start: skip first 11 rows (header area), then skip empty rows
+    let dataStartIdx = 12; // row 13 = index 12
+    // Also try to detect by looking for first row with content in SKU column
+    for (let i = 10; i < Math.min(rows.length, 20); i++) {
       const row = rows[i];
       if (!row) continue;
-      const rowStrs = row.map((c: any) => String(c ?? '').trim());
-      const rowLower = rowStrs.map(s => s.toLowerCase());
-      const matches = HEADER_KEYWORDS.filter(kw => rowLower.some(h => h.includes(kw)));
-      if (matches.length >= 2) {
-        headerRowIdx = i;
-        headers = rowStrs;
-        break;
-      }
+      const cellC = row[COL.sku] != null ? String(row[COL.sku]).trim().toLowerCase() : '';
+      // Skip header-like rows
+      if (cellC === 'sku' || cellC === '' || cellC.includes('código')) continue;
+      // Found first data row
+      dataStartIdx = i;
+      break;
     }
 
-    // Se não achou por keywords, usa fallback fixo: cabeçalho na linha 10 (index 9)
-    if (headerRowIdx < 0) {
-      // Tenta linhas 9, 10, 11 como possíveis cabeçalhos
-      for (const tryIdx of [9, 10, 11]) {
-        if (tryIdx < rows.length && rows[tryIdx]) {
-          const rowStrs = rows[tryIdx].map((c: any) => String(c ?? '').trim());
-          if (rowStrs.some(h => h.toLowerCase().includes('sku') || h.toLowerCase().includes('produto'))) {
-            headerRowIdx = tryIdx;
-            headers = rowStrs;
-            break;
-          }
-        }
-      }
-    }
-
-    // Log para debug
-    console.log(`[estoque-full-upload] headerRowIdx=${headerRowIdx}, headers=${JSON.stringify(headers?.slice(0, 15))}`);
-    for (let i = 0; i < Math.min(rows.length, 3); i++) {
-      console.log(`[estoque-full-upload] Row ${i}:`, JSON.stringify(rows[i]?.slice(0, 8)));
-    }
-
-    // Mapear colunas pelo nome do cabeçalho
-    let colSku = findCol(headers, 'sku');
-    const colTamanho = findCol(headers, 'tamaño', 'tamanho');
-    const colStatus = findCol(headers, 'status do anúncio', 'status', 'estado');
-    const colEntradaPendente = findCol(headers, 'entrada pendente', 'entrada pendiente');
-    const colTransferencia = findCol(headers, 'em transferência', 'en transferencia', 'transferencia', 'transferência');
-    const colDevolucao = findCol(headers, 'devolvidas pelo comprador', 'devueltas', 'devolv');
-    const colAptas = findCol(headers, 'aptas para venda', 'aptas para la venta', 'aptas');
-    const colEspacioFull = findCol(headers, 'unidades que ocupan espacio en full', 'espacio en full', 'espaço full', 'ocupan espacio');
-
-    // Fallback: se não achou cabeçalho nem SKU, usa índices fixos do export padrão ML
-    if (headerRowIdx < 0 || colSku < 0) {
-      console.log('[estoque-full-upload] Usando mapeamento fixo do export ML');
-      headerRowIdx = 11; // dados começam na linha 13 (index 12), header é 12 (index 11)
-      colSku = 3; // Coluna D = SKU
-    }
-
-    // Pular linhas vazias entre header e dados (ex: linha 12 pode ser vazia)
-    let dataStartIdx = headerRowIdx + 1;
-    while (dataStartIdx < rows.length) {
-      const row = rows[dataStartIdx];
-      if (row && row.some((c: any) => c != null && String(c).trim() !== '')) break;
-      dataStartIdx++;
-    }
-
-    console.log(`[estoque-full-upload] colSku=${colSku}, dataStart=${dataStartIdx}`);
+    // Log for debug
+    console.log(`[estoque-full-upload] dataStartIdx=${dataStartIdx}`);
+    console.log(`[estoque-full-upload] Sample row ${dataStartIdx}:`, JSON.stringify(rows[dataStartIdx]?.slice(0, 10)));
+    console.log(`[estoque-full-upload] Row 10 (header?):`, JSON.stringify(rows[9]?.slice(0, 10)));
+    console.log(`[estoque-full-upload] Row 11 (header?):`, JSON.stringify(rows[10]?.slice(0, 10)));
 
     const dadosNovos: any[][] = [];
 
