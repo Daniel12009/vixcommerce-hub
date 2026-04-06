@@ -71,14 +71,23 @@ Deno.serve(async (req) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: any[][] = utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // Encontrar a linha de cabeçalho (procura a primeira linha que contenha "SKU")
+    // Log das primeiras 5 linhas para debug
+    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+      console.log(`[estoque-full-upload] Row ${i}:`, JSON.stringify(rows[i]?.slice(0, 15)));
+    }
+
+    // Encontrar a linha de cabeçalho
+    const HEADER_KEYWORDS = ['sku', 'publicación', 'publicacao', 'título', 'titulo', 'stock', 'disponible', 'tamaño', 'tamanho'];
     let headerRowIdx = -1;
     let headers: string[] = [];
     for (let i = 0; i < Math.min(rows.length, 10); i++) {
       const row = rows[i];
       if (!row) continue;
       const rowStrs = row.map((c: any) => String(c ?? '').trim());
-      if (rowStrs.some(h => h.toLowerCase() === 'sku' || h.toLowerCase().includes('sku del'))) {
+      const rowLower = rowStrs.map(s => s.toLowerCase());
+      // Match if at least 2 header keywords are found in this row
+      const matches = HEADER_KEYWORDS.filter(kw => rowLower.some(h => h.includes(kw)));
+      if (matches.length >= 2) {
         headerRowIdx = i;
         headers = rowStrs;
         break;
@@ -86,12 +95,25 @@ Deno.serve(async (req) => {
     }
 
     if (headerRowIdx < 0) {
-      // Fallback: usar linha 2 (index 2) como cabeçalho
-      headerRowIdx = 2;
-      headers = (rows[headerRowIdx] || []).map((c: any) => String(c ?? '').trim());
+      // Fallback: tenta cada linha procurando pelo menos 1 keyword
+      for (let i = 0; i < Math.min(rows.length, 10); i++) {
+        const row = rows[i];
+        if (!row) continue;
+        const rowStrs = row.map((c: any) => String(c ?? '').trim());
+        const rowLower = rowStrs.map(s => s.toLowerCase());
+        if (HEADER_KEYWORDS.some(kw => rowLower.some(h => h.includes(kw)))) {
+          headerRowIdx = i;
+          headers = rowStrs;
+          break;
+        }
+      }
     }
 
-    console.log('[estoque-full-upload] Headers encontrados:', JSON.stringify(headers));
+    if (headerRowIdx < 0) {
+      throw new Error(`Cabeçalho não encontrado nas 10 primeiras linhas. Primeiras linhas: ${JSON.stringify(rows.slice(0, 3).map(r => r?.slice(0, 8)))}`);
+    }
+
+    console.log(`[estoque-full-upload] Header na linha ${headerRowIdx}:`, JSON.stringify(headers));
 
     // Mapear colunas pelo nome
     const colSku = findCol(headers, 'sku');
