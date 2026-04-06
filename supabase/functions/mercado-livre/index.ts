@@ -1361,25 +1361,44 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Frete: list_cost (custo total etiqueta) - cost (pago pelo comprador) = custo seller
+          // ═══ FRETE: Lógica por item usando cost_components ═══
+          // Hierarquia: cost_components.ratio (verdade) > shipping_option.cost > 0
+          // Se list_cost == cost → custo seller = 0
           const list_cost = shipmentData?.shipping_option?.list_cost || 0;
           const cost_opt = shipmentData?.shipping_option?.cost || 0;
-          const envio_seller = list_cost - cost_opt; // Custo TOTAL do seller para este shipment
+          const ratio_total = shipmentData?.cost_components?.ratio || 0;
+          const shippingItems: any[] = shipmentData?.shipping_items || [];
 
-          // Para carrinho (pack): calcular valor total de TODOS os itens do pack
-          // para distribuir o frete proporcionalmente por valor
-          let totalPackValue = 0;
-          if (pid) {
-            const packOrders = results.filter((o: any) => o.pack_id === pid && o.status !== 'cancelled');
-            for (const po of packOrders) {
-              for (const poi of (po.order_items || [])) {
-                totalPackValue += (poi.unit_price || 0) * (poi.quantity || 1);
+          // Determinar se o seller tem custo zero (ML pagou ou promo)
+          const sellerCostZero = (list_cost > 0 && list_cost === cost_opt) || (!shipmentData);
+
+          // Construir mapa de custo por item_id para carrinho
+          // Se houver múltiplos shipping_items, dividir ratio proporcional ao peso/valor
+          const itemRatioMap: Record<string, number> = {};
+          if (shippingItems.length > 1 && ratio_total > 0) {
+            // Carrinho: dividir ratio proporcional ao valor de cada shipping_item
+            // (ML não detalha ratio por item, usamos proporção por valor)
+            let totalShipItemValue = 0;
+            for (const si of shippingItems) {
+              const siQty = si.quantity || 1;
+              // Buscar preço do item no pedido ou pack
+              const matchingOrder = results.find((o: any) => 
+                (o.order_items || []).some((oi: any) => oi.item?.id === si.id)
+              );
+              const matchingOi = matchingOrder?.order_items?.find((oi: any) => oi.item?.id === si.id);
+              const siValue = (matchingOi?.unit_price || 0) * siQty;
+              totalShipItemValue += siValue;
+              itemRatioMap[si.id] = siValue; // temporário: guarda valor
+            }
+            // Converter valores em proporções do ratio total
+            if (totalShipItemValue > 0) {
+              for (const id of Object.keys(itemRatioMap)) {
+                itemRatioMap[id] = Math.round(ratio_total * (itemRatioMap[id] / totalShipItemValue) * 100) / 100;
               }
             }
-          }
-          // Se não é pack, totalPackValue = valor desta order
-          if (!pid || totalPackValue === 0) {
-            totalPackValue = orderItems.reduce((s: number, i: any) => s + (i.unit_price || 0) * (i.quantity || 1), 0);
+          } else if (shippingItems.length === 1 && ratio_total > 0) {
+            // Item único: ratio integral
+            itemRatioMap[shippingItems[0].id] = ratio_total;
           }
 
           const logisticType = shipmentData?.logistic_type || orderDetail?.shipping?.logistic_type || order.shipping?.logistic_type || '';
@@ -1413,12 +1432,24 @@ Deno.serve(async (req) => {
               if (node && String(node).startsWith('BR')) tipo_log = 'Mercado Envios Full';
             }
             
-            // Frete por item: proporcional ao valor do item no pack/order
-            // envio_seller * (valorItem / totalPackValue) → sem duplicação
+            // Frete por item: buscar ratio por item_id no mapa
+            // Hierarquia: itemRatioMap[item_id] > ratio_total (item único) > shipping_option.cost > 0
             let custo_calc = 0;
-            if (envio_seller > 0 && totalPackValue > 0) {
-              custo_calc = Math.round(-envio_seller * (valorItem / totalPackValue) * 100) / 100;
+            if (!sellerCostZero) {
+              const mlbId = itemData.id || '';
+              if (itemRatioMap[mlbId] !== undefined) {
+                // Carrinho: ratio específico deste item (proporcional)
+                custo_calc = -itemRatioMap[mlbId];
+              } else if (shippingItems.length <= 1 && ratio_total > 0) {
+                // Item único com ratio: usar ratio integral
+                custo_calc = -ratio_total;
+              } else if (ratio_total === 0 && cost_opt > 0 && list_cost !== cost_opt) {
+                // Sem ratio mas tem cost diferente de list_cost: usar cost como fallback
+                custo_calc = -cost_opt;
+              }
+              // Se ratio_total == 0 e list_cost == cost_opt → custo seller = 0 (já é 0)
             }
+            custo_calc = Math.round(custo_calc * 100) / 100;
 
             // Comissão ML (col 15): sale_fee × quantidade
             const comissao = saleFee > 0 ? -(saleFee * qty) : (saleFee * qty);
