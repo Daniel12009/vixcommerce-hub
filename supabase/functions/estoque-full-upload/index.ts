@@ -71,47 +71,40 @@ Deno.serve(async (req) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: any[][] = utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // ML Full export structure (from screenshot):
-    // A(0)=Código ML, B(1)=Código universal, C(2)=SKU, D(3)=# Anúncio, 
-    // E(4)=Agrupador de variações, F(5)=Produto, G(6)=Tamanho,
-    // H(7)=Tipo de produto, I(8)=Status do anúncio, J(9)=Oferece Full,
-    // K(10)=Vendas últimos 30 dias, L(11)=Unidades que afetam métrica,
-    // M(12)=Entrada pendente, N(13)=Em transferência, O(14)=Devolvidas pelo comprador,
-    // P(15)=Aptas para venda, ... U(20)=Unidades que ocupan espacio en Full
-    // Header is on rows 10-11 (merged), data starts row 13 (index 12)
-
-    // Use fixed mapping based on known ML export structure
-    // SKU = column C (index 2)
+    // ML Full export - xlsx parser strips merged header rows, data starts at row 0
+    // Verified from logs: Row 0 = ["NVIW23131","789...","FC-35","3460362799 | 4466816737",...]
+    // Column mapping (0-indexed):
+    // 0=Código ML, 1=Código universal, 2=SKU, 3=# Anúncio, 4=Agrupador,
+    // 5=Produto, 6=Tamanho, 7=Tipo produto, 8=Status, 9=Oferece Full,
+    // 10=Vendas 30d, 11=Afetam métrica, 12=Entrada pendente, 13=Em transferência,
+    // 14+=Devolvidas, Aptas, etc.
     const COL = {
-      sku: 2,         // C
-      tamanho: 6,     // G
-      status: 8,      // I - Status do anúncio
-      entradaPend: 12, // M - Entrada pendente
-      transferencia: 13, // N - Em transferência
-      devolucao: 14,  // O - Devolvidas pelo comprador
-      aptas: 15,      // P - Aptas para venda
-      espacioFull: 20, // U - Unidades que ocupan espacio en Full
+      sku: 2,
+      tamanho: 6,
+      status: 8,
+      entradaPend: 12,
+      transferencia: 13,
+      devolucao: 14,
+      aptas: 15,
+      espacioFull: 20,
     };
 
-    // Find data start: skip first 11 rows (header area), then skip empty rows
-    let dataStartIdx = 12; // row 13 = index 12
-    // Also try to detect by looking for first row with content in SKU column
-    for (let i = 10; i < Math.min(rows.length, 20); i++) {
+    // Detect data start: find first row where column 2 looks like a SKU (not a header keyword)
+    let dataStartIdx = 0;
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
       const row = rows[i];
       if (!row) continue;
-      const cellC = row[COL.sku] != null ? String(row[COL.sku]).trim().toLowerCase() : '';
-      // Skip header-like rows
-      if (cellC === 'sku' || cellC === '' || cellC.includes('código')) continue;
-      // Found first data row
+      const cell = row[COL.sku] != null ? String(row[COL.sku]).trim().toLowerCase() : '';
+      // Skip empty rows and header-like rows
+      if (!cell || cell === 'sku' || cell.includes('código') || cell.includes('codigo')) continue;
       dataStartIdx = i;
       break;
     }
 
     // Log for debug
-    console.log(`[estoque-full-upload] dataStartIdx=${dataStartIdx}`);
-    console.log(`[estoque-full-upload] Sample row ${dataStartIdx}:`, JSON.stringify(rows[dataStartIdx]?.slice(0, 10)));
-    console.log(`[estoque-full-upload] Row 10 (header?):`, JSON.stringify(rows[9]?.slice(0, 10)));
-    console.log(`[estoque-full-upload] Row 11 (header?):`, JSON.stringify(rows[10]?.slice(0, 10)));
+    console.log(`[estoque-full-upload] totalRows=${rows.length}, dataStartIdx=${dataStartIdx}`);
+    console.log(`[estoque-full-upload] First data row:`, JSON.stringify(rows[dataStartIdx]?.slice(0, 16)));
+    if (rows.length > 1) console.log(`[estoque-full-upload] Row 1:`, JSON.stringify(rows[1]?.slice(0, 16)));
 
     const dadosNovos: any[][] = [];
 
