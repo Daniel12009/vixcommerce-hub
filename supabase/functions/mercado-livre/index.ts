@@ -369,18 +369,6 @@ async function processarVendaMLSingle(
       if (custo_calc > 0) custo_calc = custo_calc * -1;
       custo_calc = Math.round(custo_calc * 100) / 100;
 
-      if (!estado) {
-        try {
-          const rb = await fetch(`${ML_API}/orders/${vid}/billing_info`, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          });
-          if (rb.ok) {
-            const rbData = await rb.json();
-            const est_raw = rbData.billing_info?.address?.state_name || '';
-            estado = traduzirEstado(est_raw);
-          }
-        } catch { /* ignorar */ }
-      }
       if (!estado) estado = 'Não Identificado';
 
       const fee = parseFloat(String(item.sale_fee ?? 0)) || 0;
