@@ -547,7 +547,7 @@ export function EstoquePage() {
                         </tr>
                       ))}
                       {displayData.length === 0 && (
-                        <tr><td colSpan={11} className="py-8 text-center text-muted-foreground text-sm">{searchTerm || filterStatus !== 'all' ? 'Nenhum SKU encontrado com os filtros aplicados' : 'Nenhum dado disponível'}</td></tr>
+                        <tr><td colSpan={12} className="py-8 text-center text-muted-foreground text-sm">{searchTerm || filterStatus !== 'all' ? 'Nenhum SKU encontrado com os filtros aplicados' : 'Nenhum dado disponível'}</td></tr>
                       )}
                     </tbody>
                   </table>
