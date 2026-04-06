@@ -184,7 +184,6 @@ async function invokeSheets(spreadsheetId: string, range: string, values: any[][
 
 const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
 
-
 // ═══════════════════════════════════════════════════════════════════
 // UTILITÁRIOS — equivalentes exatos às funções Python
 // ═══════════════════════════════════════════════════════════════════
@@ -216,12 +215,27 @@ function formatarDataBR(isoDate: string): string {
   }
 }
 
+function formatarPreco(valor: number): string {
+  const parts = valor.toFixed(2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `R$ ${parts[0]},${parts[1]}`;
+}
+
+function toStringDecimal(v: number): string {
+  return v.toFixed(2).replace('.', ',');
+}
+
+function fmtDataRef(d: string): string {
+  const [y, m, dia] = d.split('-');
+  return `${dia}/${m}/${y}`;
+}
+
 async function consultarFrete(
   shipId: string | number | null,
   token: string,
   account: any
-): Promise<{ custo_api: number; estado: string; tipo_log: string; cidade_dest: string }> {
-  if (!shipId) return { custo_api: 0, estado: '', tipo_log: 'Mercado Envios', cidade_dest: '' };
+): Promise<{ custosPorItem: Record<string, number>; estado: string; tipo_log: string; cidade_dest: string }> {
+  if (!shipId) return { custosPorItem: {}, estado: '', tipo_log: 'Mercado Envios', cidade_dest: '' };
   try {
     let res = await fetch(`${ML_API}/shipments/${shipId}`, {
       headers: { 'Authorization': `Bearer ${token}` },
@@ -232,22 +246,23 @@ async function consultarFrete(
         headers: { 'Authorization': `Bearer ${token}` },
       });
     }
-    if (!res.ok) return { custo_api: 0, estado: '', tipo_log: 'Mercado Envios', cidade_dest: '' };
+    if (!res.ok) return { custosPorItem: {}, estado: '', tipo_log: 'Mercado Envios', cidade_dest: '' };
 
     const d = await res.json();
 
-    const free_shipping = d.free_shipping || false;
-    const cost_opt = parseFloat(String(d.shipping_option?.cost ?? 0)) || 0;
-    const list_cost = parseFloat(String(d.shipping_option?.list_cost ?? 0)) || 0;
-    const base_cost = parseFloat(String(d.base_cost ?? 0)) || 0;
+    // Python doc 27: etiqueta_total = list_cost, pago = cost, custo = etiqueta - pago
+    const etiqueta_total = parseFloat(String(d.shipping_option?.list_cost ?? 0)) || 0;
+    const pago_pelo_comprador = parseFloat(String(d.shipping_option?.cost ?? 0)) || 0;
+    let custo_vendedor = etiqueta_total - pago_pelo_comprador;
+    if (custo_vendedor < 0.01) custo_vendedor = 0;
 
-    let custo_api = 0;
-    if (free_shipping) {
-      custo_api = cost_opt;
-    } else {
-      const referencia_cheia = list_cost > 0 ? list_cost : base_cost;
-      if (referencia_cheia > 0) {
-        custo_api = Math.max(0, referencia_cheia - cost_opt);
+    // Dividir por item (dict)
+    const custosPorItem: Record<string, number> = {};
+    const items_shipping = d.shipping_items || [];
+    if (items_shipping.length > 0 && custo_vendedor > 0) {
+      const valor_por_item = custo_vendedor / items_shipping.length;
+      for (const it of items_shipping) {
+        custosPorItem[String(it.id)] = valor_por_item;
       }
     }
 
@@ -271,9 +286,9 @@ async function consultarFrete(
       tipo_log = 'Mercado Envios Agência';
     }
 
-    return { custo_api, estado, tipo_log, cidade_dest };
+    return { custosPorItem, estado, tipo_log, cidade_dest };
   } catch {
-    return { custo_api: 0, estado: '', tipo_log: 'Mercado Envios', cidade_dest: '' };
+    return { custosPorItem: {}, estado: '', tipo_log: 'Mercado Envios', cidade_dest: '' };
   }
 }
 
@@ -331,7 +346,7 @@ async function processarVendaMLSingle(
       } catch { /* ignorar */ }
     }
 
-    const { custo_api, estado: estadoFrete, tipo_log: tipoLogInicial, cidade_dest } =
+    const { custosPorItem, estado: estadoFrete, tipo_log: tipoLogInicial, cidade_dest } =
       await consultarFrete(sid, token, account);
 
     let tipo_log = tipoLogInicial;
@@ -342,7 +357,8 @@ async function processarVendaMLSingle(
 
     for (const item of orderItems) {
       const item_obj = item.item || {};
-      const sku = item_obj.seller_custom_field || item_obj.seller_sku || item_obj.id || '';
+      const ml_id = item_obj.id || '';
+      const sku = item_obj.seller_custom_field || item_obj.seller_sku || ml_id;
       const preco = parseFloat(String(item.unit_price ?? 0)) || 0;
       const qtd = parseInt(String(item.quantity ?? 1)) || 1;
       const valor_total_item = preco * qtd;
@@ -362,12 +378,10 @@ async function processarVendaMLSingle(
         } else {
           custo_calc = valor_total_item <= 79.00 ? 5.00 : 12.81;
         }
-      } else if (tipo_log === 'Mercado Envios Full') {
-        custo_calc = valor_total_item < 79.00 ? 0 : custo_api;
       } else {
-        custo_calc = valor_total_item < 79.00 ? 0 : custo_api;
+        // Python doc 27: direto do dict, sem threshold de R$79
+        custo_calc = custosPorItem[String(ml_id)] ?? 0;
       }
-      if (tipo_log !== 'Mercado Envios Flex' && custo_api === 0) custo_calc = 0;
 
       if (custo_calc > 0) custo_calc = custo_calc * -1;
       custo_calc = Math.round(custo_calc * 100) / 100;
@@ -389,11 +403,13 @@ async function processarVendaMLSingle(
       const fee = parseFloat(String(item.sale_fee ?? 0)) || 0;
       const fee_total_neg = fee > 0 ? -1 * (fee * qtd) : (fee * qtd);
 
-      const data_criacao = formatarDataBR(venda.date_created || '');
-      const data_fechamento = formatarDataBR(venda.date_closed || '');
+      // Bug fix: prefixar datas com apóstrofo para forçar texto no Sheets
+      const data_criacao = `'${formatarDataBR(venda.date_created || '')}`;
+      const data_fechamento = `'${formatarDataBR(venda.date_closed || '')}`;
       const id_venda_str = `'${id_referencia_pedido}`;
 
-      const listing_type_id = item.listing_type_id || item.item?.listing_type_id || '';
+      const listing_type_id = item.listing_type_id || item.item?.listing_type_id || item.item?.listing_type?.id || '';
+      console.log('[listing_type_id]', item.listing_type_id, item.item?.listing_type_id, 'final:', listing_type_id);
 
       linhas.push([
         sku,
@@ -402,7 +418,7 @@ async function processarVendaMLSingle(
         data_fechamento,
         id_venda_str,
         'Mercado Livre',
-        item_obj.id || '',
+        ml_id,
         String(listing_type_id).toLowerCase().includes('gold_special') ? 'Clássico' : 'Premium',
         '',
         tipo_log,
@@ -1590,315 +1606,312 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ═══ PERFORMANCE CATÁLOGO ML → GOOGLE SHEETS ═══════════════════════════
+    // ═══ PERFORMANCE CATÁLOGO ML → GOOGLE SHEETS ════════════════════════════
     if (action === 'get_performance_catalog') {
       if (!account_id) throw new Error('account_id is required');
+
       const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
       const accounts = await accountsRes.json();
       if (!accounts?.length) throw new Error('Conta ML não encontrada');
       const account = accounts[0];
 
+      let token = account.access_token;
+      if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+        token = await refreshToken(account);
+      }
+
       let sellerId = account.seller_id;
       if (!sellerId) {
-        const me = await mlFetch(account, '/users/me');
-        sellerId = me.id;
+        const me = await fetch(`${ML_API}/users/me`, { headers: { 'Authorization': `Bearer ${token}` } });
+        sellerId = (await me.json()).id;
         await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
           method: 'PATCH', body: JSON.stringify({ seller_id: String(sellerId) }),
         });
       }
 
-      const agoraBR = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Sao_Paulo'}));
-      agoraBR.setDate(agoraBR.getDate() - 1);
-      const defaultDate = `${agoraBR.getFullYear()}-${String(agoraBR.getMonth() + 1).padStart(2, '0')}-${String(agoraBR.getDate()).padStart(2, '0')}`;
-      
-      const dateFrom = reqDateFrom || defaultDate;
-      const dateTo = reqDateTo || dateFrom;
-      const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
-      const contaLabel = (account.nome || '').trim().toUpperCase();
-      const sheetTab = reqSheetName || `PERF-${contaLabel}`;
+      const ontem = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+      ontem.setDate(ontem.getDate() - 1);
+      const defaultDate = ontem.toISOString().slice(0, 10);
 
-      // 1. Buscar itens Full catálogo
-      let itemIds: string[] = [];
+      const dateFrom = reqDateFrom || defaultDate;
+      const dateTo   = reqDateTo   || dateFrom;
+      const sheetId  = reqSpreadsheetId || account.spreadsheet_id || PLANILHA_MESTRA;
+
+      const contaUpper = (account.nome || '').trim().toUpperCase();
+      const nomeAba = `PERF-${contaUpper}`;
+
+      // PASSO 1: buscar itens Full catálogo
+      const itemIds: string[] = [];
       let searchOffset = 0;
-      let searchHasMore = true;
-      while (searchHasMore) {
-        const searchData = await mlFetch(account,
-          `/users/${sellerId}/items/search?status=active&logistic_type=fulfillment&catalog_listing=true&limit=50&offset=${searchOffset}`
+      while (true) {
+        let res = await fetch(
+          `${ML_API}/users/${sellerId}/items/search?status=active&logistic_type=fulfillment&catalog_listing=true&limit=50&offset=${searchOffset}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
         );
-        itemIds = itemIds.concat(searchData.results || []);
+        if (res.status === 401) { token = await refreshToken(account); res = await fetch(`${ML_API}/users/${sellerId}/items/search?status=active&logistic_type=fulfillment&catalog_listing=true&limit=50&offset=${searchOffset}`, { headers: { 'Authorization': `Bearer ${token}` } }); }
+        if (!res.ok) break;
+        const data = await res.json();
+        const results: string[] = data.results || [];
+        if (results.length === 0) break;
+        itemIds.push(...results);
+        if (results.length < 50) break;
         searchOffset += 50;
-        searchHasMore = searchOffset < (searchData.paging?.total || 0);
       }
 
-      console.log(`[PERF] ${account.nome}: ${itemIds.length} itens catálogo Full`);
+      console.log(`[PERF] ${account.nome}: ${itemIds.length} itens Full catálogo`);
+      if (itemIds.length === 0) {
+        return new Response(JSON.stringify({ mensagem: `Nenhum item Full encontrado para ${account.nome}`, itens_processados: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
-      // 2. Buscar detalhes em batches de 20
-      const itemDetails: Record<string, any> = {};
+      // PASSO 2: detalhes (chunks de 20)
+      const detalhes: Record<string, { sku: string; titulo: string; link: string; preco: number }> = {};
       for (let i = 0; i < itemIds.length; i += 20) {
-        const batch = itemIds.slice(i, i + 20).join(',');
-        if (!batch) continue;
-        const batchData = await mlFetch(account, `/items?ids=${batch}&attributes=id,title,permalink,seller_custom_field,variations,price,attributes`);
-        for (const d of batchData) {
-          if (d.code === 200 && d.body) {
-            const b = d.body;
-
-            // Fix 2: SKU extraction — seller_custom_field > attributes SELLER_SKU > variations SELLER_SKU
-            let sku = b.seller_custom_field || '';
+        const chunk = itemIds.slice(i, i + 20).join(',');
+        try {
+          let res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,title,permalink,seller_custom_field,attributes`, { headers: { 'Authorization': `Bearer ${token}` } });
+          if (res.status === 401) { token = await refreshToken(account); res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,title,permalink,seller_custom_field,attributes`, { headers: { 'Authorization': `Bearer ${token}` } }); }
+          if (!res.ok) continue;
+          const batchData = await res.json();
+          for (const item of batchData) {
+            if (item.code !== 200 || !item.body) continue;
+            const b = item.body;
+            let sku: string = b.seller_custom_field || '';
             if (!sku) {
               const attrSku = (b.attributes || []).find((a: any) => a.id === 'SELLER_SKU');
               sku = attrSku?.value_name || '';
             }
-            if (!sku) {
-              const skuVar = (b.variations || []).map((v: any) => {
-                const sa = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
-                return sa?.value_name || '';
-              }).filter(Boolean);
-              sku = skuVar[0] || '';
-            }
             if (!sku) sku = 'SEM_SKU';
-
-            itemDetails[b.id] = {
-              title: b.title || '',
-              sku,
-              price: b.price || 0,
-              permalink: b.permalink || '',
-            };
+            detalhes[b.id] = { sku, titulo: b.title || '', link: b.permalink || '', preco: 0 };
           }
-        }
+        } catch { /* continua */ }
       }
 
-      // 3. Buscar visitas e preço atualizado (1 MLB por vez)
-      const visitCounts: Record<string, number> = {};
+      // Preços
+      await Promise.all(itemIds.map(async (mlb) => {
+        try {
+          const res = await fetch(`${ML_API}/items/${mlb}/sale_price?context=channel_marketplace`, { headers: { 'Authorization': `Bearer ${token}` } });
+          if (res.ok) {
+            const p = (await res.json()).amount || 0;
+            if (detalhes[mlb] && p > 0) detalhes[mlb].preco = p;
+          }
+        } catch { /* ignora */ }
+      }));
+
+      // PASSO 3: visitas
       const date_from_str = dateFrom.slice(0, 10);
-      const date_to_str   = dateTo.slice(0, 10);
-
-      const batchSize = 20;
-      for (let i = 0; i < itemIds.length; i += batchSize) {
-        const batch = itemIds.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(async (mlb) => {
-            try {
-              const url = `/items/visits?ids=${mlb}&date_from=${date_from_str}&date_to=${date_to_str}`;
-              const vData = await mlFetch(account, url);
-              if (Array.isArray(vData)) {
-                visitCounts[mlb] = vData[0]?.total_visits || 0;
-              } else if (typeof vData === 'object') {
-                visitCounts[mlb] = vData.total_visits || 0;
-              } else {
-                visitCounts[mlb] = 0;
-              }
-            } catch {
-              visitCounts[mlb] = 0;
+      const date_to_str = dateTo.slice(0, 10);
+      const visitas: Record<string, number> = {};
+      for (let i = 0; i < itemIds.length; i += 20) {
+        const batch = itemIds.slice(i, i + 20);
+        await Promise.all(batch.map(async (mlb) => {
+          try {
+            const url = `${ML_API}/items/visits?ids=${mlb}&date_from=${date_from_str}&date_to=${date_to_str}`;
+            let res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (res.status === 401) { token = await refreshToken(account); res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }); }
+            if (!res.ok) { visitas[mlb] = 0; return; }
+            const dados = await res.json();
+            if (Array.isArray(dados)) {
+              visitas[mlb] = parseInt(String(dados[0]?.total_visits ?? 0)) || 0;
+            } else if (dados && typeof dados === 'object') {
+              visitas[mlb] = parseInt(String(dados.total_visits ?? dados[mlb]?.total_visits ?? 0)) || 0;
+            } else {
+              visitas[mlb] = 0;
             }
-
-            try {
-              const priceUrl = `/items/${mlb}/sale_price?context=channel_marketplace`;
-              const pData = await mlFetch(account, priceUrl);
-              const promotionPrice = pData?.amount;
-              if (promotionPrice && itemDetails[mlb]) {
-                itemDetails[mlb].price = promotionPrice;
-              }
-            } catch { /* if sale_price fails, keep the original price fetched from /items */ }
-          })
-        );
+          } catch { visitas[mlb] = 0; }
+        }));
       }
 
-      // 4. Buscar vendas do período
-      const salesCount: Record<string, { vendas: number; canceladas: number }> = {};
+      // PASSO 4: vendas
+      const vendas: Record<string, { total: number; canceladas: number }> = {};
+      for (const mlb of itemIds) vendas[mlb] = { total: 0, canceladas: 0 };
+      const setItems = new Set(itemIds);
       const isoFrom = `${dateFrom}T00:00:00.000-03:00`;
       const isoTo = `${dateTo}T23:59:59.999-03:00`;
       let offset = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const oData = await mlFetch(account,
-          `/orders/search?seller=${sellerId}&order.date_created.from=${encodeURIComponent(isoFrom)}&order.date_created.to=${encodeURIComponent(isoTo)}&limit=50&offset=${offset}`
-        );
-        for (const o of (oData.results || [])) {
+      while (true) {
+        let res = await fetch(`${ML_API}/orders/search?seller=${sellerId}&order.date_created.from=${encodeURIComponent(isoFrom)}&order.date_created.to=${encodeURIComponent(isoTo)}&limit=50&offset=${offset}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.status === 401) { token = await refreshToken(account); continue; }
+        if (!res.ok) break;
+        const oData = await res.json();
+        const results = oData.results || [];
+        if (results.length === 0) break;
+        for (const o of results) {
+          const st: string = o.status;
+          if (!['paid', 'confirmed', 'payment_required', 'cancelled'].includes(st)) continue;
           for (const oi of (o.order_items || [])) {
-            const mlb = oi.item?.id;
-            if (!mlb) continue;
-            if (!salesCount[mlb]) salesCount[mlb] = { vendas: 0, canceladas: 0 };
-            if (o.status === 'cancelled') {
-              salesCount[mlb].canceladas += oi.quantity || 1;
-            } else {
-              salesCount[mlb].vendas += oi.quantity || 1;
-            }
+            const mid: string = oi.item?.id;
+            if (!mid || !setItems.has(mid)) continue;
+            vendas[mid].total += 1;
+            if (st === 'cancelled') vendas[mid].canceladas += 1;
           }
         }
+        if (results.length < 50) break;
         offset += 50;
-        hasMore = offset < (oData.paging?.total || 0);
       }
 
-      // Fix 3: Data Ref em formato BR
-      function formatDateBR(ds: string): string {
-        const [y, m, d] = ds.split('-');
-        return `${d}/${m}/${y}`;
-      }
-      const dataRef = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
-
-      // 5. Montar linhas
+      // PASSO 5: montar linhas
+      const dataRef = `${fmtDataRef(dateFrom)} a ${fmtDataRef(dateTo)}`;
       const rows: any[][] = [];
-      for (const itemId of itemIds) {
-        const det = itemDetails[itemId] || {};
-        const vis = visitCounts[itemId] || 0;
-        const sales = salesCount[itemId] || { vendas: 0, canceladas: 0 };
-        // Fix 4: Conversão com vírgula
-        const convNum = vis > 0 ? ((sales.vendas / vis) * 100) : 0;
-        const convStr = convNum.toFixed(2).replace('.', ',') + '%';
-        // Fix 4: Preço formatado R$
-        const precoStr = `R$ ${(det.price || 0).toFixed(2).replace('.', ',')}`;
-        rows.push([
-          'Mercado Livre',    // Plataforma
-          itemId,             // ID Anúncio
-          det.sku || 'SEM_SKU', // SKU
-          det.title || '',    // Título
-          precoStr,           // Preço (R$ 1.234,56)
-          vis,                // Visitas
-          sales.vendas,       // Vendas
-          sales.canceladas,   // Canceladas
-          convStr,            // Conversão % (7,08%)
-          det.permalink || '',// Link
-          account.nome,       // Conta (nome completo)
-          dataRef,            // Data Ref (DD/MM/YYYY a DD/MM/YYYY)
-        ]);
+      for (const mlb of itemIds) {
+        const d = detalhes[mlb] || { sku: 'SEM_SKU', titulo: '', link: '', preco: 0 };
+        const v = visitas[mlb] || 0;
+        const s = vendas[mlb] || { total: 0, canceladas: 0 };
+        const conv = v > 0 ? s.total / v : 0;
+        const precoFmt = formatarPreco(d.preco || 0);
+        const convFmt = `${(conv * 100).toFixed(2).replace('.', ',')}%`;
+        rows.push(['Mercado Livre', mlb, d.sku, d.titulo, precoFmt, v, s.total, s.canceladas, convFmt, d.link, account.nome, dataRef]);
       }
 
-      // 6. Condicional APPEND (escrever header apenas se aba estiver vazia)
+      // PASSO 6: escrever
       if (rows.length > 0) {
-        let isAbaEmpty = true;
-        try {
-          const res = await invokeGsFunction('read', {
-            spreadsheetId: sheetId,
-            range: `${sheetTab}!A1:A1`
-          });
-          if (res.values && res.values.length > 0 && res.values[0] && res.values[0][0]) {
-            isAbaEmpty = false;
-          }
-        } catch { /* assume empty if error (sheet might not exist yet) */ }
-
         const header = ['Plataforma', 'ID Anúncio', 'SKU', 'Título', 'Preço', 'Visitas', 'Vendas', 'Canceladas', 'Conversão %', 'Link', 'Conta', 'Data Ref'];
-        const finalValues = isAbaEmpty ? [header, ...rows] : rows;
-        
-        await invokeSheets(sheetId, `${sheetTab}!A:L`, finalValues, 'append');
+        let abaTemHeader = false;
+        try {
+          const gsUrl = Deno.env.get('SUPABASE_URL')! + '/functions/v1/google-sheets';
+          const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+          const checkRes = await fetch(gsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+            body: JSON.stringify({ action: 'read', spreadsheetId: sheetId, range: `'${nomeAba}'!A1:A1` }),
+          });
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            abaTemHeader = !!(checkData.values && checkData.values.length > 0 && checkData.values[0]?.[0]);
+          }
+        } catch { /* assume vazia */ }
+
+        const finalValues = abaTemHeader ? rows : [header, ...rows];
+        await invokeSheets(sheetId, `${nomeAba}!A:L`, finalValues, 'append');
       }
 
-      const msg = `Performance ${account.nome}: ${rows.length} itens em ${sheetTab}`;
+      const msg = `Performance ${account.nome}: ${rows.length} itens em ${nomeAba}`;
       console.log(`[PERF] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, itens_processados: rows.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // ═══ VENDAS FULL 7 DIAS (V7) → GOOGLE SHEETS ══════════════════════════
+    // ═══ VENDAS FULL 7D → GOOGLE SHEETS ═════════════════════════════════════
     if (action === 'get_vendas_full_7d') {
       if (!account_id) throw new Error('account_id is required');
+
       const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
       const accounts = await accountsRes.json();
       if (!accounts?.length) throw new Error('Conta ML não encontrada');
       const account = accounts[0];
 
+      let token = account.access_token;
+      if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+        token = await refreshToken(account);
+      }
+
       let sellerId = account.seller_id;
       if (!sellerId) {
-        const me = await mlFetch(account, '/users/me');
-        sellerId = me.id;
+        const me = await fetch(`${ML_API}/users/me`, { headers: { 'Authorization': `Bearer ${token}` } });
+        sellerId = (await me.json()).id;
         await supabaseFetch(`/ml_accounts?id=eq.${account.id}`, {
           method: 'PATCH', body: JSON.stringify({ seller_id: String(sellerId) }),
         });
       }
 
       const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
-      const contaLabel = (account.nome || '').trim().toUpperCase();
-      const sheetTab = reqSheetName || `V7-${contaLabel}`;
+      const contaUpper = (account.nome || '').trim().toUpperCase();
+      const nomeAba = `V7-${contaUpper}`;
 
-      // Últimos 7 dias (fuso BR)
-      const agoraBR = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Sao_Paulo'}));
-      const dateFromDT = new Date(agoraBR);
-      dateFromDT.setDate(dateFromDT.getDate() - 7);
+      const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+      const dataInicio = new Date(agora);
+      dataInicio.setDate(dataInicio.getDate() - 7);
 
-      const isoFrom = `${dateFromDT.toISOString().slice(0,10)}T00:00:00.000-03:00`;
-      const isoTo = `${agoraBR.toISOString().slice(0,10)}T23:59:59.999-03:00`;
+      const isoFrom = `${dataInicio.toISOString().slice(0, 10)}T00:00:00.000-03:00`;
+      const isoTo = `${agora.toISOString().slice(0, 10)}T23:59:59.999-03:00`;
 
-      // Buscar pedidos paginados
-      const skuSales: Record<string, number> = {};
+      const vendasSku: Record<string, number> = {};
       let offset = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const oData = await mlFetch(account,
-          `/orders/search?seller=${sellerId}&order.date_created.from=${encodeURIComponent(isoFrom)}&order.date_created.to=${encodeURIComponent(isoTo)}&limit=50&offset=${offset}`
+      while (true) {
+        let res = await fetch(
+          `${ML_API}/orders/search?seller=${sellerId}&order.date_created.from=${encodeURIComponent(isoFrom)}&order.date_created.to=${encodeURIComponent(isoTo)}&limit=50&offset=${offset}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
         );
+        if (res.status === 401) { token = await refreshToken(account); continue; }
+        if (!res.ok) break;
+        const oData = await res.json();
+        const results = oData.results || [];
+        if (results.length === 0) break;
 
-        for (const o of (oData.results || [])) {
-          if (o.status === 'cancelled') continue;
-
-          // Verificar se é fulfilled (Full)
-          const logType = o.shipping?.logistic_type || '';
-          const isFull = logType.toLowerCase().includes('fulfillment') || logType.toLowerCase().includes('full');
-          if (!isFull) continue;
-
-          for (const oi of (o.order_items || [])) {
-            const sku = oi.item?.seller_sku || oi.item?.id || '';
-            const qty = oi.quantity || 1;
-            if (sku && !sku.startsWith('MLB')) {
-              skuSales[sku] = (skuSales[sku] || 0) + qty;
-            } else {
-              // Para itens sem SKU ou se a chave inicial for MLB
-              const mlbId = sku.startsWith('MLB') ? sku : (oi.item?.id || 'SEM_SKU');
-              skuSales[mlbId] = (skuSales[mlbId] || 0) + qty;
+        for (const o of results) {
+          if (!['paid', 'confirmed', 'payment_required'].includes(o.status)) continue;
+          let is_fulfilled = o.fulfilled === true;
+          if (!is_fulfilled) {
+            for (const item of (o.order_items || [])) {
+              if (item.stock?.node_id) { is_fulfilled = true; break; }
             }
           }
+          if (!is_fulfilled) continue;
+          for (const oi of (o.order_items || [])) {
+            const qtd = parseInt(String(oi.quantity ?? 0)) || 0;
+            const chave: string = oi.item?.seller_sku || oi.item?.id || '';
+            if (chave) vendasSku[chave] = (vendasSku[chave] || 0) + qtd;
+          }
         }
-
+        if (results.length < 50 || offset > 5000) break;
         offset += 50;
-        hasMore = offset < (oData.paging?.total || 0);
       }
 
-      // Resolver SKUs que vieram como MLB IDs
-      const unresolvedIds = Object.keys(skuSales).filter(k => k.startsWith('MLB'));
-      if (unresolvedIds.length > 0) {
-        for (let i = 0; i < unresolvedIds.length; i += 20) {
-          const batch = unresolvedIds.slice(i, i + 20).join(',');
+      if (Object.keys(vendasSku).length === 0) {
+        return new Response(JSON.stringify({ mensagem: 'Nenhuma venda Full encontrada.', skus_processados: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Resolver MLB -> SKU
+      const mlbs = Object.keys(vendasSku).filter(k => k.startsWith('MLB'));
+      const mapa: Record<string, string> = {};
+      if (mlbs.length > 0) {
+        for (let i = 0; i < mlbs.length; i += 20) {
+          const chunk = mlbs.slice(i, i + 20).join(',');
           try {
-            const batchData = await mlFetch(account, `/items?ids=${batch}&attributes=id,seller_custom_field,variations`);
-            for (const d of batchData) {
-              if (d.code === 200 && d.body) {
-                const skuVar = (d.body.variations || []).map((v: any) => {
-                  const sa = (v.attribute_combinations || []).find((a: any) => a.id === 'SELLER_SKU');
-                  return sa?.value_name || '';
-                }).filter(Boolean);
-                const resolvedSku = d.body.seller_custom_field || skuVar[0] || d.body.id;
-                if (resolvedSku !== d.body.id) {
-                  const qty = skuSales[d.body.id] || 0;
-                  delete skuSales[d.body.id];
-                  skuSales[resolvedSku] = (skuSales[resolvedSku] || 0) + qty;
-                }
+            let res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,seller_custom_field,attributes`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (res.status === 401) { token = await refreshToken(account); res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,seller_custom_field,attributes`, { headers: { 'Authorization': `Bearer ${token}` } }); }
+            if (!res.ok) continue;
+            const batchData = await res.json();
+            for (const item of batchData) {
+              if (item.code !== 200 || !item.body) continue;
+              const b = item.body;
+              let msku: string = b.seller_custom_field || '';
+              if (!msku) {
+                const attrSku = (b.attributes || []).find((a: any) => a.id === 'SELLER_SKU');
+                msku = attrSku?.value_name || '';
               }
+              mapa[b.id] = msku || b.id;
             }
-          } catch { /* skip */ }
+          } catch { /* continua */ }
         }
       }
 
-      // Montar linhas — SOBRESCREVE
-      const agora = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Sao_Paulo'}));
-      const dataRef = `${String(agora.getDate()).padStart(2, '0')}/${String(agora.getMonth() + 1).padStart(2, '0')}/${agora.getFullYear()}`;
-      
+      const dataHoje = agora.toLocaleDateString('pt-BR');
       const header = ['Conta', 'SKU', 'Unidades Vendidas (7d)', 'Data Ref'];
-      const rows: any[][] = Object.entries(skuSales)
-        .sort((a, b) => b[1] - a[1])
-        .map(([sku, qty]) => [account.nome, sku, qty, dataRef]);
+      const rows: any[][] = [];
+      for (const [chave, qtd] of Object.entries(vendasSku)) {
+        const real_sku = chave.startsWith('MLB') ? (mapa[chave] || chave) : chave;
+        rows.push([contaUpper, real_sku || 'SEM_SKU', qtd, dataHoje]);
+      }
 
       if (rows.length > 0) {
         try {
-          await invokeGsFunction('clear', {
-            spreadsheetId: sheetId,
-            range: sheetTab
+          const gsUrl = Deno.env.get('SUPABASE_URL')! + '/functions/v1/google-sheets';
+          const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+          await fetch(gsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+            body: JSON.stringify({ action: 'clear', spreadsheetId: sheetId, range: `'${nomeAba}'` }),
           });
-        } catch { /* ignora erro de clear se aba não existir */ }
-
-        await invokeSheets(sheetId, `${sheetTab}!A1`, [header, ...rows], 'write');
+        } catch { /* ignora se aba não existir */ }
+        await invokeSheets(sheetId, `${nomeAba}!A1`, [header, ...rows], 'write');
       }
 
-      const msg = `V7 ${account.nome}: ${rows.length} SKUs em ${sheetTab}`;
+      const msg = `V7 ${account.nome}: ${rows.length} SKUs em ${nomeAba}`;
       console.log(`[V7] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, skus_processados: rows.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1908,130 +1921,197 @@ Deno.serve(async (req) => {
     // ═══ ADS FULL REPORT → GOOGLE SHEETS ════════════════════════════════════
     if (action === 'get_ads_full_report') {
       if (!account_id) throw new Error('account_id is required');
+
       const accountsRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`);
       const accounts = await accountsRes.json();
       if (!accounts?.length) throw new Error('Conta ML não encontrada');
       const account = accounts[0];
 
-      const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      const dateTo = reqDateTo || dateFrom;
-      const adType = reqAdType || 'product_ads';
-      const sheetId = reqSpreadsheetId || PLANILHA_MESTRA;
-      const sheetAds = reqSheetName || 'ADS';
-      const sheetTotal = reqSheetPrefix || 'ADS-TOTAL-ML';
-
-      // Discover advertiser_id
       let token = account.access_token;
       if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
         token = await refreshToken(account);
       }
 
-      const productId = adType === 'product_ads' ? 'PADS' :
-                        adType === 'brand_ads' ? 'BADS' : 'DISPLAY';
-      const apiVersion = adType === 'product_ads' ? '2' : '1';
+      const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const dateTo   = reqDateTo   || dateFrom;
+      const adType   = reqAdType   || 'product_ads';
+      const sheetId  = reqSpreadsheetId || PLANILHA_MESTRA;
 
-      const advRes = await fetch(`${ML_API}/advertising/advertisers?product_id=${productId}`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
-      });
-      const advData = await advRes.json();
-      const mlbAdv = (advData?.advertisers || []).find((a: any) => a.site_id === 'MLB');
+      let ml_product_id: string;
+      let nome_aba: string;
+      let endpoint_type: string;
+      let metrics_list: string;
 
-      if (!mlbAdv) {
-        return new Response(JSON.stringify({ mensagem: `${adType} não habilitado para ${account.nome}`, linhas_ads: 0 }), {
+      if (adType === 'product_ads') {
+        ml_product_id = 'PADS'; nome_aba = 'ADS'; endpoint_type = 'ads';
+        metrics_list = 'clicks,prints,cost,direct_amount,direct_items_quantity,total_amount';
+      } else if (adType === 'brand_ads') {
+        ml_product_id = 'BADS'; nome_aba = 'BRAND'; endpoint_type = 'campaigns';
+        metrics_list = 'clicks,prints,consumed_budget,attribution_order_amount,attribution_order_conversions';
+      } else if (adType === 'display_ads') {
+        ml_product_id = 'DISPLAY'; nome_aba = 'DISPLAY'; endpoint_type = 'campaigns';
+        metrics_list = 'clicks,prints,consumed_budget,attribution_order_amount,attribution_order_conversions';
+      } else {
+        return new Response(JSON.stringify({ mensagem: `Tipo '${adType}' desconhecido`, linhas_ads: 0 }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      const advId = mlbAdv.advertiser_id;
-      const siteId = mlbAdv.site_id;
+      const nome_aba_total = 'ADS-TOTAL-ML';
 
-      const detailedRows: any[][] = [];
-      const summaryRows: any[][] = [];
-      const metricsFields = 'clicks,prints,cost,direct_amount,direct_items_quantity,total_amount';
+      let advRes = await fetch(`${ML_API}/advertising/advertisers?product_id=${ml_product_id}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
+      });
+      if (advRes.status === 401) {
+        token = await refreshToken(account);
+        advRes = await fetch(`${ML_API}/advertising/advertisers?product_id=${ml_product_id}`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '1' },
+        });
+      }
+      if (!advRes.ok) {
+        return new Response(JSON.stringify({ mensagem: `Erro ao acessar Advertiser: ${await advRes.text()}`, linhas_ads: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
-      // Loop dia a dia (obrigatório para ADS ML API)
-      const startDate = new Date(`${dateFrom}T12:00:00`);
-      const endDate = new Date(`${dateTo}T12:00:00`);
+      const advData = await advRes.json();
+      const advertisers = advData.advertisers || [];
+      if (advertisers.length === 0) {
+        return new Response(JSON.stringify({ mensagem: `Nenhum anunciante ativo para ${adType}`, linhas_ads: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
-      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const dayStr = d.toISOString().slice(0, 10);
-        let dailyCost = 0;
+      const adv_id: string = String(advertisers[0].advertiser_id);
+      const site_id: string = advertisers[0].site_id;
 
+      const mapa_campanhas: Record<string, string> = {};
+      if (endpoint_type === 'ads') {
         try {
-          // Fetch ads for this specific day
-          const adsUrl = `${ML_API}/advertising/${siteId}/advertisers/${advId}/product_ads/ads/search?limit=50&offset=0&date_from=${dayStr}&date_to=${dayStr}&metrics=${metricsFields}&sort_by=cost&sort=desc`;
-          const adsRes = await fetch(adsUrl, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Api-Version': apiVersion },
+          const campRes = await fetch(
+            `${ML_API}/advertising/${site_id}/advertisers/${adv_id}/product_ads/campaigns/search?limit=100&status=active`,
+            { headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': '2' } }
+          );
+          if (campRes.ok) {
+            const campData = await campRes.json();
+            for (const c of (campData.results || [])) {
+              mapa_campanhas[String(c.id)] = c.name;
+            }
+          }
+        } catch { /* ignora */ }
+      }
+
+      const timestamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const nome_conta_upper = (account.nome || '').trim().toUpperCase();
+      const nome_conta_formatado = `Mercado Livre|${account.nome}`;
+
+      const linhas_totais: any[][] = [];
+      const linhas_resumo: any[][] = [];
+
+      const dtStart = new Date(`${dateFrom}T12:00:00`);
+      const dtEnd   = new Date(`${dateTo}T12:00:00`);
+
+      for (let d = new Date(dtStart); d <= dtEnd; d.setDate(d.getDate() + 1)) {
+        const dia_atual = d.toISOString().slice(0, 10);
+        const data_ref_br = fmtDataRef(dia_atual);
+        let total_investido_dia = 0;
+        let offset = 0;
+        const limit = 50;
+
+        while (true) {
+          let url: string;
+          let api_ver: string;
+          if (endpoint_type === 'ads') {
+            url = `${ML_API}/advertising/${site_id}/advertisers/${adv_id}/${adType}/ads/search`;
+            api_ver = '2';
+          } else {
+            url = `${ML_API}/advertising/advertisers/${adv_id}/${adType}/campaigns`;
+            api_ver = '1';
+          }
+
+          const params = new URLSearchParams({
+            limit: String(limit), offset: String(offset),
+            date_from: dia_atual, date_to: dia_atual,
+            metrics: metrics_list, status: 'active',
           });
 
-          if (adsRes.status === 401) {
+          let resp = await fetch(`${url}?${params}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': api_ver, 'Content-Type': 'application/json' },
+          });
+          if (resp.status === 401) {
             token = await refreshToken(account);
-            const retryRes = await fetch(adsUrl, {
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Api-Version': apiVersion },
+            resp = await fetch(`${url}?${params}`, {
+              headers: { 'Authorization': `Bearer ${token}`, 'Api-Version': api_ver, 'Content-Type': 'application/json' },
             });
-            if (!retryRes.ok) continue;
-            var adsData = await retryRes.json();
-          } else if (!adsRes.ok) {
-            continue;
-          } else {
-            var adsData = await adsRes.json();
+          }
+          if (!resp.ok) { console.log(`[ADS] Erro dia ${dia_atual}: ${resp.status}`); break; }
+
+          const payload = await resp.json();
+          const items: any[] = payload.results || payload.campaigns || [];
+          if (items.length === 0) break;
+
+          for (const item of items) {
+            const metrics = item.metrics || {};
+            const camp_id = String(item.campaign_id || item.id || '-');
+            let id_anuncio: string;
+            let titulo: string;
+            let nome_campanha: string;
+            let custo: number;
+            let receita: number;
+            let vendas_qtd: number;
+
+            if (endpoint_type === 'ads') {
+              id_anuncio = item.item_id || '-';
+              titulo = item.title || '-';
+              nome_campanha = mapa_campanhas[camp_id] || `Campanha ${camp_id}`;
+              custo = parseFloat(String(metrics.cost ?? 0)) || 0;
+              receita = parseFloat(String(metrics.direct_amount ?? 0)) || 0;
+              vendas_qtd = metrics.direct_items_quantity || 0;
+            } else {
+              id_anuncio = '-';
+              titulo = '-';
+              nome_campanha = item.name || `Campanha ${camp_id}`;
+              custo = parseFloat(String(metrics.consumed_budget ?? 0)) || 0;
+              receita = parseFloat(String(metrics.attribution_order_amount ?? 0)) || 0;
+              vendas_qtd = metrics.attribution_order_conversions || 0;
+            }
+
+            total_investido_dia += custo;
+
+            if (custo > 0 || (metrics.clicks || 0) > 0) {
+              const acos = receita > 0 ? (custo / receita * 100) : 0;
+              const roas = custo > 0 ? (receita / custo) : 0;
+              linhas_totais.push([
+                adType, data_ref_br, nome_conta_formatado, nome_campanha, camp_id,
+                id_anuncio, titulo, toStringDecimal(custo), toStringDecimal(receita),
+                vendas_qtd, toStringDecimal(acos), toStringDecimal(roas),
+                metrics.clicks || 0, metrics.prints || 0, timestamp,
+              ]);
+            }
           }
 
-          for (const ad of (adsData?.results || [])) {
-            const m = ad.metrics || {};
-            const investimento = m.cost || 0;
-            const receita = m.total_amount || m.direct_amount || 0;
-            const vendas = m.direct_items_quantity || 0;
-            const cliques = m.clicks || 0;
-            const impressoes = m.prints || 0;
-            const acos = receita > 0 ? ((investimento / receita) * 100).toFixed(2) : '0';
-            const roas = investimento > 0 ? (receita / investimento).toFixed(2) : '0';
-
-            dailyCost += investimento;
-
-            detailedRows.push([
-              adType === 'product_ads' ? 'PADS' : adType === 'brand_ads' ? 'BADS' : 'DISPLAY',
-              dayStr,                               // Data Ref
-              account.nome,                         // Conta
-              '',                                   // Campanha (optional)
-              ad.campaign_id || '',                  // ID Campanha
-              ad.item_id || '',                      // ID Anúncio
-              ad.title || '',                        // Título
-              investimento,                         // Investimento
-              receita,                              // Receita
-              vendas,                               // Vendas (Qtd)
-              `${acos}%`,                           // ACOS
-              roas,                                 // ROAS
-              cliques,                              // Cliques
-              impressoes,                           // Impressões
-              new Date().toISOString().slice(0, 19), // Ult. Atualização
-            ]);
-          }
-        } catch (err) {
-          console.error(`[ADS] Erro dia ${dayStr} ${account.nome}:`, err);
+          const total = payload.paging?.total || 0;
+          if (items.length < limit || (offset + limit) >= total) break;
+          offset += limit;
+          await new Promise(r => setTimeout(r, 100));
         }
 
-        // Resumo diário
-        if (dailyCost > 0) {
-          summaryRows.push([dayStr, account.nome, dailyCost]);
+        if (total_investido_dia >= 0) {
+          linhas_resumo.push([data_ref_br, nome_conta_upper, `R$ ${toStringDecimal(total_investido_dia)}`]);
         }
+        await new Promise(r => setTimeout(r, 1000));
       }
 
-      // Escrever nas sheets
-      if (detailedRows.length > 0) {
-        await invokeSheets(sheetId, `${sheetAds}!A:O`, detailedRows, 'append');
+      if (linhas_totais.length > 0) {
+        await invokeSheets(sheetId, `${nome_aba}!A:O`, linhas_totais, 'append');
       }
-      if (summaryRows.length > 0) {
-        await invokeSheets(sheetId, `${sheetTotal}!A:C`, summaryRows, 'append');
+      if (linhas_resumo.length > 0) {
+        await invokeSheets(sheetId, `${nome_aba_total}!A:C`, linhas_resumo, 'append');
       }
 
-      const msg = `ADS ${account.nome}: ${detailedRows.length} linhas detalhadas, ${summaryRows.length} resumos`;
+      const msg = `ADS ${account.nome}: ${linhas_totais.length} linhas em ${nome_aba}, ${linhas_resumo.length} resumos em ${nome_aba_total}`;
       console.log(`[ADS-SYNC] ${msg}`);
-      return new Response(JSON.stringify({
-        mensagem: msg,
-        linhas_ads: detailedRows.length,
-        linhas_resumo: summaryRows.length,
-      }), {
+      return new Response(JSON.stringify({ mensagem: msg, linhas_ads: linhas_totais.length, linhas_resumo: linhas_resumo.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
