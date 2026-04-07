@@ -6,7 +6,7 @@ import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, CheckS
 import { toast } from 'sonner';
 
 export function TarefasPage() {
-  const { user: currentUser, allUsers } = useAuth();
+  const { user: currentUser, allUsers, refreshUsers } = useAuth();
   const [tasks, setTasks] = useState<TeamTask[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,7 +27,10 @@ export function TarefasPage() {
 
   useEffect(() => {
     fetchTasks();
-  }, [currentUser]);
+    if (isAdmin) {
+      refreshUsers();
+    }
+  }, [currentUser, isAdmin, refreshUsers]);
 
   const fetchTasks = async () => {
     try {
