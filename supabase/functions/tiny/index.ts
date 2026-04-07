@@ -648,8 +648,18 @@ Deno.serve(async (req) => {
 
     // ═══ SYNC ESTOQUE TINY (JSchruber → ESTOQUE-TINY) ═══════════════════
     if (action === 'sync_estoque_tiny') {
-      const TINY_TOKEN = Deno.env.get('TINY_TOKEN_JSCHRUBER');
-      if (!TINY_TOKEN) throw new Error('TINY_TOKEN_JSCHRUBER não configurado');
+      const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+      
+      let TINY_TOKEN = Deno.env.get('TINY_TOKEN_JSCHRUBER') || '';
+      
+      // If we found accounts in the database, prefer the one that matches JSchruber or just the first active one
+      if (accounts && accounts.length > 0) {
+        const jsAccount = accounts.find((a: any) => a.nome.toLowerCase().includes('schruber'));
+        TINY_TOKEN = jsAccount ? jsAccount.api_token : accounts[0].api_token;
+      }
+
+      if (!TINY_TOKEN) throw new Error('Token Tiny JSCHRUBER não configurado no DB nem no .env');
 
       const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
       const SHEET_TAB = 'ESTOQUE-TINY';
