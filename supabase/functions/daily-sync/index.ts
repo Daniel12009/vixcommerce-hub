@@ -98,7 +98,7 @@ function isEnabled(modules: Record<string, boolean>, key: string): boolean {
   return modules[key] === true;
 }
 
-const DELAY_BETWEEN_MODULES = 120_000; // 2 minutos
+const DELAY_BETWEEN_MODULES = 5_000; // 5 segundos
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
