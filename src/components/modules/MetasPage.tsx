@@ -120,11 +120,14 @@ export function MetasPage() {
     const vQtd = v.length;
     const vVal = v.reduce((acc, curr) => acc + (curr.valorTotal || 0), 0);
     const dQtd = d.length;
+    
+    // Ads Investimento & Receita do proprio Ads
     const adsVal = a.reduce((acc, curr) => acc + (curr.investimento || 0), 0);
+    const adsReceita = a.reduce((acc, curr) => acc + (curr.receita || 0), 0);
 
     const ticketMedio = vQtd > 0 ? vVal / vQtd : 0;
     const devTaxa = vQtd > 0 ? (dQtd / vQtd) * 100 : 0;
-    const acos = vVal > 0 ? (adsVal / vVal) * 100 : 0;
+    const acos = adsReceita > 0 ? (adsVal / adsReceita) * 100 : 0;
 
     switch (meta.tipo) {
       case 'vendas_qtd': return vQtd;
@@ -142,20 +145,14 @@ export function MetasPage() {
   const getProgress = (meta: Meta): number => {
     const actual = getActual(meta);
     if (meta.meta === 0) return 0;
-    if (meta.tipo === 'devolucao_max' || meta.tipo === 'devolucao_taxa' || meta.tipo === 'acos') {
-      // Reverse: lower is better
-      const pct = (actual / meta.meta) * 100;
-      if (pct > 150) return 0; // Very bad
-      return Math.max(0, 100 - (pct > 100 ? pct - 100 : 0)); // Visual mapping
-    }
-    return Math.min(100, (actual / meta.meta) * 100);
+    return (actual / meta.meta) * 100;
   };
 
   const getColor = (pct: number, isReverse: boolean = false): string => {
     if (isReverse) {
-      if (pct >= 70) return '#22c55e';
-      if (pct >= 40) return '#f59e0b';
-      return '#ef4444';
+      if (pct <= 80) return '#22c55e'; // verde
+      if (pct <= 100) return '#f59e0b'; // amarelo
+      return '#ef4444'; // vermelho
     }
     if (pct >= 80) return '#22c55e';
     if (pct >= 50) return '#f59e0b';
@@ -200,7 +197,7 @@ export function MetasPage() {
         {visibleMetas.map(m => {
           const pct = getProgress(m);
           const actual = getActual(m);
-          const isReverse = m.tipo === 'devolucao_max';
+          const isReverse = m.tipo === 'devolucao_max' || m.tipo === 'devolucao_taxa' || m.tipo === 'acos';
           const color = getColor(pct, isReverse);
           const Icon = TIPO_ICONS[m.tipo] || Target;
 
@@ -235,7 +232,9 @@ export function MetasPage() {
                   <p className="text-2xl font-bold" style={{ color }}>{formatValue(actual, m)}</p>
                   <p className="text-[10px] text-muted-foreground">Meta: {formatValue(m.meta, m)}</p>
                 </div>
-                <p className="text-lg font-bold" style={{ color }}>{Math.round(pct)}%</p>
+                <p className="text-lg font-bold" style={{ color }}>
+                  {pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                </p>
               </div>
 
               {/* Progress bar */}
@@ -243,7 +242,7 @@ export function MetasPage() {
                 <div
                   className="h-2.5 rounded-full transition-all duration-700 ease-out"
                   style={{
-                    width: `${Math.min(100, pct)}%`,
+                    width: `${Math.min(100, isReverse ? (pct > 100 ? 100 : pct) : pct)}%`,
                     background: `linear-gradient(90deg, ${color}80, ${color})`,
                   }}
                 />

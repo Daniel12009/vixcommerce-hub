@@ -16,7 +16,8 @@ export function TarefasPage() {
     title: '',
     type: 'diaria' as 'diaria' | 'afazer',
     points: 10,
-    assigned_to_email: currentUser?.username || ''
+    assigned_to_email: currentUser?.username || '',
+    due_date: ''
   });
 
   // Forward state
@@ -66,11 +67,12 @@ export function TarefasPage() {
         status: 'pendente',
         assigned_to_email: newTask.assigned_to_email,
         created_by_email: currentUser?.username || 'admin',
+        due_date: newTask.due_date ? new Date(newTask.due_date).toISOString() : null
       }]);
 
       if (error) throw error;
       toast.success('Tarefa criada!');
-      setNewTask({ ...newTask, title: '' });
+      setNewTask({ ...newTask, title: '', due_date: '' });
       setShowForm(false);
       fetchTasks();
     } catch (e: any) {
@@ -191,7 +193,7 @@ export function TarefasPage() {
             <h3 className="font-bold text-foreground">Nova Tarefa / Afazer</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
+            <div className="md:col-span-1">
               <label className="text-xs font-semibold text-muted-foreground block mb-1">O que deve ser feito?</label>
               <input 
                 type="text" 
@@ -199,6 +201,15 @@ export function TarefasPage() {
                 onChange={e => setNewTask({...newTask, title: e.target.value})}
                 placeholder="Ex: Revisar anúncios do Mercado Livre"
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">Prazo (Opcional)</label>
+              <input 
+                type="date" 
+                value={newTask.due_date}
+                onChange={e => setNewTask({...newTask, due_date: e.target.value})}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground"
               />
             </div>
             <div>
