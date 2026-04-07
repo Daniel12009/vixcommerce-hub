@@ -1,10 +1,26 @@
 import { useState, useMemo } from 'react';
-import { Search, Package, Check, AlertTriangle } from 'lucide-react';
+import { Search, Package, Check, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 
 export function EstoqueLocalTab() {
   const { estoqueTinyItems } = useSheetsData();
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState<'sku' | 'qtd'>('qtd');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: 'sku' | 'qtd') => {
+    if (sortField === field) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
+
+  const sortIcon = (field: 'sku' | 'qtd') => {
+    if (sortField !== field) return <ArrowUpDown className="inline w-3.5 h-3.5 ml-1 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="inline w-3.5 h-3.5 ml-1" /> : <ArrowDown className="inline w-3.5 h-3.5 ml-1" />;
+  };
 
   const displayData = useMemo(() => {
     if (!estoqueTinyItems) return [];
@@ -21,8 +37,14 @@ export function EstoqueLocalTab() {
     return Array.from(map.entries())
       .map(([sku, qtd]) => ({ sku, qtd }))
       .filter(row => !term || row.sku.includes(term))
-      .sort((a, b) => a.sku.localeCompare(b.sku));
-  }, [estoqueTinyItems, searchTerm]);
+      .sort((a, b) => {
+        if (sortField === 'sku') {
+          return sortDir === 'asc' ? a.sku.localeCompare(b.sku) : b.sku.localeCompare(a.sku);
+        } else {
+          return sortDir === 'asc' ? a.qtd - b.qtd : b.qtd - a.qtd;
+        }
+      });
+  }, [estoqueTinyItems, searchTerm, sortField, sortDir]);
 
   if (!estoqueTinyItems?.length) {
     return (
@@ -65,9 +87,13 @@ export function EstoqueLocalTab() {
         <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
-              <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">SKU</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Quantidade</th>
+              <tr className="border-b border-border select-none">
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('sku')}>
+                  SKU{sortIcon('sku')}
+                </th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('qtd')}>
+                  Quantidade{sortIcon('qtd')}
+                </th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">Status</th>
               </tr>
             </thead>
