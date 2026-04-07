@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { TeamTask } from '@/lib/types';
-import { Plus, Check, Clock, Trophy, Target, Star, Trash2 } from 'lucide-react';
+import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, CheckSquare } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function TarefasPage() {
@@ -18,6 +18,10 @@ export function TarefasPage() {
     points: 10,
     assigned_to_email: currentUser?.username || ''
   });
+
+  // Forward state
+  const [forwardingTaskId, setForwardingTaskId] = useState<string | null>(null);
+  const [forwardTo, setForwardTo] = useState<string>('');
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -77,10 +81,30 @@ export function TarefasPage() {
         .eq('id', task.id);
 
       if (error) throw error;
-      if (isCompleting) toast.success(`+${task.points} Pontos ganhos!`);
+      if (isCompleting) toast.success(`+${task.points} Pontos ganhos! Ouro pra conta! 🎯`);
       fetchTasks();
     } catch (e: any) {
       toast.error('Erro ao atualizar status');
+    }
+  };
+
+  const handleForwardTask = async () => {
+    if (!forwardingTaskId || !forwardTo) return;
+    try {
+      const { error } = await supabase
+        .from('team_tasks')
+        .update({ 
+          assigned_to_email: forwardTo,
+          status: 'pendente', // repassa como pendente
+        })
+        .eq('id', forwardingTaskId);
+
+      if (error) throw error;
+      toast.success('Tarefa encaminhada com sucesso! 🚀');
+      setForwardingTaskId(null);
+      fetchTasks();
+    } catch (e: any) {
+      toast.error('Erro ao repassar tarefa');
     }
   };
 
@@ -226,17 +250,25 @@ export function TarefasPage() {
                   {task.status === 'concluido' && <Check className="w-4 h-4" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${task.status==='concluido'?'line-through':''}`}>{task.title}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase flex items-center justify-between mt-1">
-                    <span>Para: {isAdmin ? task.assigned_to_email : 'Você'}</span>
-                    <span className="text-amber-500 font-bold">+{task.points} pts</span>
+                  <p className={`text-sm font-semibold transition-all ${task.status==='concluido'?'line-through text-muted-foreground':''}`}>{task.title}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-2 mt-1">
+                    <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {isAdmin ? task.assigned_to_email : 'Você'}</span>
+                    <span className="text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">+{task.points} pts</span>
                   </p>
                 </div>
-                {isAdmin && (
-                  <button onClick={() => handleDelete(task.id)} className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:bg-red-400/10 rounded">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
+                  {isAdmin && (
+                    <button onClick={() => handleDelete(task.id)} className="p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors" title="Excluir Meta">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {task.status === 'pendente' && (
+                    <button onClick={() => setForwardingTaskId(task.id)} className="p-1 text-indigo-500/70 hover:bg-indigo-500/10 hover:text-indigo-500 rounded transition-colors" title="Encaminhar / Repassar Batão">
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -274,16 +306,46 @@ export function TarefasPage() {
                   {task.status === 'concluido' && <Check className="w-4 h-4" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold text-foreground ${task.status==='concluido'?'line-through':''}`}>{task.title}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase flex items-center justify-between mt-1">
-                    <span>Para: {isAdmin ? task.assigned_to_email : 'Você'}</span>
-                    <span className="text-amber-500 font-bold">+{task.points} pts</span>
+                  <p className={`text-sm font-semibold transition-all text-foreground ${task.status==='concluido'?'line-through text-muted-foreground':''}`}>{task.title}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-2 mt-1">
+                    <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {isAdmin ? task.assigned_to_email : 'Você'}</span>
+                    <span className="text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">+{task.points} pts</span>
                   </p>
                 </div>
-                {isAdmin && (
-                  <button onClick={() => handleDelete(task.id)} className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:bg-red-400/10 rounded">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+
+                {/* Forwarding Inline Menu for Afazeres */}
+                {forwardingTaskId === task.id ? (
+                  <div className="flex items-center gap-1 bg-background border border-border p-1 rounded-lg shadow-sm">
+                    <select 
+                      className="text-xs px-1 py-1 rounded bg-muted outline-none border-none max-w-[100px]"
+                      value={forwardTo}
+                      onChange={e => setForwardTo(e.target.value)}
+                    >
+                      <option value="">Para quem?</option>
+                      {allUsers.filter((u: any) => u.username !== currentUser?.username).map((u: any) => (
+                        <option key={u.username} value={u.username}>{u.nome || u.username}</option>
+                      ))}
+                    </select>
+                    <button onClick={handleForwardTask} className="p-1 rounded bg-primary text-primary-foreground hover:opacity-90">
+                      <Check className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => setForwardingTaskId(null)} className="p-1 rounded bg-muted hover:bg-muted/80">
+                      <X className="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
+                    {isAdmin && (
+                      <button onClick={() => handleDelete(task.id)} className="p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors" title="Excluir Afazer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {task.status === 'pendente' && (
+                      <button onClick={() => setForwardingTaskId(task.id)} className="p-1 text-orange-500/70 hover:bg-orange-500/10 hover:text-orange-500 rounded transition-colors" title="Repassar Tarefa">
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
