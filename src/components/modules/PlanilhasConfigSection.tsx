@@ -30,6 +30,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   'marketplace-dia': 'Marketplace (Rentabilidade)',
   calculadora: 'Calculadora (CMV)',
   compras: 'Compras (S&OP)',
+  atividades: 'Atividades (Equipe)',
 };
 
 const moduloColors: Record<ModuloDestino, string> = {
@@ -44,6 +45,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   'marketplace-dia': 'bg-[hsl(270,70%,55%,0.1)] text-[hsl(270,70%,55%)]',
   calculadora: 'bg-[hsl(220,70%,55%,0.1)] text-[hsl(220,70%,55%)]',
   compras: 'bg-[hsl(180,70%,55%,0.1)] text-[hsl(180,70%,55%)]',
+  atividades: 'bg-rose-500/10 text-rose-500',
 };
 
 export function PlanilhasConfigSection() {
@@ -239,6 +241,7 @@ export function PlanilhasConfigSection() {
       }
       else if (config.moduloDestino === 'ads') { sheetsData.setAdsFromSheet(parsed); saveToCloud('ads_data', parsed); }
       else if (config.moduloDestino === 'devolucao') { sheetsData.setDevolucaoFromSheet(parsed); saveToCloud('devolucao_data', parsed); }
+      else if (config.moduloDestino === 'atividades') { sheetsData.setAtividadesFromSheet(parsed); saveToCloud('atividades_data', parsed); }
       setSheetConfigs(prev => prev.map(c => c.id === config.id ? { ...c, ultimaSync: new Date().toLocaleString('pt-BR') } : c));
       toast.success(`${parsed.length} linhas importadas para ${moduloLabels[config.moduloDestino]}!`);
     } catch (err: any) { toast.error(`Erro ao importar: ${err.message}`); }
@@ -404,6 +407,7 @@ export function PlanilhasConfigSection() {
                         <SelectItem value="marketplace-dia">📊 Marketplace (Rentabilidade)</SelectItem>
                         <SelectItem value="calculadora">🧮 Calculadora (CMV)</SelectItem>
                         <SelectItem value="compras">🛒 Compras (S&OP)</SelectItem>
+                        <SelectItem value="atividades">👥 Atividades (Equipe)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

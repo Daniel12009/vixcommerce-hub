@@ -2,13 +2,17 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { TeamTask } from '@/lib/types';
-import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, PlayCircle, Clock4, CheckSquare } from 'lucide-react';
+import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, PlayCircle, Clock4, CheckSquare, BarChart3, Users, LayoutDashboard, Calendar, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
 
 export function TarefasPage() {
   const { user: currentUser, allUsers, refreshUsers } = useAuth();
+  const { atividadesItems } = useSheetsData();
   const [tasks, setTasks] = useState<TeamTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('minhas');
 
   // Form states
   const [showForm, setShowForm] = useState(false);
@@ -256,8 +260,15 @@ export function TarefasPage() {
         </div>
       )}
 
-      {/* Columns */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${canManage ? 'lg:grid-cols-3' : ''} gap-6`}>
+      {/* Tabs Layout */}
+      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger value="minhas"><Target className="w-4 h-4 mr-1.5" /> Minhas Atividades</TabsTrigger>
+          {canManage && <TabsTrigger value="equipe"><LayoutDashboard className="w-4 h-4 mr-1.5" /> Gestão de Produtividade</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="minhas" className="mt-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Diárias */}
         <div className="flex flex-col gap-3">
@@ -441,27 +452,135 @@ export function TarefasPage() {
           </div>
         </div>
 
-        {/* Recompensas / Leaderboard (Apenas para Gerentes/Admin) */}
+          </div>
+        </TabsContent>
+
         {canManage && (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between pb-2 border-b border-border">
-              <h3 className="font-bold text-foreground text-lg flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-400" />
-                Painel da Equipe
-              </h3>
+          <TabsContent value="equipe" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Dashboard Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                 <div className="flex justify-between items-start mb-2">
+                   <h4 className="text-sm font-semibold text-muted-foreground">Total de Atividades</h4>
+                   <LayoutDashboard className="w-4 h-4 text-primary" />
+                 </div>
+                 <div className="text-2xl font-bold">{atividadesItems?.length || 0}</div>
+                 <p className="text-xs text-muted-foreground mt-1">Importadas da Planilha</p>
+              </div>
+
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                 <div className="flex justify-between items-start mb-2">
+                   <h4 className="text-sm font-semibold text-muted-foreground">Concluídas</h4>
+                   <CheckSquare className="w-4 h-4 text-[hsl(var(--vix-success))]" />
+                 </div>
+                 <div className="text-2xl font-bold text-[hsl(var(--vix-success))]">
+                   {atividadesItems?.filter(a => a.status?.toLowerCase() === 'concluído' || a.status?.toLowerCase() === 'concluida').length || 0}
+                 </div>
+                 <p className="text-xs text-muted-foreground mt-1">Neste período</p>
+              </div>
+
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                 <div className="flex justify-between items-start mb-2">
+                   <h4 className="text-sm font-semibold text-muted-foreground">Em Andamento</h4>
+                   <Clock4 className="w-4 h-4 text-blue-500" />
+                 </div>
+                 <div className="text-2xl font-bold text-blue-500">
+                   {atividadesItems?.filter(a => a.status?.toLowerCase().includes('andamento') || a.status?.toLowerCase().includes('execução')).length || 0}
+                 </div>
+                 <p className="text-xs text-muted-foreground mt-1">Sendo trabalhadas hoje</p>
+              </div>
+
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                 <div className="flex justify-between items-start mb-2">
+                   <h4 className="text-sm font-semibold text-muted-foreground">Atrasadas / Alertas</h4>
+                   <AlertCircle className="w-4 h-4 text-[hsl(var(--vix-danger))]" />
+                 </div>
+                 <div className="text-2xl font-bold text-[hsl(var(--vix-danger))]">
+                   {atividadesItems?.filter(a => {
+                     if (!a.prazo) return false;
+                     // Simple check mapping DD/MM/YYYY into date
+                     const [d,m,y] = a.prazo.split('/');
+                     if(y && m && d) {
+                       const prazoDate = new Date(`${y}-${m}-${d}`);
+                       return prazoDate < new Date() && !a.status?.toLowerCase().includes('conclu');
+                     }
+                     return false;
+                   }).length || 0}
+                 </div>
+                 <p className="text-xs text-muted-foreground mt-1">Vencendo ou pendentes</p>
+              </div>
+            </div>
+
+            {/* Produtividade da Equipe */}
+            <div className="bg-card border border-border p-5 rounded-2xl">
+               <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                 <Users className="w-5 h-5 text-indigo-400" /> 
+                 Ranking de Atividades (Importadas)
+               </h3>
+               
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                 <div className="space-y-4">
+                   <h4 className="text-sm font-semibold text-muted-foreground border-b border-border pb-2">Status por Executor</h4>
+                   {Array.from(new Set(atividadesItems?.map(a => a.responsavel).filter(Boolean) || [])).map(resp => {
+                     const acts = atividadesItems?.filter(a => a.responsavel === resp) || [];
+                     const concluidas = acts.filter(a => a.status?.toLowerCase().includes('conclu')).length;
+                     const progresso = acts.length ? (concluidas / acts.length) * 100 : 0;
+                     return (
+                       <div key={resp} className="space-y-2">
+                         <div className="flex justify-between items-center text-sm">
+                           <span className="font-semibold text-foreground">{resp}</span>
+                           <span className="text-muted-foreground">{concluidas} / {acts.length}</span>
+                         </div>
+                         <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                           <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${progresso}%` }}></div>
+                         </div>
+                       </div>
+                     );
+                   })}
+                 </div>
+
+                 {/* Ações Recentes / Tabela Resumo */}
+                 <div className="space-y-4">
+                   <h4 className="text-sm font-semibold text-muted-foreground border-b border-border pb-2">Últimas Atualizações</h4>
+                   <div className="space-y-3">
+                     {atividadesItems?.slice(0, 5).map((a, i) => (
+                       <div key={i} className="flex flex-col gap-1 p-3 bg-muted/20 rounded-lg border border-border text-xs">
+                         <div className="flex justify-between items-start">
+                           <strong className="text-foreground">{a.tarefa}</strong>
+                           <span className={`px-2 py-0.5 rounded font-semibold ${
+                             a.status?.toLowerCase().includes('conclu') ? 'bg-emerald-500/10 text-emerald-500' : 
+                             a.status?.toLowerCase().includes('andamento') ? 'bg-blue-500/10 text-blue-500' : 
+                             'bg-orange-500/10 text-orange-500'
+                           }`}>{a.status}</span>
+                         </div>
+                         <div className="flex gap-4 text-muted-foreground mt-1">
+                           <span>👤 {a.responsavel}</span>
+                           <span>📦 {a.conta || a.sku || a.id || 'N/A'}</span>
+                           <span>⏳ Prazo: {a.prazo}</span>
+                         </div>
+                       </div>
+                     ))}
+                     {(!atividadesItems || atividadesItems.length === 0) && (
+                       <p className="text-sm text-muted-foreground text-center py-4 italic">Dados não importados da planilha ainda.</p>
+                     )}
+                   </div>
+                 </div>
+               </div>
             </div>
             
+            {/* Legacy Recompensas block */}
             <div className="bg-card border border-border p-4 rounded-xl flex flex-col gap-4">
                <div>
                  <h4 className="font-bold text-sm text-foreground mb-3 flex items-center gap-2">
-                   <Star className="w-4 h-4 text-primary" /> 
-                   Produtividade do Time
+                   <Trophy className="w-4 h-4 text-amber-500" /> 
+                   Sistema Legacy de Pontos (Gamificação)
                  </h4>
                </div>
 
                <div className="space-y-4">
                  {allUsers.filter((u: any) => u.ativo).map((u: any) => {
                    const userTasks = tasks.filter(t => t.assigned_to_email === u.username);
+                   if(userTasks.length === 0) return null;
                    const completed = userTasks.filter(t => t.status === 'concluido');
                    const progress = userTasks.length ? (completed.length / userTasks.length) * 100 : 0;
                    const points = completed.reduce((acc, t) => acc + t.points, 0);
@@ -487,9 +606,9 @@ export function TarefasPage() {
                  })}
                </div>
             </div>
-          </div>
+          </TabsContent>
         )}
-      </div>
+      </Tabs>
     </div>
   );
 }

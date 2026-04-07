@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora' | 'compras';
+export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora' | 'compras' | 'atividades';
 
 export interface SheetConfig {
   id: string;
@@ -17,6 +17,21 @@ export interface SheetConfig {
 
 // Fields required per module
 export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: string; obrigatorio?: boolean }[]> = {
+  atividades: [
+    { key: 'sku', label: 'SKU' },
+    { key: 'conta', label: 'Conta' },
+    { key: 'id', label: 'ID (Shopee)' },
+    { key: 'observacao', label: 'Observação' },
+    { key: 'tarefa', label: 'Tarefa Principal' },
+    { key: 'prioridade', label: 'Prioridade' },
+    { key: 'data_verificacao', label: 'Data da Verificação' },
+    { key: 'acao', label: 'Ação' },
+    { key: 'responsavel', label: 'Responsável' },
+    { key: 'data_inicio', label: 'Data Início' },
+    { key: 'data_finalizacao', label: 'Data Finalização' },
+    { key: 'prazo', label: 'Prazo' },
+    { key: 'status', label: 'Status' },
+  ],
   estoque: [
     { key: 'skuPrincipal', label: 'SKU Principal', obrigatorio: true },
     { key: 'nome', label: 'Nome do Produto', obrigatorio: true },

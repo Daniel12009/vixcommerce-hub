@@ -279,6 +279,21 @@ export interface MarketplaceDiaItem {
   roas: number;
 }
 
+export interface AtividadeItem {
+  sku?: string;
+  conta?: string;
+  tarefa: string;
+  prioridade?: string;
+  data_verificacao?: string;
+  acao?: string;
+  responsavel: string;
+  data_inicio?: string;
+  data_finalizacao?: string;
+  prazo?: string;
+  status?: string;
+  abaNome?: string;
+}
+
 export interface TeamTask {
   id: string;
   title: string;

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem, DevolucaoItem, MarketplaceDiaItem, EstimativaCompraItem } from '@/lib/types';
+import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaItem, PerformanceItem, AdsImportItem, DevolucaoItem, MarketplaceDiaItem, EstimativaCompraItem, AtividadeItem } from '@/lib/types';
 import { loadFromCloud, saveToCloud, syncVendasIncremental } from '@/lib/persistence';
 import type { ModuloDestino } from '@/lib/sheets-store';
 
@@ -15,6 +15,7 @@ interface SheetsData {
   marketplaceDiaItems: MarketplaceDiaItem[] | null;
   comprasItems: EstimativaCompraItem[] | null;
   cmvItems: { sku: string; cmv: number }[] | null;
+  atividadesItems: AtividadeItem[] | null;
   isLoaded: boolean;
   setEstoqueFromSheet: (rows: Record<string, string>[]) => void;
   setEstoqueFullFromSheet: (rows: Record<string, string>[]) => void;
@@ -27,6 +28,7 @@ interface SheetsData {
   setMarketplaceDiaFromSheet: (rows: Record<string, string>[]) => void;
   setComprasFromSheet: (rows: Record<string, string>[]) => void;
   setCmvFromSheet: (rows: Record<string, string>[]) => void;
+  setAtividadesFromSheet: (rows: Record<string, string>[], abaNomeOverride?: string) => void;
   clearEstoque: () => void;
   clearEstoqueFull: () => void;
   clearEstoqueTiny: () => void;
@@ -38,6 +40,7 @@ interface SheetsData {
   clearMarketplaceDia: () => void;
   clearCompras: () => void;
   clearCmv: () => void;
+  clearAtividades: () => void;
   refreshModule: (modulo: ModuloDestino) => Promise<number>;
   refreshingModule: string | null;
 }
@@ -69,6 +72,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [marketplaceDiaItems, setMarketplaceDiaItems] = useState<MarketplaceDiaItem[] | null>(null);
   const [comprasItems, setComprasItems] = useState<EstimativaCompraItem[] | null>(null);
   const [cmvItems, setCmvItems] = useState<{ sku: string; cmv: number }[] | null>(null);
+  const [atividadesItems, setAtividadesItems] = useState<AtividadeItem[] | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [refreshingModule, setRefreshingModule] = useState<string | null>(null);
 
@@ -365,6 +369,36 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setComprasItems(items);
   }, []);
 
+  const setAtividadesFromSheet = useCallback((rows: Record<string, string>[], abaNomeOverride?: string) => {
+    const items: AtividadeItem[] = rows
+      .filter(r => r.tarefa || r.acao || r.observacao) // Require at least one description field
+      .map(r => ({
+        sku: r.sku || '',
+        conta: r.conta || '',
+        id: r.id || '',
+        observacao: r.observacao || '',
+        tarefa: r.tarefa || r.acao || r.observacao || '', // Fallback across ML/Shopee
+        prioridade: r.prioridade || '',
+        data_verificacao: r.data_verificacao || '',
+        acao: r.acao || '',
+        responsavel: r.responsavel || 'Atendimento', // fallback if empty
+        data_inicio: r.data_inicio || '',
+        data_finalizacao: r.data_finalizacao || '',
+        prazo: r.prazo || '',
+        status: r.status || '',
+        abaNome: abaNomeOverride || r.abaNome || '',
+      }));
+    
+    setAtividadesItems(prev => {
+      // If no override, just replace exactly what we got (local storage load)
+      if (!abaNomeOverride) return items;
+      
+      const safePrev = prev || [];
+      // Remove olds from this tab, then push news
+      return [...safePrev.filter(p => p.abaNome !== abaNomeOverride), ...items];
+    });
+  }, []);
+
   useEffect(() => {
     // ━━━ PHASE 0: Instant load from localStorage (synchronous) ━━━
     const KEYS_MAP: [string, (d: any) => void][] = [
@@ -377,6 +411,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       ['marketplace_dia_data', setMarketplaceDiaFromSheet],
       ['compras_data', setComprasFromSheet],
       ['cmv_data', setCmvFromSheet],
+      ['atividades_data', setAtividadesFromSheet],
     ];
 
     let hasLocalData = false;
@@ -409,7 +444,9 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           Promise.race([loadFromCloud<any[]>('estoque_tiny_data'), timeout(6000)]),
           Promise.race([loadFromCloud<any[]>('ads_data'), timeout(6000)]),
           Promise.race([loadFromCloud<any[]>('devolucao_data'), timeout(6000)]),
+          Promise.race([loadFromCloud<any[]>('devolucao_data'), timeout(6000)]),
           Promise.race([loadFromCloud<any[]>('compras_data'), timeout(6000)]),
+          Promise.race([loadFromCloud<any[]>('atividades_data'), timeout(6000)]),
         ]) as PromiseSettledResult<any[]>[];
 
         if (vendas.status === 'fulfilled' && vendas.value) setVendasFromSheet(vendas.value);
@@ -418,9 +455,13 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         if (tiny.status === 'fulfilled' && tiny.value) setEstoqueTinyFromSheet(tiny.value);
         if (ads.status === 'fulfilled' && ads.value) setAdsFromSheet(ads.value);
         if (devol.status === 'fulfilled' && devol.value) setDevolucaoFromSheet(devol.value);
+        if (devol.status === 'fulfilled' && devol.value) setDevolucaoFromSheet(devol.value);
         
-        // At index 6 is compras
+        // At index 6 is compras, 7 is atividades
         const compras = arguments[0]?.[6] as PromiseSettledResult<any[]>; // Not perfectly typed above, let's fix the above array access
+        const atividades = arguments[0]?.[7] as PromiseSettledResult<any[]>;
+        if (compras?.status === 'fulfilled' && compras.value) setComprasFromSheet(compras.value);
+        if (atividades?.status === 'fulfilled' && atividades.value) setAtividadesFromSheet(atividades.value);
       } catch (err) {
         console.warn('[Preload] Supabase refresh failed:', err);
       } finally {
@@ -470,6 +511,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       marketplaceDiaItems,
       comprasItems,
       cmvItems,
+      atividadesItems,
       isLoaded,
       setEstoqueFromSheet,
       setEstoqueFullFromSheet,
@@ -482,6 +524,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       setMarketplaceDiaFromSheet,
       setComprasFromSheet,
       setCmvFromSheet,
+      setAtividadesFromSheet,
       clearEstoque: () => setEstoqueItems(null),
       clearEstoqueFull: () => setEstoqueFullItems(null),
       clearEstoqueTiny: () => setEstoqueTinyItems(null),
@@ -493,6 +536,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       clearMarketplaceDia: () => setMarketplaceDiaItems(null),
       clearCompras: () => setComprasItems(null),
       clearCmv: () => setCmvItems(null),
+      clearAtividades: () => setAtividadesItems(null),
       refreshModule: async (modulo: ModuloDestino) => {
         setRefreshingModule(modulo);
         try {
@@ -519,6 +563,12 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             else if (mod === 'marketplace-dia') { setMarketplaceDiaFromSheet(parsed); saveToCloud('marketplace_dia_data', parsed); }
             else if (mod === 'compras') { setComprasFromSheet(parsed); saveToCloud('compras_data', parsed); }
             else if (mod === 'calculadora') { setCmvFromSheet(parsed); saveToCloud('cmv_data', parsed); }
+            else if (mod === 'atividades') {
+              setAtividadesFromSheet(parsed, config.abaNome);
+              const existing = await loadFromCloud<any[]>('atividades_data') || [];
+              const merged = [...existing.filter((p: any) => p.abaNome !== config.abaNome), ...parsed.map(p => ({ ...p, abaNome: config.abaNome }))];
+              saveToCloud('atividades_data', merged);
+            }
           }
           return totalImported;
         } catch (err) {

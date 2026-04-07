@@ -22,7 +22,6 @@ const MODULOS_DISPONIVEIS = [
   { id: 'cadastro', label: '📄 Ficha Técnica' },
   { id: 'marketing', label: '📢 Ads / Marketing' },
   { id: 'atendimento', label: '💬 Atendimento' },
-  { id: 'metas', label: '🎯 Metas' },
   { id: 'compras', label: '🛒 Compras S&OP' }
 ];
 
