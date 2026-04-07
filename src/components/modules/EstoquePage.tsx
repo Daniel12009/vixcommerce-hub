@@ -8,6 +8,7 @@ import { formatNumber } from '@/lib/utils-vix';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { EnviosTab } from './EnviosTab';
 import { ExpedicaoTab } from './ExpedicaoTab';
+import { EstoqueLocalTab } from './EstoqueLocalTab';
 import { EmTransitoTab } from './EmTransitoTab';
 import { EstoqueFullUpload } from './EstoqueFullUpload';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, PieChart, Pie, Legend } from 'recharts';
@@ -326,6 +327,7 @@ export function EstoquePage() {
         <TabsList className="mb-4">
           <TabsTrigger value="visao-geral">📊 Visão Geral</TabsTrigger>
           <TabsTrigger value="expedicao-api">📦 Expedição (API)</TabsTrigger>
+          <TabsTrigger value="estoque-local">🏢 Estoque Local</TabsTrigger>
           <TabsTrigger value="em-transito">✈️ Em Trânsito (API)</TabsTrigger>
           <TabsTrigger value="envios">🚚 Envios (Planilha ML)</TabsTrigger>
           <TabsTrigger value="importar-full">📤 Importar Full</TabsTrigger>
@@ -334,6 +336,10 @@ export function EstoquePage() {
 
         <TabsContent value="expedicao-api" className="mt-0">
           <ExpedicaoTab />
+        </TabsContent>
+
+        <TabsContent value="estoque-local" className="mt-0">
+          <EstoqueLocalTab />
         </TabsContent>
 
         <TabsContent value="em-transito" className="mt-0">
