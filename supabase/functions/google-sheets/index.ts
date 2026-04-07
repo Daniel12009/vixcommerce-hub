@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     const serviceAccountKey = JSON.parse(keyJson);
     const accessToken = await getAccessToken(serviceAccountKey);
 
-    const { action, spreadsheetId, range, values, sheetTitle } = await req.json();
+    const { action, spreadsheetId, range, values, sheetTitle, dateColumn } = await req.json();
 
     const baseUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
     const headers = {
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
     } else if (action === 'dedup_write') {
       // values: new rows to write
       // dateColumn: zero‑based index of the column that holds the date string (e.g. 11 for VendasML/PERF, 1 for ADS)
-      const { dateColumn, values: newRows } = (await req.json()) as any;
+      const newRows = values || [];
       // Read existing data
       const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}`, { headers });
       let existingRows: any[][] = [];

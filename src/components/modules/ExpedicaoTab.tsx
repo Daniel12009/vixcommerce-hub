@@ -251,7 +251,7 @@ export function ExpedicaoTab() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-muted text-foreground border border-border">
-                      {s.conta.replace('Tiny | ', '').replace('Shopee|', '')}
+                      {s.plataforma === 'shopee' && s.conta.toLowerCase().includes('via flix') ? 'Mônaco Metais' : s.conta.replace('Tiny | ', '').replace('Shopee|', '')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground capitalize">
