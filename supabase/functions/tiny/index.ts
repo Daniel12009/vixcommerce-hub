@@ -666,15 +666,32 @@ Deno.serve(async (req) => {
           pagina: String(pagina),
         });
 
-        const res = await fetch('https://api.tiny.com.br/api2/produtos.pesquisa.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        });
+        let data: any = null;
+        let listAttempts = 0;
+        while (listAttempts < 3) {
+          const res = await fetch('https://api.tiny.com.br/api2/produtos.pesquisa.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+          });
+          data = await res.json();
+          
+          if (data?.retorno?.status === 'Erro' || data?.retorno?.status === 'ERRO') {
+            const code = data.retorno?.codigo_erro;
+            if (code === '6' || code === '31' || String(data.retorno.erros?.[0]?.erro).includes('Bloqueada')) {
+              listAttempts++;
+              console.log(`Rate limit lista TINY. Tentativa ${listAttempts}/3. Aguardando 5s...`);
+              await new Promise(r => setTimeout(r, 5000));
+              continue;
+            } else {
+              throw new Error(`API Tiny Erro: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
+            }
+          }
+          break; // success
+        }
 
-        const data = await res.json();
         if (data?.retorno?.status === 'Erro' || data?.retorno?.status === 'ERRO') {
-          throw new Error(`API Tiny Erro: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
+           throw new Error(`API Tiny Erro fatal após tentativas: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
         }
 
         const produtos = data?.retorno?.produtos || [];
