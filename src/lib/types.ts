@@ -284,10 +284,11 @@ export interface TeamTask {
   title: string;
   description: string | null;
   type: 'diaria' | 'afazer' | 'recompensa';
-  status: 'pendente' | 'concluido';
+  status: 'pendente' | 'andamento' | 'concluido';
   points: number;
   assigned_to_email: string;
   created_by_email: string;
   created_at: string;
+  started_at: string | null;
   completed_at: string | null;
 }

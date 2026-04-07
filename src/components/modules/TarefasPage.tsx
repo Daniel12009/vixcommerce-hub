@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { TeamTask } from '@/lib/types';
-import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, CheckSquare } from 'lucide-react';
+import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, PlayCircle, Clock4 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function TarefasPage() {
@@ -73,18 +73,29 @@ export function TarefasPage() {
   };
 
   const handleToggleStatus = async (task: TeamTask) => {
-    const isCompleting = task.status === 'pendente';
     try {
-      const { error } = await supabase
+      const isStarting = task.status === 'pendente';
+      const isCompleting = task.status === 'andamento';
+      
+      let updates: any = {};
+      if (isStarting) {
+        updates = { status: 'andamento', started_at: new Date().toISOString() };
+      } else if (isCompleting) {
+        updates = { status: 'concluido', completed_at: new Date().toISOString() };
+      } else {
+        // Reverse concluido -> pendente
+        updates = { status: 'pendente', started_at: null, completed_at: null };
+      }
+
+      const { error } = await (supabase as any)
         .from('team_tasks')
-        .update({ 
-          status: isCompleting ? 'concluido' : 'pendente',
-          completed_at: isCompleting ? new Date().toISOString() : null
-        })
+        .update(updates)
         .eq('id', task.id);
 
       if (error) throw error;
       if (isCompleting) toast.success(`+${task.points} Pontos ganhos! Ouro pra conta! 🎯`);
+      if (isStarting) toast.success('Cronômetro iniciado! Vá com tudo! ⏱️');
+      
       fetchTasks();
     } catch (e: any) {
       toast.error('Erro ao atualizar status');
@@ -125,6 +136,16 @@ export function TarefasPage() {
   const diarias = tasks.filter(t => t.type === 'diaria');
   const afazeres = tasks.filter(t => t.type === 'afazer');
   const pointsEarned = tasks.filter(t => t.status === 'concluido').reduce((acc, t) => acc + t.points, 0);
+
+  const getDuration = (start: string, end: string) => {
+    const diffMs = new Date(end).getTime() - new Date(start).getTime();
+    if (diffMs < 0) return '0 min';
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    const rm = mins % 60;
+    return `${hrs}h ${rm > 0 ? rm + 'm' : ''}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -241,19 +262,43 @@ export function TarefasPage() {
                 className={`group flex items-start gap-3 p-3 rounded-xl border transition-all ${
                   task.status === 'concluido' 
                   ? 'bg-muted/30 border-border opacity-60 grayscale' 
+                  : task.status === 'andamento' 
+                  ? 'bg-blue-500/5 border-blue-500/30 ring-1 ring-blue-500/20' 
                   : 'bg-card border-border hover:border-indigo-500/30 hover:shadow-md hover:shadow-indigo-500/5'
                 }`}
               >
                 <button 
                   onClick={() => handleToggleStatus(task)}
                   className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded flex items-center justify-center border transition-all ${
-                    task.status === 'concluido' ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-background border-border hover:border-indigo-500'
+                    task.status === 'concluido' ? 'bg-emerald-500 border-emerald-500 text-white' 
+                    : task.status === 'andamento' ? 'bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-500/30 animate-pulse'
+                    : 'bg-background border-border hover:border-indigo-500 text-indigo-500'
                   }`}
+                  title={task.status === 'pendente' ? 'Iniciar Cronômetro' : task.status === 'andamento' ? 'Concluir' : 'Desmarcar'}
                 >
+                  {task.status === 'pendente' && <Play className="w-3.5 h-3.5 ml-0.5" />}
+                  {task.status === 'andamento' && <Check className="w-4 h-4" />}
                   {task.status === 'concluido' && <Check className="w-4 h-4" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold transition-all ${task.status==='concluido'?'line-through text-muted-foreground':''}`}>{task.title}</p>
+                  <p className={`text-sm font-semibold transition-all ${
+                    task.status==='concluido' ? 'line-through text-muted-foreground' 
+                    : task.status==='andamento' ? 'text-blue-500' 
+                    : ''
+                  }`}>{task.title}</p>
+                  
+                  {task.status === 'andamento' && (
+                    <div className="mt-1 flex items-center gap-1.5 text-blue-500 text-[10px] font-bold uppercase animate-pulse">
+                      <Clock4 className="w-3 h-3" /> Em Andamento...
+                    </div>
+                  )}
+
+                  {task.status === 'concluido' && task.started_at && task.completed_at && (
+                    <div className="mt-1 flex items-center gap-1.5 text-emerald-600 text-[10px] font-bold uppercase">
+                      <Clock4 className="w-3 h-3" /> Levou {getDuration(task.started_at, task.completed_at)}
+                    </div>
+                  )}
+
                   <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-2 mt-1">
                     <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {isAdmin ? task.assigned_to_email : 'Você'}</span>
                     <span className="text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">+{task.points} pts</span>
@@ -297,19 +342,43 @@ export function TarefasPage() {
                 className={`group flex items-start gap-3 p-3 rounded-xl border transition-all ${
                   task.status === 'concluido' 
                   ? 'bg-muted/30 border-border opacity-60 grayscale' 
+                  : task.status === 'andamento'
+                  ? 'bg-blue-500/5 border-blue-500/30 ring-1 ring-blue-500/20'
                   : 'bg-orange-500/5 border-orange-500/20 hover:border-orange-500/40 hover:shadow-md hover:shadow-orange-500/5'
                 }`}
               >
                 <button 
                   onClick={() => handleToggleStatus(task)}
                   className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded flex items-center justify-center border transition-all ${
-                    task.status === 'concluido' ? 'bg-orange-500 border-orange-500 text-white' : 'bg-background border-orange-500/30'
+                    task.status === 'concluido' ? 'bg-orange-500 border-orange-500 text-white' 
+                    : task.status === 'andamento' ? 'bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-500/30 animate-pulse'
+                    : 'bg-background border-orange-500/30 hover:border-orange-500 text-orange-500'
                   }`}
+                  title={task.status === 'pendente' ? 'Iniciar Cronômetro' : task.status === 'andamento' ? 'Concluir' : 'Desmarcar'}
                 >
+                  {task.status === 'pendente' && <Play className="w-3.5 h-3.5 ml-0.5" />}
+                  {task.status === 'andamento' && <Check className="w-4 h-4" />}
                   {task.status === 'concluido' && <Check className="w-4 h-4" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold transition-all text-foreground ${task.status==='concluido'?'line-through text-muted-foreground':''}`}>{task.title}</p>
+                  <p className={`text-sm font-semibold transition-all text-foreground ${
+                    task.status==='concluido' ? 'line-through text-muted-foreground' 
+                    : task.status==='andamento' ? 'text-blue-500'
+                    : ''
+                  }`}>{task.title}</p>
+                  
+                  {task.status === 'andamento' && (
+                    <div className="mt-1 flex items-center gap-1.5 text-blue-500 text-[10px] font-bold uppercase animate-pulse">
+                      <Clock4 className="w-3 h-3" /> Em Andamento...
+                    </div>
+                  )}
+
+                  {task.status === 'concluido' && task.started_at && task.completed_at && (
+                    <div className="mt-1 flex items-center gap-1.5 text-emerald-600 text-[10px] font-bold uppercase">
+                      <Clock4 className="w-3 h-3" /> Levou {getDuration(task.started_at, task.completed_at)}
+                    </div>
+                  )}
+
                   <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-2 mt-1">
                     <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {isAdmin ? task.assigned_to_email : 'Você'}</span>
                     <span className="text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">+{task.points} pts</span>
