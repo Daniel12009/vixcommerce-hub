@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { TeamTask } from '@/lib/types';
-import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, PlayCircle, Clock4 } from 'lucide-react';
+import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, PlayCircle, Clock4, CheckSquare } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function TarefasPage() {
@@ -14,7 +14,7 @@ export function TarefasPage() {
   const [showForm, setShowForm] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
-    type: 'diaria' as const,
+    type: 'diaria' as 'diaria' | 'afazer',
     points: 10,
     assigned_to_email: currentUser?.username || ''
   });
@@ -23,21 +23,27 @@ export function TarefasPage() {
   const [forwardingTaskId, setForwardingTaskId] = useState<string | null>(null);
   const [forwardTo, setForwardTo] = useState<string>('');
 
-  const isAdmin = currentUser?.role === 'admin';
+  const canManage = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
   useEffect(() => {
     fetchTasks();
-    if (isAdmin) {
+    if (canManage) {
       refreshUsers();
     }
-  }, [currentUser, isAdmin, refreshUsers]);
+  }, [currentUser, canManage, refreshUsers]);
 
   const fetchTasks = async () => {
     try {
-      const { data, error } = await supabase
+      let query = (supabase as any)
         .from('team_tasks')
         .select('*')
         .order('created_at', { ascending: false });
+
+      if (!canManage && currentUser?.username) {
+        query = query.or(`assigned_to_email.eq.${currentUser.username},created_by_email.eq.${currentUser.username}`);
+      }
+
+      const { data, error } = await query;
         
       if (error) throw error;
       setTasks((data || []) as TeamTask[]);
@@ -166,7 +172,7 @@ export function TarefasPage() {
             <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
             <span className="font-bold text-amber-500 text-lg">{pointsEarned} <span className="text-sm font-medium">pts</span></span>
           </div>
-          {isAdmin && (
+          {canManage && (
             <button 
               onClick={() => setShowForm(!showForm)}
               className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-all"
@@ -178,8 +184,8 @@ export function TarefasPage() {
         </div>
       </div>
 
-      {/* Admin Task Creation Form */}
-      {showForm && isAdmin && (
+      {/* Admin / Manager Task Creation Form */}
+      {showForm && canManage && (
         <div className="bg-card border border-border p-5 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-foreground">Nova Tarefa / Afazer</h3>
@@ -240,7 +246,7 @@ export function TarefasPage() {
       )}
 
       {/* Columns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${canManage ? 'lg:grid-cols-3' : ''} gap-6`}>
         
         {/* Diárias */}
         <div className="flex flex-col gap-3">
@@ -300,13 +306,13 @@ export function TarefasPage() {
                   )}
 
                   <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-2 mt-1">
-                    <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {isAdmin ? task.assigned_to_email : 'Você'}</span>
+                    <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {canManage ? task.assigned_to_email : 'Você'}</span>
                     <span className="text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">+{task.points} pts</span>
                   </p>
                 </div>
                 
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={() => handleDelete(task.id)} className="p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors" title="Excluir Meta">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -380,7 +386,7 @@ export function TarefasPage() {
                   )}
 
                   <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-2 mt-1">
-                    <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {isAdmin ? task.assigned_to_email : 'Você'}</span>
+                    <span className="bg-muted px-1.5 py-0.5 rounded">Resp: {canManage ? task.assigned_to_email : 'Você'}</span>
                     <span className="text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">+{task.points} pts</span>
                   </p>
                 </div>
@@ -407,7 +413,7 @@ export function TarefasPage() {
                   </div>
                 ) : (
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
-                    {isAdmin && (
+                    {canManage && (
                       <button onClick={() => handleDelete(task.id)} className="p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors" title="Excluir Afazer">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -424,41 +430,54 @@ export function TarefasPage() {
           </div>
         </div>
 
-        {/* Recompensas / Leaderboard */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between pb-2 border-b border-border">
-            <h3 className="font-bold text-foreground text-lg flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-amber-400" />
-              Desempenho Diário
-            </h3>
+        {/* Recompensas / Leaderboard (Apenas para Gerentes/Admin) */}
+        {canManage && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <h3 className="font-bold text-foreground text-lg flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-400" />
+                Painel da Equipe
+              </h3>
+            </div>
+            
+            <div className="bg-card border border-border p-4 rounded-xl flex flex-col gap-4">
+               <div>
+                 <h4 className="font-bold text-sm text-foreground mb-3 flex items-center gap-2">
+                   <Star className="w-4 h-4 text-primary" /> 
+                   Produtividade do Time
+                 </h4>
+               </div>
+
+               <div className="space-y-4">
+                 {allUsers.filter((u: any) => u.ativo).map((u: any) => {
+                   const userTasks = tasks.filter(t => t.assigned_to_email === u.username);
+                   const completed = userTasks.filter(t => t.status === 'concluido');
+                   const progress = userTasks.length ? (completed.length / userTasks.length) * 100 : 0;
+                   const points = completed.reduce((acc, t) => acc + t.points, 0);
+
+                   return (
+                     <div key={u.id} className="bg-muted/30 p-3 rounded-lg border border-border">
+                       <div className="flex items-center justify-between mb-2">
+                         <span className="text-xs font-bold text-foreground">{u.nome || u.username}</span>
+                         <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">{points} pts</span>
+                       </div>
+                       <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-muted-foreground">{completed.length} de {userTasks.length} concluídas</span>
+                          <span className="text-[10px] font-bold">{Math.round(progress)}%</span>
+                       </div>
+                       <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                         <div 
+                           className="h-full bg-emerald-500 transition-all duration-500" 
+                           style={{ width: `${progress}%` }}
+                         ></div>
+                       </div>
+                     </div>
+                   );
+                 })}
+               </div>
+            </div>
           </div>
-          
-          <div className="bg-card border border-border p-4 rounded-xl flex flex-col items-center justify-center text-center gap-3">
-             <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center">
-               <Trophy className="w-8 h-8 text-amber-500" />
-             </div>
-             <div>
-               <h4 className="font-bold text-lg text-foreground">Sua Produtividade</h4>
-               <p className="text-sm text-muted-foreground">Complete tarefas para ganhar mais pontos no ranking de operação.</p>
-             </div>
-
-             <div className="w-full h-px bg-border my-2"></div>
-
-             <div className="flex items-center justify-between w-full">
-                <span className="text-sm font-medium text-muted-foreground">Progresso de Hoje:</span>
-                <span className="text-sm font-bold text-foreground">{tasks.filter(t => t.status === 'concluido').length} / {tasks.length}</span>
-             </div>
-             
-             {/* Simple progress bar */}
-             <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-               <div 
-                 className="h-full bg-amber-500 transition-all duration-500" 
-                 style={{ width: `${tasks.length ? (tasks.filter(t => t.status === 'concluido').length / tasks.length) * 100 : 0}%` }}
-               ></div>
-             </div>
-          </div>
-        </div>
-
+        )}
       </div>
     </div>
   );
