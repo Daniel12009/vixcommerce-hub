@@ -117,18 +117,41 @@ Deno.serve(async (req) => {
       result = await res.json();
     } else if (action === 'append') {
       const res = await fetch(
-        `${baseUrl}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        `${baseUrl}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED\u0026insertDataOption=INSERT_ROWS`,
         {
           method: 'POST',
           headers,
           body: JSON.stringify({ values }),
         }
       );
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Sheets API append failed [${res.status}]: ${err}`);
-      }
+      if (!res.ok) { const err = await res.text(); throw new Error(`Sheets API append failed [${res.status}]: ${err}`); }
       result = await res.json();
+    } else if (action === 'dedup_write') {
+      // values: new rows to write
+      // dateColumn: zero‑based index of the column that holds the date string (e.g. 11 for VendasML/PERF, 1 for ADS)
+      const { dateColumn, values: newRows } = (await req.json()) as any;
+      // Read existing data
+      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}`, { headers });
+      let existingRows: any[][] = [];
+      if (readRes.ok) {
+        const readData = await readRes.json();
+        existingRows = readData.values || [];
+      }
+      // Assume header is first row if present
+      const header = existingRows[0] ?? [];
+      const dataRows = existingRows.slice(1);
+      // Determine date to replace (use date of first new row)
+      const targetDate = newRows[0]?.[dateColumn];
+      const filtered = dataRows.filter(row => row[dateColumn] !== targetDate);
+      const combined = [header, ...filtered, ...newRows];
+      // Write back whole sheet
+      const writeRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ values: combined }),
+      });
+      if (!writeRes.ok) { const err = await writeRes.text(); throw new Error(`Sheets API dedup_write failed [${writeRes.status}]: ${err}`); }
+      result = await writeRes.json();
     } else if (action === 'update_cell') {
       // Update a specific cell (for checkboxes)
       const res = await fetch(

@@ -146,7 +146,7 @@ async function invokeGsFunction(action: string, payload: any) {
 }
 
 // Helper: chamar google-sheets edge function
-async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' = 'append') {
+async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' | 'dedup_write' = 'append', dateColumn?: number) {
   const url = Deno.env.get('SUPABASE_URL')!;
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const gsUrl = `${url}/functions/v1/google-sheets`;
@@ -171,9 +171,14 @@ async function invokeSheets(spreadsheetId: string, range: string, values: any[][
     } catch { /* tab may already exist — OK */ }
   }
 
+  const payload: any = { action, spreadsheetId, range: normalizedRange, values };
+  if (action === 'dedup_write' && dateColumn !== undefined) {
+    payload.dateColumn = dateColumn;
+  }
+
   const res = await fetch(gsUrl, {
     method: 'POST', headers: gsHeaders,
-    body: JSON.stringify({ action, spreadsheetId, range: normalizedRange, values }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const err = await res.text();
@@ -1596,7 +1601,12 @@ Deno.serve(async (req) => {
       }
 
       if (loteLinhas.length > 0) {
-        await invokeSheets(sheetId, `${sheetTab}!A:S`, loteLinhas, 'append');
+        // Dedup: VendasML has date created at column 2 (index 2: "Data de Criação")
+        // But date could also be used at column 11 if there is a 'Data Ref' instead?
+        // Let's use date created (index 2). Wait, earlier we saw VendasML has Data Ref at col 11 (Actually col 2 is Data Criação, VendasML is what?).
+        // For vendas, the data processed is 'dateFrom', which might be passed as a ref.
+        // Actually earlier it was appending. Let's use column 2 (Data de Criação) for VendasML which has `'DD/MM/YYYY`.
+        await invokeSheets(sheetId, `${sheetTab}!A:S`, loteLinhas, 'dedup_write', 2);
       }
 
       const msg = `ML Vendas ${account.nome}: ${loteLinhas.length} linhas em ${sheetTab} (${dateFrom})`;
@@ -1783,7 +1793,8 @@ Deno.serve(async (req) => {
         } catch { /* assume vazia */ }
 
         const finalValues = abaTemHeader ? rows : [header, ...rows];
-        await invokeSheets(sheetId, `${nomeAba}!A:L`, finalValues, 'append');
+        // For PERF, 'Data Ref' is at column 11 (zero-indexed)
+        await invokeSheets(sheetId, `${nomeAba}!A:L`, finalValues, 'dedup_write', 11);
       }
 
       const msg = `Performance ${account.nome}: ${rows.length} itens em ${nomeAba}`;
@@ -2103,10 +2114,12 @@ Deno.serve(async (req) => {
       }
 
       if (linhas_totais.length > 0) {
-        await invokeSheets(sheetId, `${nome_aba}!A:O`, linhas_totais, 'append');
+        // For ADS _totais, 'Data Ref' is at column 1
+        await invokeSheets(sheetId, `${nome_aba}!A:O`, linhas_totais, 'dedup_write', 1);
       }
       if (linhas_resumo.length > 0) {
-        await invokeSheets(sheetId, `${nome_aba_total}!A:C`, linhas_resumo, 'append');
+        // For ADS _resumo, 'Data Ref' is at column 0
+        await invokeSheets(sheetId, `${nome_aba_total}!A:C`, linhas_resumo, 'dedup_write', 0);
       }
 
       const msg = `ADS ${account.nome}: ${linhas_totais.length} linhas em ${nome_aba}, ${linhas_resumo.length} resumos em ${nome_aba_total}`;
