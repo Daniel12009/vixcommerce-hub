@@ -689,26 +689,39 @@ Deno.serve(async (req) => {
           const codigo = (p.codigo || '').trim();
           if (!codigo) continue;
 
-          // Obter estoque detalhado para este produto (Tiny não retorna na pesquisa)
-          try {
-            const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
-            const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: stockParams.toString(),
-            });
-            const sData = await sRes.json();
-            const saldoStr = sData?.retorno?.produto?.saldo;
-            const saldo = parseFloat(saldoStr || '0');
+          // Obter estoque detalhado para este produto
+          let attempts = 0;
+          let success = false;
+          while (attempts < 3 && !success) {
+            try {
+              const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
+              const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: stockParams.toString(),
+              });
+              const sData = await sRes.json();
+              
+              if (sData?.retorno?.status === 'Erro' && sData?.retorno?.codigo_erro === '6') {
+                // Rate limit (Too many requests)
+                attempts++;
+                console.log(`Rate limit atingido no TINY para ID ${p.id}. Tentativa ${attempts}/3... aguardando 2s`);
+                await new Promise(r => setTimeout(r, 2000));
+                continue;
+              }
 
-            if (saldo > 0) {
+              const saldoStr = sData?.retorno?.produto?.saldo;
+              const saldo = parseFloat(saldoStr || '0');
+
               allProducts.push([codigo, Math.round(saldo)]);
-            }
+              success = true;
 
-            // Rate limit (Tiny is strict)
-            await new Promise(r => setTimeout(r, 200));
-          } catch (err) {
-            console.error(`Erro buscando estoque do ID ${p.id}:`, err);
+              // Smooth rate limit to avoid hitting the wall so fast (Tiny allows ~60/min = 1/sec on normal plans)
+              await new Promise(r => setTimeout(r, 800));
+            } catch (err) {
+              console.error(`Erro buscando estoque do ID ${p.id}:`, err);
+              break;
+            }
           }
         }
 
