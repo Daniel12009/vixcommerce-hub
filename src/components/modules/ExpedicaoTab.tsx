@@ -26,11 +26,20 @@ let lastSyncTime: Date | null = null;
 let isFetchingShipments = false;
 let fetchPromise: Promise<void> | null = null;
 
-function getShippingDeadline(dateStr: string): Date {
+function getShippingDeadline(dateStr: string, plataforma: string, logisticType: string): Date {
   const d = new Date(dateStr);
   const dayOfWeek = d.getDay(); // 0 is Sunday
   const hour = d.getHours();
-  const isBefore11 = hour < 11;
+  
+  let cutoffHour = 11;
+  if (plataforma === 'shopee') {
+    const logStr = (logisticType || '').toLowerCase();
+    if (logStr.includes('diret')) { // e.g. "shopee direta"
+      cutoffHour = 12;
+    }
+  }
+
+  const isBeforeCutoff = hour < cutoffHour;
 
   const deadline = new Date(d);
   deadline.setHours(23, 59, 59, 999);
@@ -41,13 +50,13 @@ function getShippingDeadline(dateStr: string): Date {
   } else if (dayOfWeek === 1) { // Monday
     daysToAdd = 1; // Limit: Tuesday
   } else if (dayOfWeek === 2) { // Tuesday
-    daysToAdd = isBefore11 ? 0 : 1; // <11h: Tuesday, >11h: Wednesday
+    daysToAdd = isBeforeCutoff ? 0 : 1; // < cutoff: Tuesday, > cutoff: Wednesday
   } else if (dayOfWeek === 3) { // Wednesday
-    daysToAdd = isBefore11 ? 0 : 1;
+    daysToAdd = isBeforeCutoff ? 0 : 1;
   } else if (dayOfWeek === 4) { // Thursday
-    daysToAdd = isBefore11 ? 0 : 1;
+    daysToAdd = isBeforeCutoff ? 0 : 1;
   } else if (dayOfWeek === 5) { // Friday
-    daysToAdd = isBefore11 ? 0 : 3; // >11h Limit: Monday
+    daysToAdd = isBeforeCutoff ? 0 : 3; // > cutoff Limit: Monday
   } else if (dayOfWeek === 6) { // Saturday
     daysToAdd = 2; // Limit: Monday
   }
@@ -164,7 +173,7 @@ export function ExpedicaoTab() {
       // Ignora registros de erro devolvidos pelas functions
       if (s.error) return;
 
-      const deadline = getShippingDeadline(s.dateCreated);
+      const deadline = getShippingDeadline(s.dateCreated, s.plataforma, s.logisticType);
       const isLate = todayStart > deadline;
 
       if (isLate) {
