@@ -20,62 +20,126 @@ export interface Shipment {
   error?: string;
 }
 
+// Module-level cache to survive tab changes within the same page session
+let cachedShipments: Shipment[] | null = null;
+let lastSyncTime: Date | null = null;
+let isFetchingShipments = false;
+let fetchPromise: Promise<void> | null = null;
+
+function getShippingDeadline(dateStr: string): Date {
+  const d = new Date(dateStr);
+  const dayOfWeek = d.getDay(); // 0 is Sunday
+  const hour = d.getHours();
+  const isBefore11 = hour < 11;
+
+  const deadline = new Date(d);
+  deadline.setHours(23, 59, 59, 999);
+
+  let daysToAdd = 0;
+  if (dayOfWeek === 0) { // Sunday
+    daysToAdd = 2; // Limit: Tuesday
+  } else if (dayOfWeek === 1) { // Monday
+    daysToAdd = 1; // Limit: Tuesday
+  } else if (dayOfWeek === 2) { // Tuesday
+    daysToAdd = isBefore11 ? 0 : 1; // <11h: Tuesday, >11h: Wednesday
+  } else if (dayOfWeek === 3) { // Wednesday
+    daysToAdd = isBefore11 ? 0 : 1;
+  } else if (dayOfWeek === 4) { // Thursday
+    daysToAdd = isBefore11 ? 0 : 1;
+  } else if (dayOfWeek === 5) { // Friday
+    daysToAdd = isBefore11 ? 0 : 3; // >11h Limit: Monday
+  } else if (dayOfWeek === 6) { // Saturday
+    daysToAdd = 2; // Limit: Monday
+  }
+
+  deadline.setDate(deadline.getDate() + daysToAdd);
+  return deadline;
+}
+
 export function ExpedicaoTab() {
   const [loading, setLoading] = useState(false);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [shipments, setShipments] = useState<Shipment[]>(cachedShipments || []);
+  const [lastSync, setLastSync] = useState<Date | null>(lastSyncTime);
 
-  const fetchPendingShipments = async () => {
-    setLoading(true);
-    try {
-      // Fetch from all 3 platforms in parallel
-      const [mlRes, shopeeRes, tinyRes] = await Promise.allSettled([
-        supabase.functions.invoke('mercado-livre', { body: { action: 'get_pending_shipments' } }),
-        supabase.functions.invoke('shopee', { body: { action: 'get_pending_shipments' } }),
-        supabase.functions.invoke('tiny', { body: { action: 'get_pending_shipments' } })
-      ]);
-
-      let all: Shipment[] = [];
-      let errors = [];
-
-      if (mlRes.status === 'fulfilled' && !mlRes.value.error) {
-        const data = mlRes.value.data?.shipments || [];
-        all = [...all, ...data.map((s: any) => ({ ...s, plataforma: 'ml' }))];
-      } else {
-        errors.push('Mercado Livre');
-      }
-
-      if (shopeeRes.status === 'fulfilled' && !shopeeRes.value.error) {
-        const data = shopeeRes.value.data?.shipments || [];
-        all = [...all, ...data.map((s: any) => ({ ...s, plataforma: 'shopee' }))];
-      } else {
-        errors.push('Shopee');
-      }
-
-      if (tinyRes.status === 'fulfilled' && !tinyRes.value.error) {
-        const data = tinyRes.value.data?.shipments || [];
-        all = [...all, ...data.map((s: any) => ({ ...s, plataforma: s.plataforma || 'tiny' }))];
-      } else {
-        errors.push('Tiny ERP');
-      }
-
-      setShipments(all);
-      setLastSync(new Date());
-
-      if (errors.length > 0) {
-        toast.error(`Falha ao buscar algumas plataformas: ${errors.join(', ')}`);
-      } else {
-        toast.success(`Carregados ${all.length} pedidos pendentes.`);
-      }
-    } catch (err: any) {
-      toast.error('Erro geral ao buscar expedições: ' + err.message);
-    } finally {
-      setLoading(false);
+  const fetchPendingShipments = async (force = false) => {
+    if (!force && cachedShipments && lastSyncTime && (new Date().getTime() - lastSyncTime.getTime() < 5 * 60 * 1000)) {
+      // Use cached if less than 5 mins old
+      setShipments(cachedShipments);
+      setLastSync(lastSyncTime);
+      return;
     }
+
+    if (isFetchingShipments && fetchPromise) {
+      setLoading(true);
+      await fetchPromise;
+      setShipments(cachedShipments || []);
+      setLastSync(lastSyncTime);
+      setLoading(false);
+      return;
+    }
+
+    isFetchingShipments = true;
+    setLoading(true);
+
+    fetchPromise = (async () => {
+      try {
+        // Fetch from all 3 platforms in parallel
+        const [mlRes, shopeeRes, tinyRes] = await Promise.allSettled([
+          supabase.functions.invoke('mercado-livre', { body: { action: 'get_pending_shipments' } }),
+          supabase.functions.invoke('shopee', { body: { action: 'get_pending_shipments' } }),
+          supabase.functions.invoke('tiny', { body: { action: 'get_pending_shipments' } })
+        ]);
+
+        let all: Shipment[] = [];
+        let errors = [];
+
+        if (mlRes.status === 'fulfilled' && !mlRes.value.error) {
+          const data = mlRes.value.data?.shipments || [];
+          all = [...all, ...data.map((s: any) => ({ ...s, plataforma: 'ml' }))];
+        } else {
+          errors.push('Mercado Livre');
+        }
+
+        if (shopeeRes.status === 'fulfilled' && !shopeeRes.value.error) {
+          const data = shopeeRes.value.data?.shipments || [];
+          all = [...all, ...data.map((s: any) => ({ ...s, plataforma: 'shopee' }))];
+        } else {
+          errors.push('Shopee');
+        }
+
+        if (tinyRes.status === 'fulfilled' && !tinyRes.value.error) {
+          const data = tinyRes.value.data?.shipments || [];
+          all = [...all, ...data.map((s: any) => ({ ...s, plataforma: s.plataforma || 'tiny' }))];
+        } else {
+          errors.push('Tiny ERP');
+        }
+
+        cachedShipments = all;
+        lastSyncTime = new Date();
+        setShipments(all);
+        setLastSync(lastSyncTime);
+
+        if (force) {
+          if (errors.length > 0) {
+            toast.error(`Falha ao buscar: ${errors.join(', ')}`);
+          } else {
+            toast.success(`Carregados ${all.length} pedidos.`);
+          }
+        }
+      } catch (err: any) {
+        if (force) toast.error('Erro ao buscar expedições: ' + err.message);
+      } finally {
+        isFetchingShipments = false;
+        fetchPromise = null;
+        setLoading(false);
+      }
+    })();
   };
 
   useEffect(() => {
-    fetchPendingShipments();
+    if (!cachedShipments) {
+      fetchPendingShipments(false);
+    }
   }, []);
 
   // KPIs & Agrupamentos
@@ -100,8 +164,8 @@ export function ExpedicaoTab() {
       // Ignora registros de erro devolvidos pelas functions
       if (s.error) return;
 
-      const date = new Date(s.dateCreated);
-      const isLate = date < todayStart;
+      const deadline = getShippingDeadline(s.dateCreated);
+      const isLate = todayStart > deadline;
 
       if (isLate) {
         atrasados++;
@@ -220,7 +284,7 @@ export function ExpedicaoTab() {
             </span>
           )}
           <button 
-            onClick={fetchPendingShipments}
+            onClick={() => fetchPendingShipments(true)}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50 shadow-sm"
           >
@@ -242,7 +306,7 @@ export function ExpedicaoTab() {
       <div className="mt-6 space-y-6">
         {stats.grupos.atrasados.length > 0 && (
           <ShipmentTable 
-            title="Atrasados (Criados ontem ou antes)" 
+            title="Atrasados (Fora do Prazo de Envio)" 
             icon={AlertTriangle} 
             data={stats.grupos.atrasados} 
             colorClass="bg-[hsl(var(--vix-danger)/0.1)] text-[hsl(var(--vix-danger))] border-[hsl(var(--vix-danger)/0.2)]"
