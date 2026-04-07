@@ -37,21 +37,21 @@ function getYesterdayBR_DDMMYYYY(): string {
   return `${d}/${m}/${y}`;
 }
 
-async function invokeFunction(name: string, body: object): Promise<any> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+function invokeFunction(name: string, body: object): Promise<any> {
+  // Fire-and-forget: dispatches the call without waiting for the response.
+  // The sub-function (mercado-livre, tiny) will continue running on Supabase
+  // independently after this orchestrator returns.
+  fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${SERVICE_KEY}`,
     },
     body: JSON.stringify(body),
-  });
-  if (res.ok) {
-    try { return await res.json(); } catch { return { ok: true }; }
-  }
-  const errText = await res.text();
-  return { error: errText.slice(0, 200) };
+  }).catch(e => console.error(`[invokeFunction] ${name} error:`, e));
+  return Promise.resolve({ ok: true, dispatched: true });
 }
+
 
 async function restGet(path: string): Promise<any[]> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
