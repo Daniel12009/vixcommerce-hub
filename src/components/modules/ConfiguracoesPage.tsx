@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserManagementPage } from '@/components/auth/UserManagementPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { PlanilhasConfigSection } from './PlanilhasConfigSection';
 import { ApiConfigSection } from './ApiConfigSection';
 import { MarketplaceSourceConfig } from './MarketplaceSourceConfig';
@@ -11,6 +12,9 @@ import { SyncTestPanel } from './SyncTestPanel';
 
 export function ConfiguracoesPage() {
   const [tab, setTab] = useState('planilhas');
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   return (
     <div>
       <PageHeader
@@ -21,8 +25,8 @@ export function ConfiguracoesPage() {
       <Tabs value={tab} onValueChange={setTab} className="space-y-6 mt-6">
         <TabsList className="bg-card border border-border">
           <TabsTrigger value="planilhas"><FileSpreadsheet className="w-4 h-4 mr-1.5" /> Planilhas</TabsTrigger>
-          <TabsTrigger value="api"><Key className="w-4 h-4 mr-1.5" /> API / Tokens</TabsTrigger>
-          <TabsTrigger value="usuarios"><Users className="w-4 h-4 mr-1.5" /> Usuários</TabsTrigger>
+          {isAdmin && <TabsTrigger value="api"><Key className="w-4 h-4 mr-1.5" /> API / Tokens</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="usuarios"><Users className="w-4 h-4 mr-1.5" /> Usuários</TabsTrigger>}
           <TabsTrigger value="fonte"><PlugZap className="w-4 h-4 mr-1.5" /> Fonte de Dados</TabsTrigger>
           <TabsTrigger value="sync"><Zap className="w-4 h-4 mr-1.5" /> Sync Teste</TabsTrigger>
         </TabsList>
@@ -33,14 +37,18 @@ export function ConfiguracoesPage() {
         </TabsContent>
 
         {/* ═══ API / TOKENS TAB ═══ */}
-        <TabsContent value="api">
-          <ApiConfigSection />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="api">
+            <ApiConfigSection />
+          </TabsContent>
+        )}
 
         {/* ═══ USUÁRIOS TAB ═══ */}
-        <TabsContent value="usuarios">
-          <UserManagementPage onBack={() => setTab('planilhas')} />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="usuarios">
+            <UserManagementPage onBack={() => setTab('planilhas')} />
+          </TabsContent>
+        )}
 
         {/* ═══ FONTE DE DADOS TAB ═══ */}
         <TabsContent value="fonte">
