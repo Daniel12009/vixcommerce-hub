@@ -653,10 +653,12 @@ Deno.serve(async (req) => {
       
       let TINY_TOKEN = Deno.env.get('TINY_TOKEN_JSCHRUBER') || '';
       
-      // If we found accounts in the database, prefer the one that matches JSchruber or just the first active one
+      // If we found accounts in the database, prefer the one that matches JSchruber explicitly
       if (accounts && accounts.length > 0) {
         const jsAccount = accounts.find((a: any) => a.nome.toLowerCase().includes('schruber'));
-        TINY_TOKEN = jsAccount ? jsAccount.api_token : accounts[0].api_token;
+        if (jsAccount && jsAccount.api_token) {
+          TINY_TOKEN = jsAccount.api_token;
+        }
       }
 
       if (!TINY_TOKEN) throw new Error('Token Tiny JSCHRUBER não configurado no DB nem no .env');
