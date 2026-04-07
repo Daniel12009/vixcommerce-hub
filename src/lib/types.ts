@@ -129,7 +129,7 @@ export interface DevolucaoItem {
   retornoDevolucao: string;
 }
 
-export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar' | 'devolucao' | 'usuarios' | 'configuracoes' | 'atendimento' | 'metas' | 'compras' | 'mercado';
+export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar' | 'devolucao' | 'usuarios' | 'configuracoes' | 'atendimento' | 'metas' | 'compras' | 'mercado' | 'tarefas';
 
 export type MarketplaceId = 'ml1' | 'ml2' | 'ml3' | 'ml4' | 'tiny' | 'shopee' | 'amazon';
 
@@ -277,4 +277,17 @@ export interface MarketplaceDiaItem {
   pctAds: number;
   pctMc: number;
   roas: number;
+}
+
+export interface TeamTask {
+  id: string;
+  title: string;
+  description: string | null;
+  type: 'diaria' | 'afazer' | 'recompensa';
+  status: 'pendente' | 'concluido';
+  points: number;
+  assigned_to_email: string;
+  created_by_email: string;
+  created_at: string;
+  completed_at: string | null;
 }

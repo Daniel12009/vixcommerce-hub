@@ -17,6 +17,7 @@ import { AtendimentoPage } from '@/components/modules/AtendimentoPage';
 import { MetasPage } from '@/components/modules/MetasPage';
 import { ComprasPage } from '@/components/modules/compras/ComprasPage';
 import { MarketIntelligence } from '@/components/modules/mercado/MarketIntelligence';
+import { TarefasPage } from '@/components/modules/TarefasPage';
 import { SheetsDataProvider, useSheetsData } from '@/contexts/SheetsDataContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import type { ModuleName } from '@/lib/types';
@@ -90,6 +91,7 @@ function AppContent() {
       case 'metas': return <MetasPage />;
       case 'compras': return <ComprasPage />;
       case 'mercado': return <MarketIntelligence />;
+      case 'tarefas': return <TarefasPage />;
       case 'usuarios': return <UserManagementPage onBack={() => setActiveModule('configuracoes')} />;
     }
   };
