@@ -719,12 +719,15 @@ Deno.serve(async (req) => {
               });
               const sData = await sRes.json();
               
-              if (sData?.retorno?.status === 'Erro' && sData?.retorno?.codigo_erro === '6') {
-                // Rate limit (Too many requests)
-                attempts++;
-                console.log(`Rate limit atingido no TINY para ID ${p.id}. Tentativa ${attempts}/3... aguardando 2s`);
-                await new Promise(r => setTimeout(r, 2000));
-                continue;
+              if (sData?.retorno?.status === 'Erro') {
+                const code = sData.retorno?.codigo_erro;
+                if (code === '6' || code === '31' || String(sData.retorno.erros?.[0]?.erro).includes('Bloqueada')) {
+                  // Rate limit (Too many requests)
+                  attempts++;
+                  console.log(`Rate limit atingido no TINY para ID ${p.id}. Tentativa ${attempts}/3... aguardando 4s`);
+                  await new Promise(r => setTimeout(r, 4000));
+                  continue;
+                }
               }
 
               const saldoStr = sData?.retorno?.produto?.saldo;
@@ -733,8 +736,8 @@ Deno.serve(async (req) => {
               allProducts.push([codigo, Math.round(saldo)]);
               success = true;
 
-              // Smooth rate limit to avoid hitting the wall so fast (Tiny allows ~60/min = 1/sec on normal plans)
-              await new Promise(r => setTimeout(r, 800));
+              // Smooth rate limit to avoid hitting the wall so fast (Tiny allows ~60/min. 1200ms ensures < 50/min)
+              await new Promise(r => setTimeout(r, 1200));
             } catch (err) {
               console.error(`Erro buscando estoque do ID ${p.id}:`, err);
               break;
@@ -746,8 +749,8 @@ Deno.serve(async (req) => {
         pagina++;
         hasMore = pagina <= totalPaginas;
 
-        // Rate limit
-        await new Promise(r => setTimeout(r, 1000));
+        // Rate limit between pages
+        await new Promise(r => setTimeout(r, 1500));
       }
 
       // Sobrescrever aba ESTOQUE-TINY
