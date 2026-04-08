@@ -27,10 +27,10 @@ export function CatalogExperienceTab() {
   const [contaAccountMap, setContaAccountMap] = useState<Record<string, string>>({});
 
   const fetchAccounts = async () => {
-    const { data } = await (supabase as any).from('ml_accounts').select('id, seller_id, nome').eq('ativo', true);
+    const { data } = await (supabase as any).from('ml_accounts').select('id, nome');
     if (data) {
       const map: Record<string, string> = {};
-      data.forEach((a: any) => { if (a.nome) map[a.nome] = a.seller_id || a.id; });
+      data.forEach((a: any) => { if (a.nome) map[a.nome] = a.id; });
       setContaAccountMap(map);
     }
   };
@@ -101,7 +101,7 @@ export function CatalogExperienceTab() {
   }, [healthHistory]);
 
   const rows = useMemo(() =>
-    healthHistory.filter(h => filterConta === 'all' || h.conta === filterConta),
+    healthHistory.filter(h => h.mlb_id !== 'MLB_TEST_CLI' && (filterConta === 'all' || h.conta === filterConta)),
     [healthHistory, filterConta]
   );
 

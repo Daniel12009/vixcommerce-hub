@@ -149,8 +149,11 @@ function PurchaseExperiencePanel({ pe, shipping, listingType, loading }: { pe: a
                 <span className="text-[10px] text-muted-foreground">({p.claims || 0} recl. / {p.cancellations || 0} canc.)</span>
               </div>
               {p.level_two?.title && <p className="text-[10px] text-foreground">{p.level_two.title.text || p.level_two.title}</p>}
+              {p.level_three?.title && <p className="text-[10px] text-foreground ml-2">→ {p.level_three.title.text || p.level_three.title}</p>}
               {p.level_three?.remedy && (
-                <p className="text-[10px] text-emerald-400 mt-1">💡 {p.level_three.remedy.text || p.level_three.remedy}</p>
+                <div className="mt-1.5 bg-emerald-500/10 rounded-lg p-2">
+                  <p className="text-[10px] text-emerald-400">💡 {p.level_three.remedy.text || p.level_three.remedy}</p>
+                </div>
               )}
             </div>
           ))}
