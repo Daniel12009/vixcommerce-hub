@@ -38,7 +38,7 @@ const STATUS_COLORS = {
 };
 
 export function EstoquePage() {
-  const { estoqueFullItems, estoqueTinyItems, performanceItems, refreshModule, refreshingModule } = useSheetsData();
+  const { estoqueFullItems, estoqueTinyItems, vendasItems, refreshModule, refreshingModule } = useSheetsData();
 
   const handleRefresh = useCallback(async () => {
     const [r1, r2] = await Promise.all([
@@ -98,26 +98,52 @@ export function EstoquePage() {
     return Array.from(set).sort();
   }, [estoqueFullItems]);
 
+  // Normalize conta names for fuzzy matching: "[VIAFLIX]" and "VIA FLIX" both → "VIAFLIX"
+  const normalizeConta = (s: string) =>
+    s.toUpperCase().replace(/[\[\]\s\-\.]/g, '');
+
   const vmdBySkuAndConta = useMemo(() => {
     const map = new Map<string, number>();
-    const grouped = new Map<string, { totalVendas: number; dias: Set<string> }>();
-    (performanceItems || []).forEach(item => {
-      if (!item.sku) return;
+    const grouped = new Map<string, { totalQtd: number; dias: Set<string> }>();
+    const skuOnly = new Map<string, { totalQtd: number; dias: Set<string> }>();
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000; // last 30 days
+
+    (vendasItems || []).forEach(item => {
+      if (!item.sku || item.statusPedido === 'cancelado') return;
+      let dateMs = 0;
+      if (item.data) {
+        const parts = item.data.split('/');
+        dateMs = parts.length === 3
+          ? new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime()
+          : new Date(item.data).getTime();
+      }
+      if (isNaN(dateMs) || dateMs < cutoff) return;
+
       const sku = item.sku.trim().toUpperCase();
-      const conta = item.conta || '';
-      const dateKey = item.dataRef || 'sem-data';
-      const key = `${sku}||${conta}`;
-      const current = grouped.get(key) || { totalVendas: 0, dias: new Set<string>() };
-      current.totalVendas += Number(item.vendas || 0);
-      current.dias.add(dateKey);
-      grouped.set(key, current);
+      const contaRaw = (item.conta || item.contaMae || '').trim();
+      const normConta = normalizeConta(contaRaw);
+      const dateKey = item.data || 'sem-data';
+      const qty = Number(item.quantidade || 1);
+
+      // Per-account key (normalized)
+      const key = `${sku}||${normConta}`;
+      const cur = grouped.get(key) || { totalQtd: 0, dias: new Set<string>() };
+      cur.totalQtd += qty;
+      cur.dias.add(dateKey);
+      grouped.set(key, cur);
+
+      // SKU-only fallback
+      const skuCur = skuOnly.get(sku) || { totalQtd: 0, dias: new Set<string>() };
+      skuCur.totalQtd += qty;
+      skuCur.dias.add(dateKey);
+      skuOnly.set(sku, skuCur);
     });
-    grouped.forEach((value, key) => {
-      const dias = Math.max(1, value.dias.size);
-      map.set(key, value.totalVendas / dias);
-    });
+
+    grouped.forEach((v, key) => map.set(key, v.totalQtd / Math.max(1, v.dias.size)));
+    skuOnly.forEach((v, sku) => map.set(`${sku}||__ANY__`, v.totalQtd / Math.max(1, v.dias.size)));
     return map;
-  }, [performanceItems]);
+  }, [vendasItems]);
+
 
   const mergedData = useMemo<MergedStockRow[]>(() => {
     const fullMap = new Map<string, { fullML: number; entradaPendente: number; emTransferencia: number; contas: Set<string> }>();
@@ -199,7 +225,9 @@ export function EstoquePage() {
     return Array.from(grouped.values()).map(item => {
       const { sku, conta, fullML, entradaPendente, emTransferencia } = item;
       const tinyLocal = tinyMap.get(sku) || 0;
-      const vmd = vmdBySkuAndConta.get(`${sku}||${conta}`) || 0;
+      const normContaKey = `${sku}||${normalizeConta(conta)}`;
+      const vmd = vmdBySkuAndConta.get(normContaKey)
+        ?? vmdBySkuAndConta.get(`${sku}||__ANY__`) ?? 0;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
       const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
       const sugestaoEnvio = Math.max(0, Math.ceil((vmd * skuCobertura) - (fullML + entradaPendente + emTransferencia)));
