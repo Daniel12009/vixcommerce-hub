@@ -567,7 +567,7 @@ export function TarefasPage() {
                          </div>
                          <div className="flex gap-4 text-muted-foreground mt-1">
                            <span>👤 {a.responsavel}</span>
-                           <span>📦 {a.conta || a.sku || a.id || 'N/A'}</span>
+                           <span>📦 {a.conta || a.sku || 'N/A'}</span>
                            <span>⏳ Prazo: {a.prazo}</span>
                          </div>
                        </div>

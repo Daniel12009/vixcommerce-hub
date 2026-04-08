@@ -64,6 +64,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
   'marketplace-dia': 'bg-[hsl(270,70%,55%,0.1)] text-[hsl(270,70%,55%)]',
   calculadora: 'bg-[hsl(220,70%,55%,0.1)] text-[hsl(220,70%,55%)]',
+  atividades: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
 };
 
 // Vendas Table Columns state
