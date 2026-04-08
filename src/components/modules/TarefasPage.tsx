@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { TeamTask } from '@/lib/types';
-import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, PlayCircle, Clock4, CheckSquare, BarChart3, Users, LayoutDashboard, Calendar, AlertCircle } from 'lucide-react';
+import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, Clock4, CheckSquare, Users, LayoutDashboard, AlertCircle, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -14,6 +14,7 @@ export function TarefasPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('minhas');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [detailTask, setDetailTask] = useState<TeamTask | null>(null);
 
   // Form states
   const [showForm, setShowForm] = useState(false);
@@ -444,6 +445,11 @@ export function TarefasPage() {
                   </div>
                 ) : (
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
+                    {task.description && (
+                      <button onClick={() => setDetailTask(task)} className="p-1 text-primary/70 hover:bg-primary/10 hover:text-primary rounded transition-colors" title="Ver detalhes">
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {canManage && (
                       <button onClick={() => handleDelete(task.id)} className="p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors" title="Excluir Afazer">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -711,6 +717,62 @@ export function TarefasPage() {
           </div>
         </div>
       )}
+
+      {/* Task Detail Modal */}
+      {detailTask && (() => {
+        // Parse description: "MLB: {id} | SKU: {sku} | Conta: {conta}\n{titulo}"
+        const lines = (detailTask.description || '').split('\n');
+        const metaLine = lines[0] || '';
+        const titulo = lines.slice(1).join(' ').trim();
+        const parseMeta = (label: string) => {
+          const match = metaLine.match(new RegExp(label + ':\\s*([^|\\n]+)'));
+          return match ? match[1].trim() : null;
+        };
+        const mlbId = parseMeta('MLB');
+        const sku = parseMeta('SKU');
+        const conta = parseMeta('Conta');
+        return (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDetailTask(null)}>
+            <div className="bg-card w-full max-w-sm border border-border rounded-2xl shadow-xl animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                <h3 className="font-bold text-sm text-foreground">Detalhes da Tarefa</h3>
+                <button onClick={() => setDetailTask(null)} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Ação</p>
+                  <p className="text-sm font-bold text-foreground">{detailTask.title}</p>
+                </div>
+                {titulo && (
+                  <div className="p-3 bg-primary/5 border border-primary/15 rounded-xl">
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-1">Produto</p>
+                    <p className="text-xs text-foreground leading-snug">{titulo}</p>
+                  </div>
+                )}
+                {(mlbId || sku || conta) && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {mlbId && <div className="bg-muted/40 rounded-lg p-2 text-center"><p className="text-[9px] text-muted-foreground">MLB ID</p><p className="text-[11px] font-mono font-bold text-primary truncate" title={mlbId}>{mlbId}</p></div>}
+                    {sku    && <div className="bg-muted/40 rounded-lg p-2 text-center"><p className="text-[9px] text-muted-foreground">SKU</p><p className="text-[11px] font-mono font-semibold text-foreground truncate" title={sku}>{sku}</p></div>}
+                    {conta  && <div className="bg-muted/40 rounded-lg p-2 text-center"><p className="text-[9px] text-muted-foreground">Conta</p><p className="text-[11px] font-semibold text-foreground truncate" title={conta}>{conta}</p></div>}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <div className="flex-1 bg-muted/40 rounded-lg p-2 text-center">
+                    <p className="text-[9px] text-muted-foreground">Responsável</p>
+                    <p className="text-[11px] font-semibold text-foreground">{detailTask.assigned_to_email || '—'}</p>
+                  </div>
+                  {detailTask.due_date && (
+                    <div className="flex-1 bg-muted/40 rounded-lg p-2 text-center">
+                      <p className="text-[9px] text-muted-foreground">Prazo</p>
+                      <p className="text-[11px] font-semibold text-foreground">{new Date(detailTask.due_date).toLocaleDateString('pt-BR')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
