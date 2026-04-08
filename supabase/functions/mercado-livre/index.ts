@@ -1650,15 +1650,15 @@ Deno.serve(async (req) => {
       const contaUpper = (account.nome || '').trim().toUpperCase();
       const nomeAba = `PERF-${contaUpper}`;
 
-      // PASSO 1: buscar itens Full catálogo
+      // PASSO 1: buscar TODOS os itens ativos da conta (sem restringir a full ou catálogo)
       const itemIds: string[] = [];
       let searchOffset = 0;
       while (true) {
         let res = await fetch(
-          `${ML_API}/users/${sellerId}/items/search?status=active&logistic_type=fulfillment&catalog_listing=true&limit=50&offset=${searchOffset}`,
+          `${ML_API}/users/${sellerId}/items/search?status=active&limit=50&offset=${searchOffset}`,
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
-        if (res.status === 401) { token = await refreshToken(account); res = await fetch(`${ML_API}/users/${sellerId}/items/search?status=active&logistic_type=fulfillment&catalog_listing=true&limit=50&offset=${searchOffset}`, { headers: { 'Authorization': `Bearer ${token}` } }); }
+        if (res.status === 401) { token = await refreshToken(account); res = await fetch(`${ML_API}/users/${sellerId}/items/search?status=active&limit=50&offset=${searchOffset}`, { headers: { 'Authorization': `Bearer ${token}` } }); }
         if (!res.ok) break;
         const data = await res.json();
         const results: string[] = data.results || [];
