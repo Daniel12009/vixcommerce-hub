@@ -27,7 +27,7 @@ export function CatalogExperienceTab() {
   const [contaAccountMap, setContaAccountMap] = useState<Record<string, string>>({});
 
   const fetchAccounts = async () => {
-    const { data } = await (supabase as any).from('ml_accounts').select('id, nome');
+    const { data } = await supabase.from('ml_accounts').select('id, nome');
     if (data) {
       const map: Record<string, string> = {};
       data.forEach((a: any) => { if (a.nome) map[a.nome] = a.id; });
