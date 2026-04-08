@@ -50,9 +50,27 @@ export function CatalogExperienceTab() {
   }, []);
 
   const handleSyncHealth = async () => {
-    // We could technically trigger the ML edge function here
-    toast.info('Sincronização iniciada. Os dados no banco serão atualizados em breve...');
-    fetchHealth();
+    try {
+      setLoadingDb(true);
+      toast.info('Buscando dados de Saúde do Catálogo no Mercado Livre...');
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('mercado-livre', {
+        body: { action: 'get_performance_catalog' },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+
+      if (error) {
+        toast.error(`Erro ao sincronizar: ${error.message}`);
+      } else {
+        toast.success('Dados atualizados no banco com sucesso!');
+      }
+    } catch (e: any) {
+      toast.error(`Erro: ${e.message}`);
+    } finally {
+      // Re-fetch from DB regardless of result
+      await fetchHealth();
+    }
   };
 
   const contasUnicas = useMemo(() => {
