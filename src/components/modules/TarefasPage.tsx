@@ -13,6 +13,7 @@ export function TarefasPage() {
   const [tasks, setTasks] = useState<TeamTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('minhas');
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
   // Form states
   const [showForm, setShowForm] = useState(false);
@@ -458,7 +459,7 @@ export function TarefasPage() {
         {canManage && (
           <TabsContent value="equipe" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Dashboard Overview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
                  <div className="flex justify-between items-start mb-2">
                    <h4 className="text-sm font-semibold text-muted-foreground">Total de Atividades</h4>
@@ -474,9 +475,20 @@ export function TarefasPage() {
                    <CheckSquare className="w-4 h-4 text-[hsl(var(--vix-success))]" />
                  </div>
                  <div className="text-2xl font-bold text-[hsl(var(--vix-success))]">
-                   {atividadesItems?.filter(a => a.status?.toLowerCase() === 'concluído' || a.status?.toLowerCase() === 'concluida').length || 0}
+                   {atividadesItems?.filter(a => a.status?.toLowerCase().includes('conclu')).length || 0}
                  </div>
-                 <p className="text-xs text-muted-foreground mt-1">Neste período</p>
+                 <p className="text-xs text-muted-foreground mt-1">Status Finalizado</p>
+              </div>
+
+              <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+                 <div className="flex justify-between items-start mb-2">
+                   <h4 className="text-sm font-semibold text-muted-foreground">Pendentes (Não Ini.)</h4>
+                   <Clock className="w-4 h-4 text-orange-400" />
+                 </div>
+                 <div className="text-2xl font-bold text-orange-400">
+                   {atividadesItems?.filter(a => !a.status || a.status?.toLowerCase().includes('pendente') || a.status?.toLowerCase().includes('não ini') || a.status?.toLowerCase().includes('abert')).length || 0}
+                 </div>
+                 <p className="text-xs text-muted-foreground mt-1">Na fila aguardando</p>
               </div>
 
               <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
@@ -485,7 +497,7 @@ export function TarefasPage() {
                    <Clock4 className="w-4 h-4 text-blue-500" />
                  </div>
                  <div className="text-2xl font-bold text-blue-500">
-                   {atividadesItems?.filter(a => a.status?.toLowerCase().includes('andamento') || a.status?.toLowerCase().includes('execução')).length || 0}
+                   {atividadesItems?.filter(a => a.status?.toLowerCase().includes('andamento') || a.status?.toLowerCase().includes('execuç')).length || 0}
                  </div>
                  <p className="text-xs text-muted-foreground mt-1">Sendo trabalhadas hoje</p>
               </div>
@@ -521,15 +533,15 @@ export function TarefasPage() {
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                  <div className="space-y-4">
                    <h4 className="text-sm font-semibold text-muted-foreground border-b border-border pb-2">Status por Executor</h4>
-                   {Array.from(new Set(atividadesItems?.map(a => a.responsavel).filter(Boolean) || [])).map(resp => {
+                    {Array.from(new Set(atividadesItems?.map(a => a.responsavel).filter(Boolean) || [])).map(resp => {
                      const acts = atividadesItems?.filter(a => a.responsavel === resp) || [];
                      const concluidas = acts.filter(a => a.status?.toLowerCase().includes('conclu')).length;
                      const progresso = acts.length ? (concluidas / acts.length) * 100 : 0;
                      return (
-                       <div key={resp} className="space-y-2">
+                       <div key={resp} onClick={() => setSelectedUser(resp)} className="space-y-2 cursor-pointer hover:bg-muted/50 p-2 rounded-lg -mx-2 transition-colors">
                          <div className="flex justify-between items-center text-sm">
                            <span className="font-semibold text-foreground">{resp}</span>
-                           <span className="text-muted-foreground">{concluidas} / {acts.length}</span>
+                           <span className="text-muted-foreground text-xs">{concluidas} / {acts.length} • Clique para ver painel ➔</span>
                          </div>
                          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${progresso}%` }}></div>
@@ -609,6 +621,88 @@ export function TarefasPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* DETAILED USER MODAL */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card w-full max-w-4xl border border-border rounded-xl shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-4 border-b border-border">
+              <h2 className="font-bold text-lg flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" /> Ficha Completa: {selectedUser}
+              </h2>
+              <button onClick={() => setSelectedUser(null)} className="p-1 hover:bg-muted rounded text-muted-foreground">
+                <X className="w-5 h-5"/>
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                 {(() => {
+                   const acts = atividadesItems?.filter(a => a.responsavel === selectedUser) || [];
+                   const conc = acts.filter(a => a.status?.toLowerCase().includes('conclu')).length;
+                   const and = acts.filter(a => a.status?.toLowerCase().includes('andamento') || a.status?.toLowerCase().includes('exec')).length;
+                   const pend = acts.filter(a => !a.status || a.status?.toLowerCase().includes('pendente') || a.status?.toLowerCase().includes('não')).length;
+                   return (
+                     <>
+                        <div className="bg-muted/30 p-3 rounded-lg border border-border text-center">
+                           <div className="text-xs text-muted-foreground">Total Atividades</div>
+                           <div className="font-bold text-lg">{acts.length}</div>
+                        </div>
+                        <div className="bg-muted/30 border-emerald-500/20 text-emerald-500 p-3 rounded-lg border text-center">
+                           <div className="text-xs">Concluídas</div>
+                           <div className="font-bold text-lg">{conc}</div>
+                        </div>
+                        <div className="bg-muted/30 border-blue-500/20 text-blue-500 p-3 rounded-lg border text-center">
+                           <div className="text-xs">Andamento</div>
+                           <div className="font-bold text-lg">{and}</div>
+                        </div>
+                        <div className="bg-muted/30 border-orange-500/20 text-orange-500 p-3 rounded-lg border text-center">
+                           <div className="text-xs">Pendentes</div>
+                           <div className="font-bold text-lg">{pend}</div>
+                        </div>
+                     </>
+                   )
+                 })()}
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-muted text-muted-foreground text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3 whitespace-nowrap">Tarefa / Ação</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Status</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Aba / Doc</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Ref. (ID/SKU)</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Prazo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border bg-card">
+                    {(atividadesItems?.filter(a => a.responsavel === selectedUser) || []).map((a, i) => (
+                      <tr key={i} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-medium text-foreground max-w-[200px] truncate" title={a.tarefa}>
+                          {a.tarefa || '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                           <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                             a.status?.toLowerCase().includes('conclu') ? 'bg-emerald-500/10 text-emerald-500' : 
+                             a.status?.toLowerCase().includes('andamento') ? 'bg-blue-500/10 text-blue-500' : 
+                             'bg-orange-500/10 text-orange-500'
+                           }`}>{a.status || 'Pendente'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{a.abaNome || '-'}</td>
+                        <td className="px-4 py-3 text-muted-foreground font-mono text-xs max-w-[120px] truncate" title={a.conta || a.sku || a.id}>
+                          {a.conta || a.sku || a.id || '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">{a.prazo || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
