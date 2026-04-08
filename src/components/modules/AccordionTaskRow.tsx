@@ -42,7 +42,7 @@ function TaskModal({ idAnuncio, sku, titulo, conta, users, onClose, onCreated }:
         title: title.trim(),
         description: `MLB: ${idAnuncio} | SKU: ${sku} | Conta: ${conta}`,
         type: 'improvement',
-        status: 'pending',
+        status: 'pendente',
         points: 5,
         assigned_to_email: assignee,
         created_by_email: me,
@@ -264,10 +264,10 @@ export function AccordionTaskRow({ idAnuncio, sku, titulo, conta, preco, link, i
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><User className="w-2.5 h-2.5" />{t.assigned_to_email}</span>
                           <span className={`px-1.5 py-0.5 rounded uppercase text-[9px] font-bold ${
-                            t.status === 'completed' ? 'text-[hsl(var(--vix-success))] bg-[hsl(var(--vix-success)/0.1)]'
-                            : t.status === 'in_progress' ? 'text-[hsl(var(--vix-info))] bg-[hsl(var(--vix-info)/0.1)]'
+                            t.status === 'concluido' ? 'text-[hsl(var(--vix-success))] bg-[hsl(var(--vix-success)/0.1)]'
+                            : t.status === 'andamento' ? 'text-[hsl(var(--vix-info))] bg-[hsl(var(--vix-info)/0.1)]'
                             : 'text-[hsl(var(--vix-warning))] bg-[hsl(var(--vix-warning)/0.1)]'
-                          }`}>{t.status === 'completed' ? 'Feito' : t.status === 'in_progress' ? 'Fazendo' : 'Pendente'}</span>
+                          }`}>{t.status === 'concluido' ? 'Feito' : t.status === 'andamento' ? 'Fazendo' : 'Pendente'}</span>
                         </div>
                       </div>
                     ))
