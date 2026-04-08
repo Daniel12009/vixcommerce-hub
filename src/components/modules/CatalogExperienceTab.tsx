@@ -21,6 +21,20 @@ export function CatalogExperienceTab() {
   const [syncing, setSyncing] = useState(false);
   const [filterConta, setFilterConta] = useState('all');
   const [openAccordionId, setOpenAccordionId] = useState<string | null>(null);
+  const [contaAccountMap, setContaAccountMap] = useState<Record<string, string>>({});
+
+  // Fetch ML accounts to build conta → account_id map
+  const fetchAccounts = async () => {
+    const { data } = await (supabase as any)
+      .from('ml_accounts')
+      .select('id, nome')
+      .eq('ativo', true);
+    if (data) {
+      const map: Record<string, string> = {};
+      data.forEach((a: any) => { if (a.nome) map[a.nome] = a.id; });
+      setContaAccountMap(map);
+    }
+  };
 
   const fetchHealth = async () => {
     try {
@@ -42,7 +56,7 @@ export function CatalogExperienceTab() {
     finally { setLoadingDb(false); }
   };
 
-  useEffect(() => { fetchHealth(); }, []);
+  useEffect(() => { fetchHealth(); fetchAccounts(); }, []);
 
   const handleSyncHealth = async () => {
     setSyncing(true);
@@ -214,6 +228,7 @@ export function CatalogExperienceTab() {
                       conta={item.conta}
                       preco={item.preco}
                       link={item.link}
+                      accountId={contaAccountMap[item.conta]}
                       isOpen={openAccordionId === `${item.idAnuncio}||${item.conta}`}
                       onClose={() => setOpenAccordionId(null)}
                       experienciaInfo={{ health: item.health, actions: item.health_actions }}
