@@ -138,7 +138,7 @@ export function TarefasPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Deseja excluir esta atividade?')) return;
     try {
-      const { error } = await supabase.from('team_tasks').delete().eq('id', id);
+      const { error } = await (supabase as any).from('team_tasks').delete().eq('id', id);
       if (error) throw error;
       fetchTasks();
     } catch (e: any) {
