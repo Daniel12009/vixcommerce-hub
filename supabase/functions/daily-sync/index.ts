@@ -221,11 +221,37 @@ async function runTinyPlatform(plat: string, dIniBR: string): Promise<string[]> 
 
 async function runTinyEstoque(): Promise<string[]> {
   const log: string[] = [];
+  let page = 1;
+  let sheetMode = 'write';
+  let totalSkus = 0;
+  const MAX_PAGES = 20; // safety limit
+
   try {
-    const r = await invokeFunction('tiny', { action: 'sync_estoque_tiny' });
-    log.push(`✅ Estoque Tiny: ${r.mensagem || r.error || 'ok'}`);
+    for (let i = 0; i < MAX_PAGES; i++) {
+      log.push(`📦 Estoque Tiny: processando página ${page}...`);
+      const r = await invokeFunction('tiny', {
+        action: 'sync_estoque_tiny',
+        page,
+        sheetMode,
+      });
+      totalSkus += r.skus || 0;
+
+      if (!r.hasMore) {
+        log.push(`✅ Estoque Tiny: ${totalSkus} SKUs sincronizados (${i + 1} chamadas)`);
+        break;
+      }
+
+      page = r.nextPage;
+      sheetMode = 'append';
+
+      // Small delay between pagination calls
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   } catch (e: any) {
-    log.push(`❌ Estoque Tiny: ${e.message}`);
+    log.push(`❌ Estoque Tiny (página ${page}): ${e.message}`);
+    if (totalSkus > 0) {
+      log.push(`⚠️ Parcial: ${totalSkus} SKUs já sincronizados antes do erro`);
+    }
   }
   return log;
 }
