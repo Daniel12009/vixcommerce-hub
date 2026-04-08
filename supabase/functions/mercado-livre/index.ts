@@ -2206,11 +2206,11 @@ Deno.serve(async (req) => {
       if (!item_id) throw new Error('item_id is required');
       if (!account_id) throw new Error('account_id is required');
 
-      // Look up account by seller_id first, then by UUID
-      let accountRes = await supabaseFetch(`/ml_accounts?seller_id=eq.${account_id}&ativo=eq.true&limit=1`);
+      // Look up account by seller_id first, then by UUID (no ativo filter to avoid missing accounts)
+      let accountRes = await supabaseFetch(`/ml_accounts?seller_id=eq.${account_id}&limit=1`);
       let accounts = await accountRes.json();
       if (!accounts || accounts.length === 0) {
-        accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true&limit=1`);
+        accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&limit=1`);
         accounts = await accountRes.json();
       }
       if (!accounts || accounts.length === 0) throw new Error(`Account not found: ${account_id}`);

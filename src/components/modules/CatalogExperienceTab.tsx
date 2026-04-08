@@ -109,8 +109,8 @@ export function CatalogExperienceTab() {
     excellent: rows.filter(r => r.health >= 1),
     good:      rows.filter(r => r.health >= 0.75 && r.health < 1),
     average:   rows.filter(r => r.health >= 0.65 && r.health < 0.75),
-    poor:      rows.filter(r => r.health >= 0.50 && r.health < 0.65),
-    critical:  rows.filter(r => r.health > 0 && r.health < 0.50),
+    poor:      rows.filter(r => r.health > 0.30 && r.health < 0.65),
+    critical:  rows.filter(r => r.health > 0 && r.health <= 0.30),
   }), [rows]);
 
   const scoreBadge = (h: HealthData) => {
@@ -135,8 +135,8 @@ export function CatalogExperienceTab() {
     { key: 'excellent', title: '100% (Excelente)', data: buckets.excellent, icon: ShieldCheck,    color: 'text-emerald-500' },
     { key: 'good',      title: '75% (Bom)',        data: buckets.good,      icon: Shield,          color: 'text-blue-500' },
     { key: 'average',   title: '65% (Regular)',    data: buckets.average,   icon: ShieldAlert,     color: 'text-yellow-500' },
-    { key: 'poor',      title: '50% (Baixo)',      data: buckets.poor,      icon: AlertTriangle,   color: 'text-orange-500' },
-    { key: 'critical',  title: '<50% (Crítico)',   data: buckets.critical,  icon: ArrowDownCircle, color: 'text-red-500' },
+    { key: 'poor',      title: '>30% (Baixo)',     data: buckets.poor,      icon: AlertTriangle,   color: 'text-orange-500' },
+    { key: 'critical',  title: '<=30% (Crítico)',  data: buckets.critical,  icon: ArrowDownCircle, color: 'text-red-500' },
   ];
 
   return (
@@ -162,8 +162,8 @@ export function CatalogExperienceTab() {
         <KpiCard title="100% (Excelente)" value={String(buckets.excellent.length)} icon={ShieldCheck}    delay={0} />
         <KpiCard title="75% (Bom)"        value={String(buckets.good.length)}      icon={Shield}          delay={50} />
         <KpiCard title="65% (Regular)"    value={String(buckets.average.length)}   icon={ShieldAlert}     delay={100} />
-        <KpiCard title="50% (Baixo)"      value={String(buckets.poor.length)}      icon={AlertTriangle}   delay={150} />
-        <KpiCard title="<50% (Crítico)"   value={String(buckets.critical.length)}  icon={ArrowDownCircle} delay={200} />
+        <KpiCard title=">30% (Baixo)"     value={String(buckets.poor.length)}      icon={AlertTriangle}   delay={150} />
+        <KpiCard title="<=30% (Crítico)"  value={String(buckets.critical.length)}  icon={ArrowDownCircle} delay={200} />
       </div>
 
       {/* Bucket tables */}
