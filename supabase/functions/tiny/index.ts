@@ -755,7 +755,7 @@ Deno.serve(async (req) => {
         pagesProcessed++;
 
         // Rate limit between pages
-        if (hasMore && pagesProcessed < 2) {
+        if (hasMore && pagesProcessed < 1) {
            await new Promise(r => setTimeout(r, 1500));
         }
       }
