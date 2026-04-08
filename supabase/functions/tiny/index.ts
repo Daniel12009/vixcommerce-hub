@@ -178,7 +178,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action } = await req.json();
+    const reqBody = await req.json();
+    const { action } = reqBody;
 
     if (action === 'get_today_orders') {
       const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
@@ -651,134 +652,137 @@ Deno.serve(async (req) => {
       const TINY_TOKEN = (Deno.env.get('TINY_TOKEN_JSCHRUBER') || '').trim();
       if (!TINY_TOKEN) throw new Error('Token Tiny JSCHRUBER não configurado no .env');
 
-      const body = await req.clone().then(r => r.json()).catch(() => ({}));
-      const startPage = body.page || 1;
-      const sheetMode = body.sheetMode || 'write';
+      const startPage = reqBody.page || 1;
+      const startOffset = reqBody.offset || 0;
+      const sheetMode = reqBody.sheetMode || 'write';
+      const MAX_PRODUCTS_PER_CALL = 20; // Process max 20 products per invocation to stay under timeout
 
       const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
       const SHEET_TAB = 'ESTOQUE-TINY';
 
-      const allProducts: any[][] = [];
-      let pagina = startPage;
-      let hasMore = true;
-      let pagesProcessed = 0;
-
-      while (hasMore && pagesProcessed < 2) { // Process max 2 pages per call (approx 60-80 seconds)
+      // Step 1: Fetch product list for the current page
+      let data: any = null;
+      let listAttempts = 0;
+      while (listAttempts < 3) {
         const params = new URLSearchParams({
           token: TINY_TOKEN,
           formato: 'json',
-          pagina: String(pagina),
+          pagina: String(startPage),
         });
-
-        let data: any = null;
-        let listAttempts = 0;
-        while (listAttempts < 3) {
-          const res = await fetch('https://api.tiny.com.br/api2/produtos.pesquisa.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: params.toString(),
-          });
-          data = await res.json();
-          
-          if (data?.retorno?.status === 'Erro' || data?.retorno?.status === 'ERRO') {
-            const code = data.retorno?.codigo_erro;
-            if (code === '6' || code === '31' || String(data.retorno.erros?.[0]?.erro).includes('Bloqueada')) {
-              listAttempts++;
-              console.log(`Rate limit lista TINY. Tentativa ${listAttempts}/3. Aguardando 5s...`);
-              await new Promise(r => setTimeout(r, 5000));
-              continue;
-            } else {
-              throw new Error(`API Tiny Erro: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
-            }
-          }
-          break; // success
-        }
+        const res = await fetch('https://api.tiny.com.br/api2/produtos.pesquisa.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+        });
+        data = await res.json();
 
         if (data?.retorno?.status === 'Erro' || data?.retorno?.status === 'ERRO') {
-           throw new Error(`API Tiny Erro fatal após tentativas: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
-        }
-
-        const produtos = data?.retorno?.produtos || [];
-
-        if (produtos.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        for (const pw of produtos) {
-          const p = pw.produto || pw;
-          const codigo = (p.codigo || '').trim();
-          if (!codigo) continue;
-
-          // Obter estoque detalhado para este produto
-          let attempts = 0;
-          let success = false;
-          while (attempts < 3 && !success) {
-            try {
-              const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
-              const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: stockParams.toString(),
-              });
-              const sData = await sRes.json();
-              
-              if (sData?.retorno?.status === 'Erro') {
-                const code = sData.retorno?.codigo_erro;
-                if (code === '6' || code === '31' || String(sData.retorno.erros?.[0]?.erro).includes('Bloqueada')) {
-                  // Rate limit (Too many requests)
-                  attempts++;
-                  console.log(`Rate limit atingido no TINY para ID ${p.id}. Tentativa ${attempts}/3... aguardando 4s`);
-                  await new Promise(r => setTimeout(r, 4000));
-                  continue;
-                }
-              }
-
-              const saldoStr = sData?.retorno?.produto?.saldo;
-              const saldo = parseFloat(saldoStr || '0');
-
-              allProducts.push([codigo, Math.round(saldo)]);
-              success = true;
-
-              // Smooth rate limit to avoid hitting the wall so fast (Tiny allows ~60/min. 1200ms ensures < 50/min)
-              await new Promise(r => setTimeout(r, 1200));
-            } catch (err) {
-              console.error(`Erro buscando estoque do ID ${p.id}:`, err);
-              break;
-            }
+          const code = data.retorno?.codigo_erro;
+          if (code === '6' || code === '31' || String(data.retorno.erros?.[0]?.erro).includes('Bloqueada')) {
+            listAttempts++;
+            console.log(`Rate limit lista TINY. Tentativa ${listAttempts}/3. Aguardando 5s...`);
+            await new Promise(r => setTimeout(r, 5000));
+            continue;
+          } else {
+            throw new Error(`API Tiny Erro: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
           }
         }
+        break;
+      }
 
-        const totalPaginas = data?.retorno?.numero_paginas || 1;
-        pagina++;
-        hasMore = pagina <= totalPaginas;
-        pagesProcessed++;
+      if (data?.retorno?.status === 'Erro' || data?.retorno?.status === 'ERRO') {
+        throw new Error(`API Tiny Erro fatal: ${data.retorno.erros?.[0]?.erro || JSON.stringify(data.retorno)}`);
+      }
 
-        // Rate limit between pages
-        if (hasMore && pagesProcessed < 2) {
-           await new Promise(r => setTimeout(r, 1500));
+      const allProdutos = data?.retorno?.produtos || [];
+      const totalPaginas = data?.retorno?.numero_paginas || 1;
+
+      if (allProdutos.length === 0) {
+        return new Response(JSON.stringify({ 
+          mensagem: 'Nenhum produto encontrado', skus: 0, hasMore: false 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Step 2: Process only a slice of the products (startOffset to startOffset + MAX_PRODUCTS_PER_CALL)
+      const slice = allProdutos.slice(startOffset, startOffset + MAX_PRODUCTS_PER_CALL);
+      const allProducts: any[][] = [];
+
+      for (const pw of slice) {
+        const p = pw.produto || pw;
+        const codigo = (p.codigo || '').trim();
+        if (!codigo) continue;
+
+        let attempts = 0;
+        let success = false;
+        while (attempts < 3 && !success) {
+          try {
+            const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
+            const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: stockParams.toString(),
+            });
+            const sData = await sRes.json();
+
+            if (sData?.retorno?.status === 'Erro') {
+              const code = sData.retorno?.codigo_erro;
+              if (code === '6' || code === '31' || String(sData.retorno.erros?.[0]?.erro).includes('Bloqueada')) {
+                attempts++;
+                console.log(`Rate limit TINY ID ${p.id}. Tentativa ${attempts}/3... aguardando 5s`);
+                await new Promise(r => setTimeout(r, 5000));
+                continue;
+              }
+            }
+
+            const saldoStr = sData?.retorno?.produto?.saldo;
+            const saldo = parseFloat(saldoStr || '0');
+            allProducts.push([codigo, Math.round(saldo)]);
+            success = true;
+
+            // 1.5s delay between products to respect rate limit (~40/min)
+            await new Promise(r => setTimeout(r, 1500));
+          } catch (err) {
+            console.error(`Erro buscando estoque ID ${p.id}:`, err);
+            break;
+          }
         }
       }
 
-      // Sobrescrever ou anexar na aba ESTOQUE-TINY
+      // Step 3: Write to sheets
       const header = ['SKU', 'TOTAL'];
       const writeData = sheetMode === 'write' ? [header, ...allProducts] : allProducts;
-      
+
       if (writeData.length > 0) {
         await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, sheetMode);
       }
 
-      const msg = `Estoque Tiny: ${allProducts.length} SKUs sincronizados na página(s)`;
+      // Step 4: Determine next batch
+      const nextOffset = startOffset + MAX_PRODUCTS_PER_CALL;
+      let hasMore = false;
+      let nextPage = startPage;
+      let returnOffset = 0;
+
+      if (nextOffset < allProdutos.length) {
+        // More products on this page
+        hasMore = true;
+        returnOffset = nextOffset;
+      } else if (startPage < totalPaginas) {
+        // Move to next page
+        hasMore = true;
+        nextPage = startPage + 1;
+        returnOffset = 0;
+      }
+
+      const msg = `Estoque Tiny: ${allProducts.length} SKUs (pág ${startPage}, offset ${startOffset})`;
       console.log(`[ESTOQUE-TINY] ${msg}`);
-      return new Response(JSON.stringify({ 
-        mensagem: msg, 
-        skus: allProducts.length, 
-        hasMore, 
-        nextPage: pagina,
-        sheetMode: 'append' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({
+        mensagem: msg,
+        skus: allProducts.length,
+        hasMore,
+        nextPage,
+        nextOffset: returnOffset,
+        sheetMode: 'append',
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     throw new Error(`Unknown action: ${action}`);
