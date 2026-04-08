@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
       // dateColumn: zero‑based index of the column that holds the date string (e.g. 11 for VendasML/PERF, 1 for ADS)
       const newRows = values || [];
       // Read existing data
-      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}`, { headers });
+      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMULA`, { headers });
       let existingRows: any[][] = [];
       if (readRes.ok) {
         const readData = await readRes.json();
