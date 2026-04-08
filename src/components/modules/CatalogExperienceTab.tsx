@@ -1,3 +1,4 @@
+// v2 - catalog experience with purchase_experience/integrators
 import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
