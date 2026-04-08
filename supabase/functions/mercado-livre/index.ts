@@ -1761,32 +1761,47 @@ Deno.serve(async (req) => {
         offset += 50;
       }
 
-      // PASSO 4.5: HEALTH (Qualidade da Experiência)
-      const healthData: Record<string, { health: number; actions: string[] }> = {};
-      const BATCH_SIZE = 20;
+      // PASSO 4.5: HEALTH via Purchase Experience Integrators (correct API)
+      const healthData: Record<string, { health: number; actions: any[]; rep_text: string; rep_color: string }> = {};
+      const BATCH_SIZE = 5; // small batch to respect rate limits
       for (let i = 0; i < itemIds.length; i += BATCH_SIZE) {
         const batch = itemIds.slice(i, i + BATCH_SIZE);
         await Promise.all(batch.map(async (mlb) => {
           try {
-            let res = await fetch(`${ML_API}/items/${mlb}/health`, { headers: { 'Authorization': `Bearer ${token}` } });
+            let res = await fetch(`${ML_API}/reputation/items/${mlb}/purchase_experience/integrators?locale=pt_BR`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (res.status === 401) { 
               token = await refreshToken(account); 
-              res = await fetch(`${ML_API}/items/${mlb}/health`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+              res = await fetch(`${ML_API}/reputation/items/${mlb}/purchase_experience/integrators?locale=pt_BR`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+            }
+            if (res.status === 302) {
+              const loc = res.headers.get('location');
+              if (loc) res = await fetch(loc, { headers: { 'Authorization': `Bearer ${token}` } });
             }
             if (res.ok) {
               const data = await res.json();
-              const actions = (data.actions || []).map((a: any) => a.name || a.id);
-              healthData[mlb] = { health: Number(data.health || 0), actions };
+              const repValue: number = data.reputation?.value ?? -1;
+              const actions = (data.metrics_details?.problems || []).map((p: any) => p.level_two?.title?.text || p.level_two?.title || p.key || '');
+              healthData[mlb] = {
+                health: repValue >= 0 ? repValue / 100 : 0,
+                actions,
+                rep_text: data.reputation?.text || '',
+                rep_color: data.reputation?.color || '',
+              };
             }
           } catch { /* ignora */ }
         }));
+        await new Promise(r => setTimeout(r, 300)); // avoid rate limits
       }
 
       const healthInserts = itemIds.map(mlb => ({
          conta: account.nome,
          mlb_id: mlb,
-         health: parseFloat((healthData[mlb]?.health ?? 0).toFixed(2)),
+         health: parseFloat((healthData[mlb]?.health ?? 0).toFixed(4)),
          health_actions: healthData[mlb]?.actions ?? [],
+         titulo: detalhes[mlb]?.titulo || '',
+         sku: detalhes[mlb]?.sku || '',
+         reputation_text: healthData[mlb]?.rep_text ?? '',
+         reputation_color: healthData[mlb]?.rep_color ?? '',
          snapshot_date: dateTo.slice(0, 10)
       }));
       
