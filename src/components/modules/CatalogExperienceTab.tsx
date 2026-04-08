@@ -63,7 +63,7 @@ export function CatalogExperienceTab() {
     toast.info('Buscando dados de Experiência do Mercado Livre...');
     try {
       const { data: accounts, error: accError } = await supabase
-        .from('ml_accounts' as any).select('id, nome').eq('ativo', true);
+        .from('ml_accounts').select('id, nome').eq('ativo', true);
 
       if (accError || !accounts?.length) {
         toast.error('Nenhuma conta ML ativa encontrada. Configure em Configurações.');
