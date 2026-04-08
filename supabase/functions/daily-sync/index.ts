@@ -18,7 +18,19 @@ const SHEET_MAP: Record<string, string> = {
   temu: 'VENDASTM',
 };
 
-function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+const MODULE_LABELS: Record<string, string> = {
+  ml_vendas: '📦 Vendas ML',
+  ml_performance: '📊 Performance ML',
+  ml_v7: '📈 V7 ML',
+  ml_ads: '📢 ADS ML',
+  shopee_vendas: '🛒 Vendas Shopee',
+  tiny_shein: '👗 Shein (Tiny)',
+  tiny_amazon: '📦 Amazon (Tiny)',
+  tiny_tiktok: '🎵 TikTok (Tiny)',
+  tiny_temu: '🛍️ Temu (Tiny)',
+  tiny_estoque: '📋 Estoque Tiny',
+  verify: '🔍 Verificação Final',
+};
 
 function getYesterdayBR(): string {
   const now = new Date();
@@ -37,28 +49,15 @@ function getYesterdayBR_DDMMYYYY(): string {
   return `${d}/${m}/${y}`;
 }
 
-async function invokeFunction(name: string, body: object): Promise<any> {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SERVICE_KEY}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[invokeFunction] ${name} HTTP ${res.status}: ${errText}`);
-      return { error: `HTTP ${res.status}: ${errText.slice(0, 200)}` };
-    }
-    return await res.json();
-  } catch (e) {
-    console.error(`[invokeFunction] ${name} error:`, e);
-    return { error: e instanceof Error ? e.message : String(e) };
-  }
+function getTodayBR(): string {
+  const now = new Date();
+  const spOffset = -3 * 60;
+  const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
+  const y = localNow.getFullYear();
+  const m = String(localNow.getMonth() + 1).padStart(2, '0');
+  const d = String(localNow.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
-
 
 async function restGet(path: string): Promise<any[]> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -67,11 +66,38 @@ async function restGet(path: string): Promise<any[]> {
   return res.ok ? await res.json() : [];
 }
 
-async function sendTelegramMessage(text: string) {
+async function restPost(path: string, body: any): Promise<any> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify(body),
+  });
+  return res.ok ? await res.json() : null;
+}
+
+async function restPatch(path: string, body: any): Promise<any> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify(body),
+  });
+  return res.ok ? await res.json() : null;
+}
+
+async function sendTelegram(text: string) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
   const chatId = Deno.env.get('TELEGRAM_CHAT_ID');
   if (!token || !chatId) return;
-
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -79,193 +105,297 @@ async function sendTelegramMessage(text: string) {
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
     });
   } catch (e) {
-    console.error('Telegram notification error:', e);
+    console.error('Telegram error:', e);
   }
+}
+
+async function invokeFunction(name: string, body: object): Promise<any> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SERVICE_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`HTTP ${res.status}: ${errText.slice(0, 300)}`);
+  }
+  return await res.json();
 }
 
 async function getEnabledModules(): Promise<Record<string, boolean>> {
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/app_data?data_key=eq.daily_sync_modules&select=data_value`,
-      { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-    );
-    if (res.ok) {
-      const rows = await res.json();
-      if (rows.length > 0 && rows[0].data_value) {
-        return rows[0].data_value;
-      }
-    }
+    const rows = await restGet('app_data?data_key=eq.daily_sync_modules&select=data_value');
+    if (rows.length > 0 && rows[0].data_value) return rows[0].data_value;
   } catch (e) {
-    console.error('Erro ao ler módulos ativos:', e);
+    console.error('Erro ao ler módulos:', e);
   }
   return {};
 }
 
-function isEnabled(modules: Record<string, boolean>, key: string): boolean {
-  return modules[key] === true;
+// ━━━ MODULE HANDLERS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function runMLModule(moduleKey: string, action: string, extraParams: Record<string, any>, dIni: string): Promise<string[]> {
+  const log: string[] = [];
+  const mlAccounts = await restGet('ml_accounts?ativo=eq.true&select=id,nome,seller_id');
+  log.push(`📋 ${mlAccounts.length} contas ML ativas`);
+
+  for (const conta of mlAccounts) {
+    const nome = conta.nome || conta.seller_id;
+    try {
+      const params: any = { action, account_id: conta.id, ...extraParams };
+      if (action === 'sync_vendas') {
+        params.date_from = dIni;
+        params.date_to = dIni;
+        params.spreadsheet_id = PLANILHA_MESTRA;
+        params.sheet_name = 'VendasML';
+      } else if (action === 'get_performance_catalog') {
+        params.date_from = dIni;
+        params.date_to = dIni;
+        params.spreadsheet_id = PLANILHA_MESTRA;
+      } else if (action === 'get_vendas_full_7d') {
+        params.spreadsheet_id = PLANILHA_MESTRA;
+      } else if (action === 'get_ads_full_report') {
+        params.date_from = dIni;
+        params.date_to = dIni;
+        params.ad_type = 'product_ads';
+        params.spreadsheet_id = PLANILHA_MESTRA;
+        params.sheet_name = 'ADS';
+        params.sheet_name_prefix = 'ADS-TOTAL-ML';
+      }
+      const r = await invokeFunction('mercado-livre', params);
+      log.push(`✅ ${MODULE_LABELS[moduleKey] || moduleKey} ${nome}: ${r.mensagem || r.error || 'ok'}`);
+    } catch (e: any) {
+      log.push(`❌ ${MODULE_LABELS[moduleKey] || moduleKey} ${nome}: ${e.message}`);
+    }
+  }
+  return log;
 }
 
-const DELAY_BETWEEN_MODULES = 5_000; // 5 segundos
+async function runShopeeVendas(dIni: string, dIniBR: string): Promise<string[]> {
+  const log: string[] = [];
+  const shopeeAccounts = await restGet('shopee_accounts?ativo=eq.true&select=id,nome,source_mode');
+  log.push(`📋 ${shopeeAccounts.length} contas Shopee ativas`);
+
+  for (const conta of shopeeAccounts) {
+    const nome = conta.nome;
+    const sourceMode = conta.source_mode || 'tiny';
+    try {
+      if (sourceMode === 'api') {
+        const r = await invokeFunction('shopee', {
+          action: 'sync_vendas', account_id: conta.id,
+          date_from: dIni, date_to: dIni,
+          spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'Shopee_Vendas',
+        });
+        log.push(`✅ Shopee API ${nome}: ${r.mensagem || r.error || 'ok'}`);
+      } else {
+        const r = await invokeFunction('tiny', {
+          action: 'sync_vendas_marketplace', date_from: dIniBR, date_to: dIniBR,
+          plataforma: 'shopee', spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'Shopee_Vendas',
+        });
+        log.push(`✅ Shopee Tiny ${nome}: ${r.mensagem || r.error || 'ok'}`);
+      }
+    } catch (e: any) {
+      log.push(`❌ Shopee ${nome}: ${e.message}`);
+    }
+  }
+  return log;
+}
+
+async function runTinyPlatform(plat: string, dIniBR: string): Promise<string[]> {
+  const log: string[] = [];
+  try {
+    const r = await invokeFunction('tiny', {
+      action: 'sync_vendas_marketplace', date_from: dIniBR, date_to: dIniBR,
+      plataforma: plat, spreadsheet_id: PLANILHA_MESTRA,
+      sheet_name: SHEET_MAP[plat] || 'Shopee_Vendas',
+    });
+    log.push(`✅ ${plat.toUpperCase()} Tiny: ${r.mensagem || r.error || 'ok'}`);
+  } catch (e: any) {
+    log.push(`❌ ${plat}: ${e.message}`);
+  }
+  return log;
+}
+
+async function runTinyEstoque(): Promise<string[]> {
+  const log: string[] = [];
+  try {
+    const r = await invokeFunction('tiny', { action: 'sync_estoque_tiny' });
+    log.push(`✅ Estoque Tiny: ${r.mensagem || r.error || 'ok'}`);
+  } catch (e: any) {
+    log.push(`❌ Estoque Tiny: ${e.message}`);
+  }
+  return log;
+}
+
+async function runVerify(runDate: string): Promise<string[]> {
+  const log: string[] = [];
+  const results = await restGet(`sync_run_log?run_date=eq.${runDate}&select=module,status,message&order=started_at.asc`);
+
+  const errors = results.filter(r => r.status === 'error');
+  const successes = results.filter(r => r.status === 'success');
+  const running = results.filter(r => r.status === 'running');
+
+  log.push(`📊 Resumo da sincronização de ${runDate}:`);
+  log.push(`  ✅ Sucesso: ${successes.length} módulos`);
+  if (running.length > 0) log.push(`  ⏳ Ainda rodando: ${running.length} módulos`);
+  if (errors.length > 0) {
+    log.push(`  ❌ Erros: ${errors.length} módulos`);
+    for (const err of errors) {
+      log.push(`    → ${MODULE_LABELS[err.module] || err.module}: ${err.message || 'erro desconhecido'}`);
+    }
+  }
+
+  if (errors.length === 0 && running.length === 0) {
+    log.push(`\n🎉 Todos os módulos executados com sucesso!`);
+  }
+
+  return log;
+}
+
+// ━━━ MAIN HANDLER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  let body: any = {};
+  try { body = await req.json(); } catch {}
+
+  const targetModule = body.module as string | undefined;
   const dIni = getYesterdayBR();
   const dIniBR = getYesterdayBR_DDMMYYYY();
-  const log: string[] = [];
+  const runDate = getTodayBR();
 
-  // Ler módulos habilitados do app_data
-  const modules = await getEnabledModules();
-  const enabledKeys = Object.entries(modules).filter(([_, v]) => v).map(([k]) => k);
+  // If no module specified, run ALL enabled modules sequentially (manual/legacy mode)
+  if (!targetModule) {
+    const modules = await getEnabledModules();
+    const enabledKeys = Object.entries(modules).filter(([_, v]) => v).map(([k]) => k);
+    const allLog: string[] = [`🚀 daily-sync completo iniciado. Data ref: ${dIni}`, `📋 Módulos: ${enabledKeys.join(', ') || 'NENHUM'}`];
 
-  log.push(`🚀 daily-sync iniciado. Data ref: ${dIni}`);
-  log.push(`📋 Módulos ativos: ${enabledKeys.length > 0 ? enabledKeys.join(', ') : 'NENHUM (abortando)'}`);
+    if (enabledKeys.length === 0) {
+      return new Response(JSON.stringify({ sucesso: true, log: allLog }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-  if (enabledKeys.length === 0) {
-    log.push('⚠️ Nenhum módulo habilitado. Configure em Configurações → Sync Teste → Automação.');
-    return new Response(JSON.stringify({ sucesso: true, log }), {
+    for (const key of enabledKeys) {
+      const moduleLog = await executeModule(key, dIni, dIniBR, runDate);
+      allLog.push(...moduleLog);
+    }
+
+    allLog.push(`\n✅ daily-sync completo concluído.`);
+    return new Response(JSON.stringify({ sucesso: true, log: allLog }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  let stepCount = 0;
+  // ━━━ SINGLE MODULE MODE (used by cron) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  // ━━━ ML ACCOUNTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const needsML = ['ml_vendas', 'ml_performance', 'ml_v7', 'ml_ads'].some(k => isEnabled(modules, k));
+  // Verify module
+  if (targetModule === 'verify') {
+    const verifyLog = await runVerify(runDate);
+    const verifyText = verifyLog.join('\n');
 
-  if (needsML) {
-    const mlAccounts = await restGet('ml_accounts?ativo=eq.true&select=id,nome,seller_id');
-    log.push(`📋 ${mlAccounts.length} contas ML ativas`);
+    const hasErrors = verifyText.includes('❌');
+    const emoji = hasErrors ? '⚠️' : '✅';
+    await sendTelegram(`<b>${emoji} Verificação Final - Sincronização Diária</b>\n\n<pre>${verifyText}</pre>`);
 
-    for (const conta of mlAccounts) {
-      const nome = conta.nome || conta.seller_id;
-
-      // ML Vendas
-      if (isEnabled(modules, 'ml_vendas')) {
-        if (stepCount > 0) await sleep(DELAY_BETWEEN_MODULES);
-        try {
-          const r = await invokeFunction('mercado-livre', {
-            action: 'sync_vendas', account_id: conta.id,
-            date_from: dIni, date_to: dIni,
-            spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'VendasML',
-          });
-          log.push(`✅ Vendas ML ${nome}: ${r.mensagem || r.error || 'ok'}`);
-        } catch (e: any) { log.push(`❌ Vendas ML ${nome}: ${e.message}`); }
-        stepCount++;
-      }
-
-      // ML Performance
-      if (isEnabled(modules, 'ml_performance')) {
-        if (stepCount > 0) await sleep(DELAY_BETWEEN_MODULES);
-        try {
-          const r = await invokeFunction('mercado-livre', {
-            action: 'get_performance_catalog', account_id: conta.id,
-            date_from: dIni, date_to: dIni, spreadsheet_id: PLANILHA_MESTRA,
-          });
-          log.push(`✅ Performance ${nome}: ${r.mensagem || r.error || 'ok'}`);
-        } catch (e: any) { log.push(`❌ Performance ${nome}: ${e.message}`); }
-        stepCount++;
-      }
-
-      // ML V7
-      if (isEnabled(modules, 'ml_v7')) {
-        if (stepCount > 0) await sleep(DELAY_BETWEEN_MODULES);
-        try {
-          const r = await invokeFunction('mercado-livre', {
-            action: 'get_vendas_full_7d', account_id: conta.id,
-            spreadsheet_id: PLANILHA_MESTRA,
-          });
-          log.push(`✅ V7 ${nome}: ${r.mensagem || r.error || 'ok'}`);
-        } catch (e: any) { log.push(`❌ V7 ${nome}: ${e.message}`); }
-        stepCount++;
-      }
-
-      // ML ADS
-      if (isEnabled(modules, 'ml_ads')) {
-        if (stepCount > 0) await sleep(DELAY_BETWEEN_MODULES);
-        try {
-          const r = await invokeFunction('mercado-livre', {
-            action: 'get_ads_full_report', account_id: conta.id,
-            date_from: dIni, date_to: dIni, ad_type: 'product_ads',
-            spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'ADS', sheet_name_prefix: 'ADS-TOTAL-ML',
-          });
-          log.push(`✅ ADS ${nome}: ${r.mensagem || r.error || 'ok'}`);
-        } catch (e: any) { log.push(`❌ ADS ${nome}: ${e.message}`); }
-        stepCount++;
-      }
-    }
+    return new Response(JSON.stringify({ sucesso: true, log: verifyLog }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
-  // ━━━ SHOPEE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (isEnabled(modules, 'shopee_vendas')) {
-    const shopeeAccounts = await restGet('shopee_accounts?ativo=eq.true&select=id,nome,source_mode');
-    log.push(`📋 ${shopeeAccounts.length} contas Shopee ativas`);
-
-    for (const conta of shopeeAccounts) {
-      if (stepCount > 0) await sleep(DELAY_BETWEEN_MODULES);
-      const nome = conta.nome;
-      const sourceMode = conta.source_mode || 'tiny';
-      try {
-        if (sourceMode === 'api') {
-          const r = await invokeFunction('shopee', {
-            action: 'sync_vendas', account_id: conta.id,
-            date_from: dIni, date_to: dIni,
-            spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'Shopee_Vendas',
-          });
-          log.push(`✅ Shopee API ${nome}: ${r.mensagem || r.error || 'ok'}`);
-        } else {
-          const r = await invokeFunction('tiny', {
-            action: 'sync_vendas_marketplace', date_from: dIniBR, date_to: dIniBR,
-            plataforma: 'shopee', spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'Shopee_Vendas',
-          });
-          log.push(`✅ Shopee Tiny ${nome}: ${r.mensagem || r.error || 'ok'}`);
-        }
-      } catch (e: any) { log.push(`❌ Shopee ${nome}: ${e.message}`); }
-      stepCount++;
-    }
+  // Check if module is enabled
+  const modules = await getEnabledModules();
+  if (!modules[targetModule]) {
+    const msg = `⏭️ Módulo ${MODULE_LABELS[targetModule] || targetModule} desabilitado, pulando.`;
+    return new Response(JSON.stringify({ sucesso: true, log: [msg], skipped: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
-  // ━━━ OUTRAS PLATAFORMAS VIA TINY ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const tinyPlatforms: { key: string; plat: string }[] = [
-    { key: 'tiny_shein', plat: 'shein' },
-    { key: 'tiny_amazon', plat: 'amazon' },
-    { key: 'tiny_tiktok', plat: 'tiktok' },
-    { key: 'tiny_temu', plat: 'temu' },
-  ];
+  const moduleLog = await executeModule(targetModule, dIni, dIniBR, runDate);
 
-  for (const { key, plat } of tinyPlatforms) {
-    if (!isEnabled(modules, key)) continue;
-    if (stepCount > 0) await sleep(DELAY_BETWEEN_MODULES);
-    try {
-      const r = await invokeFunction('tiny', {
-        action: 'sync_vendas_marketplace', date_from: dIniBR, date_to: dIniBR,
-        plataforma: plat, spreadsheet_id: PLANILHA_MESTRA,
-        sheet_name: SHEET_MAP[plat] || 'Shopee_Vendas',
-      });
-      log.push(`✅ ${plat.toUpperCase()} Tiny: ${r.mensagem || r.error || 'ok'}`);
-    } catch (e: any) { log.push(`❌ ${plat}: ${e.message}`); }
-    stepCount++;
-  }
-
-  // ━━━ ESTOQUE TINY ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (isEnabled(modules, 'tiny_estoque')) {
-    if (stepCount > 0) await sleep(DELAY_BETWEEN_MODULES);
-    try {
-      const r = await invokeFunction('tiny', { action: 'sync_estoque_tiny' });
-      log.push(`✅ Estoque Tiny: ${r.mensagem || r.error || 'ok'}`);
-    } catch (e: any) { log.push(`❌ Estoque Tiny: ${e.message}`); }
-    stepCount++;
-  }
-
-  log.push(`✅ daily-sync concluído. ${stepCount} etapas processadas.`);
-  const finalLogText = log.join('\n');
-  console.log(finalLogText);
-
-  // Send Telegram summary
-  const summaryMessage = `<b>🤖 Sincronização Diária Concluída</b>\n\n<pre>${finalLogText}</pre>`;
-  await sendTelegramMessage(summaryMessage);
-
-  return new Response(JSON.stringify({ sucesso: true, log }), {
+  return new Response(JSON.stringify({ sucesso: true, log: moduleLog }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });
+
+async function executeModule(moduleKey: string, dIni: string, dIniBR: string, runDate: string): Promise<string[]> {
+  const label = MODULE_LABELS[moduleKey] || moduleKey;
+
+  // Log start
+  const logEntry = await restPost('sync_run_log', {
+    run_date: runDate,
+    module: moduleKey,
+    status: 'running',
+    message: 'Iniciando...',
+  });
+  const logId = logEntry?.[0]?.id;
+
+  // Telegram: started
+  await sendTelegram(`<b>🔄 Iniciando: ${label}</b>\nData ref: ${dIni}`);
+
+  let moduleLog: string[] = [];
+  let hasError = false;
+
+  try {
+    switch (moduleKey) {
+      case 'ml_vendas':
+        moduleLog = await runMLModule('ml_vendas', 'sync_vendas', {}, dIni);
+        break;
+      case 'ml_performance':
+        moduleLog = await runMLModule('ml_performance', 'get_performance_catalog', {}, dIni);
+        break;
+      case 'ml_v7':
+        moduleLog = await runMLModule('ml_v7', 'get_vendas_full_7d', {}, dIni);
+        break;
+      case 'ml_ads':
+        moduleLog = await runMLModule('ml_ads', 'get_ads_full_report', {}, dIni);
+        break;
+      case 'shopee_vendas':
+        moduleLog = await runShopeeVendas(dIni, dIniBR);
+        break;
+      case 'tiny_shein':
+        moduleLog = await runTinyPlatform('shein', dIniBR);
+        break;
+      case 'tiny_amazon':
+        moduleLog = await runTinyPlatform('amazon', dIniBR);
+        break;
+      case 'tiny_tiktok':
+        moduleLog = await runTinyPlatform('tiktok', dIniBR);
+        break;
+      case 'tiny_temu':
+        moduleLog = await runTinyPlatform('temu', dIniBR);
+        break;
+      case 'tiny_estoque':
+        moduleLog = await runTinyEstoque();
+        break;
+      default:
+        moduleLog = [`⚠️ Módulo desconhecido: ${moduleKey}`];
+    }
+
+    hasError = moduleLog.some(l => l.includes('❌'));
+  } catch (e: any) {
+    moduleLog.push(`❌ Erro geral: ${e.message}`);
+    hasError = true;
+  }
+
+  // Update log entry
+  const resultText = moduleLog.join('\n');
+  if (logId) {
+    await restPatch(`sync_run_log?id=eq.${logId}`, {
+      status: hasError ? 'error' : 'success',
+      message: resultText.slice(0, 1000),
+      finished_at: new Date().toISOString(),
+    });
+  }
+
+  // Telegram: finished
+  const emoji = hasError ? '❌' : '✅';
+  await sendTelegram(`<b>${emoji} Concluído: ${label}</b>\n\n<pre>${resultText}</pre>`);
+
+  return moduleLog;
+}
