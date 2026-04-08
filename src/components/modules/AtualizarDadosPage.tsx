@@ -1086,18 +1086,35 @@ export function AtualizarDadosPage() {
               return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
             };
 
-            // Compute date ranges based on global filterDias
+            // Compute date ranges based on global filterDias or filterDataInicio/Fim
             const today = getNowBR();
             today.setHours(23, 59, 59, 999);
-            const curEnd = new Date(today);
-            const curStart = new Date(today);
-            curStart.setDate(curStart.getDate() - filterDias + 1);
-            curStart.setHours(0, 0, 0, 0);
+            let curEnd = new Date(today);
+            let curStart = new Date(today);
+            
+            if (showCustomDate && filterDataInicio && filterDataFim) {
+              const startParts = filterDataInicio.split('-');
+              curStart = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]), 0, 0, 0, 0);
+              const endParts = filterDataFim.split('-');
+              curEnd = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]), 23, 59, 59, 999);
+            } else {
+              curStart.setDate(curStart.getDate() - filterDias + 1);
+              curStart.setHours(0, 0, 0, 0);
+            }
+            
             const prevEnd = new Date(curStart);
             prevEnd.setDate(prevEnd.getDate() - 1);
             prevEnd.setHours(23, 59, 59, 999);
             const prevStart = new Date(prevEnd);
-            prevStart.setDate(prevStart.getDate() - filterDias + 1);
+            
+            if (showCustomDate && filterDataInicio && filterDataFim) {
+               // Calculate diff in days
+               const diffTime = Math.abs(curEnd.getTime() - curStart.getTime());
+               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+               prevStart.setDate(prevStart.getDate() - diffDays + 1);
+            } else {
+               prevStart.setDate(prevStart.getDate() - filterDias + 1);
+            }
             prevStart.setHours(0, 0, 0, 0);
 
             const fmtDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;

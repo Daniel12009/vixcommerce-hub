@@ -662,7 +662,6 @@ Deno.serve(async (req) => {
         const params = new URLSearchParams({
           token: TINY_TOKEN,
           formato: 'json',
-          situacao: 'A',
           pagina: String(pagina),
         });
 

@@ -64,15 +64,22 @@ export function TarefasPage() {
   const handleCreate = async () => {
     if (!newTask.title) return toast.error('Preencha o título da tarefa!');
 
+    const assignee = newTask.assigned_to_email || (allUsers.length > 0 ? allUsers[0].username : (currentUser?.username || 'admin'));
+
     try {
+      let formatOut = null;
+      if (newTask.due_date) {
+        try { formatOut = new Date(`${newTask.due_date}T12:00:00-03:00`).toISOString(); } catch { formatOut = null; }
+      }
+
       const { error } = await (supabase as any).from('team_tasks').insert([{
         title: newTask.title,
         type: newTask.type,
         points: newTask.points,
         status: 'pendente',
-        assigned_to_email: newTask.assigned_to_email,
+        assigned_to_email: assignee,
         created_by_email: currentUser?.username || 'admin',
-        due_date: newTask.due_date ? new Date(newTask.due_date).toISOString() : null
+        due_date: formatOut
       }]);
 
       if (error) throw error;
