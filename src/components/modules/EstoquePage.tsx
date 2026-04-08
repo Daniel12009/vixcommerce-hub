@@ -98,21 +98,23 @@ export function EstoquePage() {
     return Array.from(set).sort();
   }, [estoqueFullItems]);
 
-  const vmdBySku = useMemo(() => {
+  const vmdBySkuAndConta = useMemo(() => {
     const map = new Map<string, number>();
     const grouped = new Map<string, { totalVendas: number; dias: Set<string> }>();
     (performanceItems || []).forEach(item => {
       if (!item.sku) return;
       const sku = item.sku.trim().toUpperCase();
+      const conta = item.conta || '';
       const dateKey = item.dataRef || 'sem-data';
-      const current = grouped.get(sku) || { totalVendas: 0, dias: new Set<string>() };
+      const key = `${sku}||${conta}`;
+      const current = grouped.get(key) || { totalVendas: 0, dias: new Set<string>() };
       current.totalVendas += Number(item.vendas || 0);
       current.dias.add(dateKey);
-      grouped.set(sku, current);
+      grouped.set(key, current);
     });
-    grouped.forEach((value, sku) => {
+    grouped.forEach((value, key) => {
       const dias = Math.max(1, value.dias.size);
-      map.set(sku, value.totalVendas / dias);
+      map.set(key, value.totalVendas / dias);
     });
     return map;
   }, [performanceItems]);
@@ -148,7 +150,13 @@ export function EstoquePage() {
       const fullML = full?.fullML || 0;
       const entradaPendente = full?.entradaPendente || 0;
       const emTransferencia = full?.emTransferencia || 0;
-      const vmd = vmdBySku.get(sku) || 0;
+      
+      // Calculate global VMD (used purely for legacy grouped mapping or fallback)
+      let vmdGlobal = 0;
+      Array.from(full?.contas || []).forEach(c => {
+         vmdGlobal += vmdBySkuAndConta.get(`${sku}||${c}`) || 0;
+      });
+      const vmd = vmdGlobal;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
       const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
       const sugestaoEnvio = Math.max(0, Math.ceil((vmd * skuCobertura) - (fullML + entradaPendente + emTransferencia)));
@@ -164,7 +172,7 @@ export function EstoquePage() {
         customCobertura: skuCoberturaOverrides[sku],
       };
     });
-  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo, skuCoberturaOverrides]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuAndConta, diasCoberturaAlvo, skuCoberturaOverrides]);
 
   // Per-account rows for the table — one row per (SKU × conta)
   const perAccountData = useMemo<MergedStockRow[]>(() => {
@@ -191,7 +199,7 @@ export function EstoquePage() {
     return Array.from(grouped.values()).map(item => {
       const { sku, conta, fullML, entradaPendente, emTransferencia } = item;
       const tinyLocal = tinyMap.get(sku) || 0;
-      const vmd = vmdBySku.get(sku) || 0;
+      const vmd = vmdBySkuAndConta.get(`${sku}||${conta}`) || 0;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
       const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
       const sugestaoEnvio = Math.max(0, Math.ceil((vmd * skuCobertura) - (fullML + entradaPendente + emTransferencia)));

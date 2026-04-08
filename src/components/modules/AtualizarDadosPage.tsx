@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { RefreshCw, Wifi, WifiOff, ShoppingCart, TrendingUp, DollarSign, Package, ChevronDown, ChevronUp, Clock, CheckCircle2, XCircle, Truck, AlertTriangle, Plus, Trash2, Key, Eye, EyeOff, FileSpreadsheet, Loader2, CalendarDays, Bot, Zap, PackageX, BarChart2, Settings2, Check, Sparkles, Send, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -16,6 +16,8 @@ import { GraficosTab } from './GraficosTab';
 import { PerformanceAdsTab } from './PerformanceAdsTab';
 import { StatusAnunciosTab } from './StatusAnunciosTab';
 import { CalculadoraTab } from './CalculadoraTab';
+import { CatalogExperienceTab } from './CatalogExperienceTab';
+import { AccordionTaskRow } from './AccordionTaskRow';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -759,6 +761,7 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="ads">Performance Anúncios</TabsTrigger>
           <TabsTrigger value="status-anuncios">Status Anúncios</TabsTrigger>
           <TabsTrigger value="perf-ads">Performance ADS</TabsTrigger>
+          <TabsTrigger value="experiencia">🛡️ Experiência de Compra</TabsTrigger>
           <TabsTrigger value="calculadora">🧮 Calculadora</TabsTrigger>
         </TabsList>
 
@@ -1304,36 +1307,45 @@ export function AtualizarDadosPage() {
                         {perfPaginated.map((item, idx) => {
                           const prev = prevPerfMap.get(item.idAnuncio);
                           return (
-                            <tr key={`${item.idAnuncio}-${idx}`} className="border-t border-border hover:bg-muted/30 transition-colors">
-                              <td className="px-3 py-2">
-                                {item.link ? (
-                                  <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{item.idAnuncio}</a>
-                                ) : item.idAnuncio}
-                              </td>
-                              <td className="px-3 py-2 font-mono">{item.sku}</td>
-                              <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
-                              <td className="px-3 py-2 text-right">
-                                {formatBRL(item.preco)}
-                                {prev && <PerfDelta cur={item.preco} prev={prev.preco} />}
-                              </td>
-                              <td className="px-3 py-2 text-right font-medium">
-                                {item.visitas.toLocaleString('pt-BR')}
-                                {prev && <PerfDelta cur={item.visitas} prev={prev.visitas} />}
-                              </td>
-                              <td className="px-3 py-2 text-right font-medium text-[hsl(var(--vix-success))]">
-                                {item.vendas.toLocaleString('pt-BR')}
-                                {prev && <PerfDelta cur={item.vendas} prev={prev.vendas} />}
-                              </td>
-                              <td className="px-3 py-2 text-right text-[hsl(var(--vix-danger))]">{item.canceladas}</td>
-                              <td className="px-3 py-2 text-right">
-                                <span className={`font-medium ${item.conversao >= 5 ? 'text-[hsl(var(--vix-success))]' : item.conversao >= 2 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]'}`}>
-                                  {item.conversao.toFixed(2)}%
-                                </span>
-                                {prev && <PerfDelta cur={item.conversao} prev={prev.conversao} />}
-                              </td>
-                              <td className="px-3 py-2">{item.conta}</td>
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{curLabel}</td>
-                            </tr>
+                            <React.Fragment key={`${item.idAnuncio}-${idx}`}>
+                              <tr className="border-t border-border hover:bg-muted/30 transition-colors">
+                                <td className="px-3 py-2">
+                                  {item.link ? (
+                                    <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{item.idAnuncio}</a>
+                                  ) : item.idAnuncio}
+                                </td>
+                                <td className="px-3 py-2 font-mono">{item.sku}</td>
+                                <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
+                                <td className="px-3 py-2 text-right">
+                                  {formatBRL(item.preco)}
+                                  {prev && <PerfDelta cur={item.preco} prev={prev.preco} />}
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium">
+                                  {item.visitas.toLocaleString('pt-BR')}
+                                  {prev && <PerfDelta cur={item.visitas} prev={prev.visitas} />}
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium text-[hsl(var(--vix-success))]">
+                                  {item.vendas.toLocaleString('pt-BR')}
+                                  {prev && <PerfDelta cur={item.vendas} prev={prev.vendas} />}
+                                </td>
+                                <td className="px-3 py-2 text-right text-[hsl(var(--vix-danger))]">{item.canceladas}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <span className={`font-medium ${item.conversao >= 5 ? 'text-[hsl(var(--vix-success))]' : item.conversao >= 2 ? 'text-[hsl(var(--vix-warning))]' : 'text-[hsl(var(--vix-danger))]'}`}>
+                                    {item.conversao.toFixed(2)}%
+                                  </span>
+                                  {prev && <PerfDelta cur={item.conversao} prev={prev.conversao} />}
+                                </td>
+                                <td className="px-3 py-2">{item.conta}</td>
+                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{curLabel}</td>
+                              </tr>
+                              <AccordionTaskRow 
+                                idAnuncio={item.idAnuncio} 
+                                sku={item.sku} 
+                                titulo={item.titulo} 
+                                conta={item.conta}
+                                colSpan={10} 
+                              />
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -1367,6 +1379,11 @@ export function AtualizarDadosPage() {
         {/* Tab: Performance ADS */}
         <TabsContent value="perf-ads">
           <PerformanceAdsTab />
+        </TabsContent>
+
+        {/* Tab: Experiência de Compra */}
+        <TabsContent value="experiencia">
+          <CatalogExperienceTab />
         </TabsContent>
 
         {/* Tab: Status Anúncios */}

@@ -1761,6 +1761,46 @@ Deno.serve(async (req) => {
         offset += 50;
       }
 
+      // PASSO 4.5: HEALTH (Qualidade da Experiência)
+      const healthData: Record<string, { health: number; actions: string[] }> = {};
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < itemIds.length; i += BATCH_SIZE) {
+        const batch = itemIds.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (mlb) => {
+          try {
+            let res = await fetch(`${ML_API}/items/${mlb}/health`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (res.status === 401) { 
+              token = await refreshToken(account); 
+              res = await fetch(`${ML_API}/items/${mlb}/health`, { headers: { 'Authorization': `Bearer ${token}` } }); 
+            }
+            if (res.ok) {
+              const data = await res.json();
+              const actions = (data.actions || []).map((a: any) => a.name || a.id);
+              healthData[mlb] = { health: Number(data.health || 0), actions };
+            }
+          } catch { /* ignora */ }
+        }));
+      }
+
+      const healthInserts = itemIds.map(mlb => ({
+         conta: account.nome,
+         mlb_id: mlb,
+         health: healthData[mlb]?.health || 0,
+         health_actions: healthData[mlb]?.actions || [],
+         snapshot_date: dateTo.slice(0, 10)
+      }));
+      
+      if (healthInserts.length > 0) {
+        for (let i = 0; i < healthInserts.length; i += 50) {
+           const chunk = healthInserts.slice(i, i + 50);
+           await supabaseFetch(`/catalog_health_history?on_conflict=conta,mlb_id,snapshot_date`, {
+             method: 'POST',
+             headers: { 'Prefer': 'resolution=merge-duplicates' },
+             body: JSON.stringify(chunk)
+           });
+        }
+      }
+
       // PASSO 5: montar linhas
       const dataRef = `${fmtDataRef(dateFrom)} a ${fmtDataRef(dateTo)}`;
       const rows: any[][] = [];
