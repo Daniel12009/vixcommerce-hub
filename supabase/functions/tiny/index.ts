@@ -663,7 +663,7 @@ Deno.serve(async (req) => {
       let hasMore = true;
       let pagesProcessed = 0;
 
-      while (hasMore && pagesProcessed < 2) { // Process max 2 pages per call (approx 60-80 seconds)
+      while (hasMore && pagesProcessed < 1) { // Process max 1 page per call to avoid timeout
         const params = new URLSearchParams({
           token: TINY_TOKEN,
           formato: 'json',
