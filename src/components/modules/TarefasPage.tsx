@@ -118,7 +118,7 @@ export function TarefasPage() {
   const handleForwardTask = async () => {
     if (!forwardingTaskId || !forwardTo) return;
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('team_tasks')
         .update({ 
           assigned_to_email: forwardTo,
