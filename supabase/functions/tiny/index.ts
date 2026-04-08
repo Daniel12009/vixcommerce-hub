@@ -784,8 +784,6 @@ Deno.serve(async (req) => {
         sheetMode: 'append',
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-      });
-    }
 
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
