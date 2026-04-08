@@ -23,15 +23,15 @@ export function CatalogExperienceTab() {
   const [openAccordionId, setOpenAccordionId] = useState<string | null>(null);
   const [contaAccountMap, setContaAccountMap] = useState<Record<string, string>>({});
 
-  // Fetch ML accounts to build conta → account_id map
+  // Fetch ML accounts to build conta → ML seller_id map (needed for get_item_status)
   const fetchAccounts = async () => {
     const { data } = await (supabase as any)
       .from('ml_accounts')
-      .select('id, nome')
+      .select('id, seller_id, nome')
       .eq('ativo', true);
     if (data) {
       const map: Record<string, string> = {};
-      data.forEach((a: any) => { if (a.nome) map[a.nome] = a.id; });
+      data.forEach((a: any) => { if (a.nome) map[a.nome] = a.seller_id || a.id; });
       setContaAccountMap(map);
     }
   };
