@@ -457,3 +457,5 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
 
   return moduleLog;
 }
+/ /   l o v a b l e   t r i g g e r  
+ 
