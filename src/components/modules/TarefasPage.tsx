@@ -65,7 +65,7 @@ export function TarefasPage() {
     if (!newTask.title) return toast.error('Preencha o título da tarefa!');
 
     try {
-      const { error } = await supabase.from('team_tasks').insert([{
+      const { error } = await (supabase as any).from('team_tasks').insert([{
         title: newTask.title,
         type: newTask.type,
         points: newTask.points,
@@ -118,7 +118,7 @@ export function TarefasPage() {
   const handleForwardTask = async () => {
     if (!forwardingTaskId || !forwardTo) return;
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('team_tasks')
         .update({ 
           assigned_to_email: forwardTo,
@@ -138,7 +138,7 @@ export function TarefasPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Deseja excluir esta atividade?')) return;
     try {
-      const { error } = await supabase.from('team_tasks').delete().eq('id', id);
+      const { error } = await (supabase as any).from('team_tasks').delete().eq('id', id);
       if (error) throw error;
       fetchTasks();
     } catch (e: any) {
@@ -567,7 +567,7 @@ export function TarefasPage() {
                          </div>
                          <div className="flex gap-4 text-muted-foreground mt-1">
                            <span>👤 {a.responsavel}</span>
-                           <span>📦 {a.conta || a.sku || a.id || 'N/A'}</span>
+                           <span>📦 {a.conta || a.sku || 'N/A'}</span>
                            <span>⏳ Prazo: {a.prazo}</span>
                          </div>
                        </div>
@@ -690,8 +690,8 @@ export function TarefasPage() {
                            }`}>{a.status || 'Pendente'}</span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{a.abaNome || '-'}</td>
-                        <td className="px-4 py-3 text-muted-foreground font-mono text-xs max-w-[120px] truncate" title={a.conta || a.sku || a.id}>
-                          {a.conta || a.sku || a.id || '-'}
+                         <td className="px-4 py-3 text-muted-foreground font-mono text-xs max-w-[120px] truncate" title={a.conta || a.sku || ''}>
+                           {a.conta || a.sku || '-'}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">{a.prazo || '-'}</td>
                       </tr>

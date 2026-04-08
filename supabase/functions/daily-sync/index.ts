@@ -37,19 +37,26 @@ function getYesterdayBR_DDMMYYYY(): string {
   return `${d}/${m}/${y}`;
 }
 
-function invokeFunction(name: string, body: object): Promise<any> {
-  // Fire-and-forget: dispatches the call without waiting for the response.
-  // The sub-function (mercado-livre, tiny) will continue running on Supabase
-  // independently after this orchestrator returns.
-  fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SERVICE_KEY}`,
-    },
-    body: JSON.stringify(body),
-  }).catch(e => console.error(`[invokeFunction] ${name} error:`, e));
-  return Promise.resolve({ ok: true, dispatched: true });
+async function invokeFunction(name: string, body: object): Promise<any> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SERVICE_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[invokeFunction] ${name} HTTP ${res.status}: ${errText}`);
+      return { error: `HTTP ${res.status}: ${errText.slice(0, 200)}` };
+    }
+    return await res.json();
+  } catch (e) {
+    console.error(`[invokeFunction] ${name} error:`, e);
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 
