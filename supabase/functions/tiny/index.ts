@@ -178,7 +178,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action } = await req.json();
+    const reqBody = await req.json();
+    const { action } = reqBody;
 
     if (action === 'get_today_orders') {
       const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
