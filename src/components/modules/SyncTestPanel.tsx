@@ -465,19 +465,50 @@ function ManualTestSection() {
 
     try {
       const body = action.body || (action.bodyFn ? action.bodyFn(selectedMl) : {});
-      const result = await callEdgeFunction(action.fn, body);
+      let result;
 
-      if (result.error) {
-        addLog(`❌ ${action.label}: ${result.error}`, 'error');
-        toast.error(result.error);
-      } else if (result.log) {
-        for (const line of result.log) {
-          addLog(line, line.includes('❌') ? 'error' : 'ok');
+      if (action.id === 'tiny-estoque') {
+        let page = 1;
+        let hasMore = true;
+        let sheetMode = 'write';
+        
+        while (hasMore) {
+          addLog(`Processando página ${page} do Tiny...`, 'running');
+          result = await callEdgeFunction(action.fn, { ...body, page, sheetMode });
+          
+          if (result.error) {
+            addLog(`❌ ${action.label}: ${result.error}`, 'error');
+            toast.error(result.error);
+            break;
+          } else {
+             const msg = result.mensagem || `Página ${page} concluída`;
+             addLog(`✅ ${msg}`, 'ok');
+          }
+          
+          hasMore = result.hasMore === true;
+          if (hasMore) {
+            page = result.nextPage || page + 1;
+            sheetMode = result.sheetMode || 'append';
+          }
         }
-        toast.success('Ciclo completo executado!');
+        
+        if (!result.error) toast.success('Estoque sincronizado por completo!');
+
       } else {
-        addLog(`✅ ${result.mensagem || 'Concluído com sucesso'}`, 'ok');
-        toast.success(result.mensagem || 'Sucesso!');
+        result = await callEdgeFunction(action.fn, body);
+
+        if (result.error) {
+          addLog(`❌ ${action.label}: ${result.error}`, 'error');
+          toast.error(result.error);
+        } else if (result.log) {
+          for (const line of result.log) {
+            addLog(line, line.includes('❌') ? 'error' : 'ok');
+          }
+          toast.success('Ciclo completo executado!');
+        } else {
+          addLog(`✅ ${result.mensagem || 'Concluído com sucesso'}`, 'ok');
+          toast.success(result.mensagem || 'Sucesso!');
+        }
       }
     } catch (err: any) {
       addLog(`❌ Erro: ${err.message}`, 'error');

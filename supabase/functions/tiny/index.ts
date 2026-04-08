@@ -651,14 +651,19 @@ Deno.serve(async (req) => {
       const TINY_TOKEN = (Deno.env.get('TINY_TOKEN_JSCHRUBER') || '').trim();
       if (!TINY_TOKEN) throw new Error('Token Tiny JSCHRUBER não configurado no .env');
 
+      const body = await req.clone().then(r => r.json()).catch(() => ({}));
+      const startPage = body.page || 1;
+      const sheetMode = body.sheetMode || 'write';
+
       const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
       const SHEET_TAB = 'ESTOQUE-TINY';
 
       const allProducts: any[][] = [];
-      let pagina = 1;
+      let pagina = startPage;
       let hasMore = true;
+      let pagesProcessed = 0;
 
-      while (hasMore) {
+      while (hasMore && pagesProcessed < 2) { // Process max 2 pages per call (approx 60-80 seconds)
         const params = new URLSearchParams({
           token: TINY_TOKEN,
           formato: 'json',
@@ -747,19 +752,31 @@ Deno.serve(async (req) => {
         const totalPaginas = data?.retorno?.numero_paginas || 1;
         pagina++;
         hasMore = pagina <= totalPaginas;
+        pagesProcessed++;
 
         // Rate limit between pages
-        await new Promise(r => setTimeout(r, 1500));
+        if (hasMore && pagesProcessed < 2) {
+           await new Promise(r => setTimeout(r, 1500));
+        }
       }
 
-      // Sobrescrever aba ESTOQUE-TINY
+      // Sobrescrever ou anexar na aba ESTOQUE-TINY
       const header = ['SKU', 'TOTAL'];
-      const writeData = [header, ...allProducts];
-      await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, 'write');
+      const writeData = sheetMode === 'write' ? [header, ...allProducts] : allProducts;
+      
+      if (writeData.length > 0) {
+        await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, sheetMode);
+      }
 
-      const msg = `Estoque Tiny: ${allProducts.length} SKUs com saldo escritos em ${SHEET_TAB}`;
+      const msg = `Estoque Tiny: ${allProducts.length} SKUs sincronizados na página(s)`;
       console.log(`[ESTOQUE-TINY] ${msg}`);
-      return new Response(JSON.stringify({ mensagem: msg, skus: allProducts.length }), {
+      return new Response(JSON.stringify({ 
+        mensagem: msg, 
+        skus: allProducts.length, 
+        hasMore, 
+        nextPage: pagina,
+        sheetMode: 'append' 
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
