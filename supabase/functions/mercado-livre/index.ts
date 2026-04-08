@@ -1790,20 +1790,30 @@ Deno.serve(async (req) => {
          snapshot_date: dateTo.slice(0, 10)
       }));
       
-      console.log(`[HEALTH] ${account.nome}: ${healthInserts.length} rows to upsert`);
+      console.log(`[HEALTH] ${account.nome}: ${healthInserts.length} rows to insert`);
       if (healthInserts.length > 0) {
+        // Delete existing rows for this account + date to avoid duplicates
+        const delRes = await supabaseFetch(
+          `/catalog_health_history?conta=eq.${encodeURIComponent(account.nome)}&snapshot_date=eq.${dateTo.slice(0, 10)}`,
+          { method: 'DELETE', headers: { 'Prefer': 'return=minimal' } }
+        );
+        if (!delRes.ok) {
+          const txt = await delRes.text();
+          console.warn(`[HEALTH_DELETE] ${delRes.status}: ${txt}`);
+        }
+        // Insert in chunks of 50
         for (let i = 0; i < healthInserts.length; i += 50) {
            const chunk = healthInserts.slice(i, i + 50);
-           const insertRes = await supabaseFetch(`/catalog_health_history?on_conflict=conta,mlb_id,snapshot_date`, {
+           const insertRes = await supabaseFetch(`/catalog_health_history`, {
              method: 'POST',
-             headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+             headers: { 'Prefer': 'return=minimal' },
              body: JSON.stringify(chunk)
            });
            if (!insertRes.ok) {
              const errText = await insertRes.text();
              console.error(`[HEALTH_INSERT] Error ${insertRes.status}: ${errText}`);
            } else {
-             console.log(`[HEALTH_INSERT] OK chunk ${i}–${i + chunk.length}`);
+             console.log(`[HEALTH_INSERT] OK chunk ${i}–${i + chunk.length} for ${account.nome}`);
            }
         }
       }
@@ -2172,6 +2182,72 @@ Deno.serve(async (req) => {
       const msg = `ADS ${account.nome}: ${linhas_totais.length} linhas em ${nome_aba}, ${linhas_resumo.length} resumos em ${nome_aba_total}`;
       console.log(`[ADS-SYNC] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, linhas_ads: linhas_totais.length, linhas_resumo: linhas_resumo.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'get_item_status') {
+      const { item_id, account_id } = body;
+      if (!item_id) throw new Error('item_id is required');
+      if (!account_id) throw new Error('account_id is required');
+
+      // Look up account by seller_id first, then by UUID
+      let accountRes = await supabaseFetch(`/ml_accounts?seller_id=eq.${account_id}&ativo=eq.true&limit=1`);
+      let accounts = await accountRes.json();
+      if (!accounts || accounts.length === 0) {
+        accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true&limit=1`);
+        accounts = await accountRes.json();
+      }
+      if (!accounts || accounts.length === 0) throw new Error(`Account not found: ${account_id}`);
+      const account = accounts[0];
+
+      // Fetch purchase experience using the correct endpoint
+      let peData: any = null;
+      try {
+        const res = await fetch(
+          `${ML_API}/reputation/items/${item_id}/purchase_experience/integrators?locale=pt_BR`,
+          { headers: { 'Authorization': `Bearer ${account.access_token}` } }
+        );
+        if (res.status === 401) {
+          const newToken = await refreshToken(account);
+          const res2 = await fetch(
+            `${ML_API}/reputation/items/${item_id}/purchase_experience/integrators?locale=pt_BR`,
+            { headers: { 'Authorization': `Bearer ${newToken}` } }
+          );
+          if (res2.ok) peData = await res2.json();
+        } else if (res.status === 302) {
+          // Item migrated to User Products — follow redirect
+          const location = res.headers.get('location');
+          if (location) {
+            const res3 = await fetch(location, { headers: { 'Authorization': `Bearer ${account.access_token}` } });
+            if (res3.ok) peData = await res3.json();
+          }
+        } else if (res.ok) {
+          peData = await res.json();
+        } else {
+          const err = await res.text();
+          console.warn(`[PE] ${item_id} ${res.status}: ${err}`);
+        }
+      } catch (e) {
+        console.error(`[PE] Error for ${item_id}:`, e);
+      }
+
+      // Also fetch basic item info
+      let itemInfo: any = {};
+      try {
+        const info = await mlFetch(account, `/items/${item_id}?attributes=id,title,status,listing_type_id,shipping`);
+        itemInfo = {
+          shipping: info.shipping?.logistic_type || '',
+          listing_type: info.listing_type_id || '',
+          catalog_listing: info.catalog_listing || false,
+          status: info.status || '',
+        };
+      } catch { /* OK */ }
+
+      return new Response(JSON.stringify({
+        purchase_experience: peData,
+        ...itemInfo,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
