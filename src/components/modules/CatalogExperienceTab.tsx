@@ -100,10 +100,23 @@ export function CatalogExperienceTab() {
     return Array.from(set).sort();
   }, [healthHistory]);
 
-  const rows = useMemo(() =>
-    healthHistory.filter(h => h.mlb_id !== 'MLB_TEST_CLI' && (filterConta === 'all' || h.conta === filterConta)),
-    [healthHistory, filterConta]
-  );
+  const rows = useMemo(() => {
+    const filtered = healthHistory.filter(h => h.mlb_id !== 'MLB_TEST_CLI' && (filterConta === 'all' || h.conta === filterConta));
+    const skuMap = new Map<string, HealthData>();
+    const noSku: HealthData[] = [];
+    
+    for (const item of filtered) {
+      if (item.sku && item.sku.trim() !== '') {
+        if (!skuMap.has(item.sku)) {
+          skuMap.set(item.sku, item);
+        }
+      } else {
+        noSku.push(item);
+      }
+    }
+    
+    return [...Array.from(skuMap.values()), ...noSku];
+  }, [healthHistory, filterConta]);
 
   const buckets = useMemo(() => ({
     excellent: rows.filter(r => r.health >= 1),
