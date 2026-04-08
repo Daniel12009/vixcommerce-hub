@@ -1786,7 +1786,7 @@ Deno.serve(async (req) => {
          conta: account.nome,
          mlb_id: mlb,
          health: parseFloat((healthData[mlb]?.health ?? 0).toFixed(2)),
-         health_actions: JSON.stringify(healthData[mlb]?.actions ?? []),
+         health_actions: healthData[mlb]?.actions ?? [],
          snapshot_date: dateTo.slice(0, 10)
       }));
       
