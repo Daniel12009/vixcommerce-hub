@@ -1785,19 +1785,26 @@ Deno.serve(async (req) => {
       const healthInserts = itemIds.map(mlb => ({
          conta: account.nome,
          mlb_id: mlb,
-         health: healthData[mlb]?.health || 0,
-         health_actions: healthData[mlb]?.actions || [],
+         health: parseFloat((healthData[mlb]?.health ?? 0).toFixed(2)),
+         health_actions: JSON.stringify(healthData[mlb]?.actions ?? []),
          snapshot_date: dateTo.slice(0, 10)
       }));
       
+      console.log(`[HEALTH] ${account.nome}: ${healthInserts.length} rows to upsert`);
       if (healthInserts.length > 0) {
         for (let i = 0; i < healthInserts.length; i += 50) {
            const chunk = healthInserts.slice(i, i + 50);
-           await supabaseFetch(`/catalog_health_history?on_conflict=conta,mlb_id,snapshot_date`, {
+           const insertRes = await supabaseFetch(`/catalog_health_history?on_conflict=conta,mlb_id,snapshot_date`, {
              method: 'POST',
-             headers: { 'Prefer': 'resolution=merge-duplicates' },
+             headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
              body: JSON.stringify(chunk)
            });
+           if (!insertRes.ok) {
+             const errText = await insertRes.text();
+             console.error(`[HEALTH_INSERT] Error ${insertRes.status}: ${errText}`);
+           } else {
+             console.log(`[HEALTH_INSERT] OK chunk ${i}–${i + chunk.length}`);
+           }
         }
       }
 
