@@ -741,7 +741,7 @@ Deno.serve(async (req) => {
               success = true;
 
               // Smooth rate limit to avoid hitting the wall so fast (Tiny allows ~60/min. 1200ms ensures < 50/min)
-              await new Promise(r => setTimeout(r, 1200));
+              await new Promise(r => setTimeout(r, 800));
             } catch (err) {
               console.error(`Erro buscando estoque do ID ${p.id}:`, err);
               break;
