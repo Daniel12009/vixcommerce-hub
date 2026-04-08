@@ -652,9 +652,8 @@ Deno.serve(async (req) => {
       const TINY_TOKEN = (Deno.env.get('TINY_TOKEN_JSCHRUBER') || '').trim();
       if (!TINY_TOKEN) throw new Error('Token Tiny JSCHRUBER não configurado no .env');
 
-      const body = await req.clone().then(r => r.json()).catch(() => ({}));
-      const startPage = body.page || 1;
-      const sheetMode = body.sheetMode || 'write';
+      const startPage = reqBody.page || 1;
+      const sheetMode = reqBody.sheetMode || 'write';
 
       const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
       const SHEET_TAB = 'ESTOQUE-TINY';
