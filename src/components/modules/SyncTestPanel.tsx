@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, Loader2, CheckCircle, XCircle, Clock, Zap, RefreshCw, Settings2, Power } from 'lucide-react';
+import { Play, Loader2, CheckCircle, XCircle, Clock, Zap, RefreshCw, Settings2, Power, Pencil, Save, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
@@ -174,10 +174,29 @@ const SYNC_ACTIONS = [
 ];
 
 // ─── Automation Config Section ───────────────────────────────────────
+const SUPABASE_FN_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_FN_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+
+async function callManageCron(body: object): Promise<any> {
+  const res = await fetch(`${SUPABASE_FN_URL}/functions/v1/manage-cron`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_FN_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
 function AutomationConfig() {
   const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({});
+  const [schedules, setSchedules] = useState<Record<string, string>>({});
+  const [editingTime, setEditingTime] = useState<Record<string, string>>({});
+  const [editMode, setEditMode] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -185,13 +204,15 @@ function AutomationConfig() {
 
   const loadConfig = async () => {
     try {
-      const { data } = await supabase
-        .from('app_data')
-        .select('data_value')
-        .eq('data_key', 'daily_sync_modules')
-        .maybeSingle();
-      if (data?.data_value && typeof data.data_value === 'object') {
-        setEnabledModules(data.data_value as Record<string, boolean>);
+      const [modulesRes, schedulesRes] = await Promise.all([
+        supabase.from('app_data').select('data_value').eq('data_key', 'daily_sync_modules').maybeSingle(),
+        supabase.from('app_data').select('data_value').eq('data_key', 'daily_sync_schedules').maybeSingle(),
+      ]);
+      if (modulesRes.data?.data_value && typeof modulesRes.data.data_value === 'object') {
+        setEnabledModules(modulesRes.data.data_value as Record<string, boolean>);
+      }
+      if (schedulesRes.data?.data_value && typeof schedulesRes.data.data_value === 'object') {
+        setSchedules(schedulesRes.data.data_value as Record<string, string>);
       }
     } catch (e) {
       console.error('Erro ao carregar config:', e);
@@ -210,12 +231,59 @@ function AutomationConfig() {
         data_value: updated as any,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'data_key' });
+
+      // Also update cron job
+      const currentTime = schedules[key] || '';
+      await callManageCron({
+        action: 'set_schedule',
+        module_key: key,
+        time_brt: currentTime,
+        enabled,
+      });
+
       toast.success(`${enabled ? 'Ativado' : 'Desativado'}: ${AUTOMATION_MODULES.find(m => m.key === key)?.label}`);
+
+      if (!enabled) {
+        setEditMode(prev => ({ ...prev, [key]: false }));
+      } else if (!currentTime) {
+        // If enabling without a time, open edit mode
+        setEditMode(prev => ({ ...prev, [key]: true }));
+        setEditingTime(prev => ({ ...prev, [key]: '05:00' }));
+      }
     } catch (e: any) {
       toast.error('Erro ao salvar configuração');
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveSchedule = async (key: string) => {
+    const time = editingTime[key];
+    if (!time) return;
+    setSavingSchedule(key);
+    try {
+      const result = await callManageCron({
+        action: 'set_schedule',
+        module_key: key,
+        time_brt: time,
+        enabled: true,
+      });
+
+      if (result.error) throw new Error(result.error);
+
+      setSchedules(prev => ({ ...prev, [key]: time }));
+      setEditMode(prev => ({ ...prev, [key]: false }));
+      toast.success(`Horário salvo: ${time} (Brasília)`);
+    } catch (e: any) {
+      toast.error(`Erro ao salvar horário: ${e.message}`);
+    } finally {
+      setSavingSchedule(null);
+    }
+  };
+
+  const startEditing = (key: string) => {
+    setEditingTime(prev => ({ ...prev, [key]: schedules[key] || '05:00' }));
+    setEditMode(prev => ({ ...prev, [key]: true }));
   };
 
   const enabledCount = Object.values(enabledModules).filter(Boolean).length;
@@ -246,8 +314,7 @@ function AutomationConfig() {
           <div>
             <h2 className="text-xl font-bold text-foreground">Automação Diária</h2>
             <p className="text-sm text-muted-foreground">
-              Ative os módulos que devem rodar automaticamente todos os dias às <strong>06:00 (Brasília)</strong>.
-              Cada módulo roda com intervalo de 2 minutos entre si.
+              Ative os módulos e configure o horário individual de cada um (Brasília).
             </p>
           </div>
         </div>
@@ -264,11 +331,11 @@ function AutomationConfig() {
           <div>
             <p className="text-sm font-medium text-foreground">
               {enabledCount > 0
-                ? `Cron ativo — ${enabledCount} módulo${enabledCount !== 1 ? 's' : ''} rodando diariamente às 06:00`
+                ? `Cron ativo — ${enabledCount} módulo${enabledCount !== 1 ? 's' : ''} agendados individualmente`
                 : 'Cron inativo — nenhum módulo habilitado'}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Intervalo entre módulos: 2 minutos • Horário: Brasília (UTC-3)
+              Cada módulo roda no seu próprio horário • Verificação final automática 10 min após o último
             </p>
           </div>
         </div>
@@ -281,25 +348,86 @@ function AutomationConfig() {
             <h3 className="text-sm font-semibold text-foreground">{group}</h3>
           </div>
           <div className="divide-y divide-border">
-            {modules.map(mod => (
-              <div key={mod.key} className="flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors">
-                <div className="flex-1 min-w-0 mr-4">
-                  <p className="text-sm font-medium text-foreground">{mod.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{mod.description}</p>
+            {modules.map(mod => {
+              const isEnabled = !!enabledModules[mod.key];
+              const savedTime = schedules[mod.key];
+              const isEditing = editMode[mod.key];
+              const isSavingThis = savingSchedule === mod.key;
+
+              return (
+                <div key={mod.key} className="px-4 py-3 hover:bg-muted/10 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0 mr-4">
+                      <p className="text-sm font-medium text-foreground">{mod.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{mod.description}</p>
+                    </div>
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={(checked) => toggleModule(mod.key, checked)}
+                      disabled={saving}
+                    />
+                  </div>
+
+                  {/* Schedule time control */}
+                  {isEnabled && (
+                    <div className="mt-2 ml-0 flex items-center gap-2">
+                      {isEditing ? (
+                        <>
+                          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                          <input
+                            type="time"
+                            value={editingTime[mod.key] || '05:00'}
+                            onChange={e => setEditingTime(prev => ({ ...prev, [mod.key]: e.target.value }))}
+                            className="text-xs px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                          <span className="text-xs text-muted-foreground">BRT</span>
+                          <button
+                            onClick={() => saveSchedule(mod.key)}
+                            disabled={isSavingThis}
+                            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                          >
+                            {isSavingThis ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                            Salvar
+                          </button>
+                          {savedTime && (
+                            <button
+                              onClick={() => setEditMode(prev => ({ ...prev, [mod.key]: false }))}
+                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          )}
+                        </>
+                      ) : savedTime ? (
+                        <>
+                          <Clock className="w-3.5 h-3.5 text-primary" />
+                          <span className="text-xs font-medium text-primary">{savedTime}</span>
+                          <span className="text-xs text-muted-foreground">BRT</span>
+                          <Check className="w-3.5 h-3.5 text-[hsl(var(--vix-success))]" />
+                          <button
+                            onClick={() => startEditing(mod.key)}
+                            className="ml-1 p-1 rounded hover:bg-muted/30 transition-colors"
+                            title="Alterar horário"
+                          >
+                            <Pencil className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">
+                          Configure o horário para ativar a automação
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <Switch
-                  checked={!!enabledModules[mod.key]}
-                  onCheckedChange={(checked) => toggleModule(mod.key, checked)}
-                  disabled={saving}
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
 
       <p className="text-xs text-muted-foreground text-center">
-        As alterações são salvas automaticamente. O daily-sync lerá os módulos ativos ao executar.
+        Os horários são sincronizados automaticamente com o agendador. Desativar um módulo remove o agendamento.
       </p>
     </div>
   );
