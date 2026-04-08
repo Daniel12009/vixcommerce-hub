@@ -88,7 +88,8 @@ export function TarefasPage() {
       setShowForm(false);
       fetchTasks();
     } catch (e: any) {
-      toast.error('Erro ao criar tarefa');
+      console.error('Supabase Insert Error:', e);
+      toast.error('Erro ao criar tarefa: ' + (e.message || JSON.stringify(e)));
     }
   };
 
