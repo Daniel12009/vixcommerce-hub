@@ -225,10 +225,11 @@ async function runTinyEstoque(): Promise<string[]> {
   let offset = 0;
   let sheetMode = 'write';
   let totalSkus = 0;
-  const MAX_BATCHES = 50; // safety limit
 
   try {
-    for (let i = 0; i < MAX_BATCHES; i++) {
+    let hasMore = true;
+    let i = 0;
+    while (hasMore) {
       log.push(`📦 Estoque Tiny: pág ${page}, offset ${offset}...`);
       const r = await invokeFunction('tiny', {
         action: 'sync_estoque_tiny',
@@ -240,12 +241,14 @@ async function runTinyEstoque(): Promise<string[]> {
 
       if (!r.hasMore) {
         log.push(`✅ Estoque Tiny: ${totalSkus} SKUs sincronizados (${i + 1} batches)`);
+        hasMore = false;
         break;
       }
 
       page = r.nextPage;
       offset = r.nextOffset || 0;
       sheetMode = 'append';
+      i++;
 
       // Delay between batches to respect rate limits
       await new Promise(resolve => setTimeout(resolve, 3000));
