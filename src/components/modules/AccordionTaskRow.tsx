@@ -38,7 +38,7 @@ function TaskModal({ idAnuncio, sku, titulo, conta, users, onClose, onCreated }:
       const me = session?.user?.email || 'sistema@vix.com';
       const { error } = await (supabase as any).from('team_tasks').insert([{
         title: title.trim(),
-        description: `MLB: ${idAnuncio} | SKU: ${sku} | Conta: ${conta}`,
+        description: `MLB: ${idAnuncio} | SKU: ${sku} | Conta: ${conta}\n${titulo}`,
         type: 'afazer',
         status: 'pendente',
         points: 5,
