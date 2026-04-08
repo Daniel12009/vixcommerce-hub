@@ -17,7 +17,7 @@ import { PerformanceAdsTab } from './PerformanceAdsTab';
 import { StatusAnunciosTab } from './StatusAnunciosTab';
 import { CalculadoraTab } from './CalculadoraTab';
 import { CatalogExperienceTab } from './CatalogExperienceTab';
-import { AccordionTaskRow } from './AccordionTaskRow';
+import { AccordionTaskRow, AccordionTriggerButton } from './AccordionTaskRow';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -106,6 +106,8 @@ export function AtualizarDadosPage() {
   const [perfPage, setPerfPage] = useState(0);
   const [perfSortField, setPerfSortField] = useState<string>('vendas');
   const [perfSortDir, setPerfSortDir] = useState<'asc' | 'desc'>('desc');
+  const [openAccordionId, setOpenAccordionId] = useState<string | null>(null);
+  const toggleAccordion = (id: string) => setOpenAccordionId(prev => prev === id ? null : id);
   const [vendasSortField, setVendasSortField] = useState<string>('data');
   const [vendasSortDir, setVendasSortDir] = useState<'asc' | 'desc'>('desc');
   const [showCustomDate, setShowCustomDate] = useState(false);
@@ -1301,6 +1303,7 @@ export function AtualizarDadosPage() {
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('conversao')}>Conv. %{sortIcon('conversao')}</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap" style={{ minWidth: '180px' }}>Período</th>
+                          <th className="px-3 py-2.5" />
                         </tr>
                       </thead>
                       <tbody>
@@ -1337,13 +1340,21 @@ export function AtualizarDadosPage() {
                                 </td>
                                 <td className="px-3 py-2">{item.conta}</td>
                                 <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{curLabel}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <AccordionTriggerButton
+                                    isOpen={openAccordionId === item.idAnuncio}
+                                    onClick={() => toggleAccordion(item.idAnuncio)}
+                                  />
+                                </td>
                               </tr>
-                              <AccordionTaskRow 
-                                idAnuncio={item.idAnuncio} 
-                                sku={item.sku} 
-                                titulo={item.titulo} 
+                              <AccordionTaskRow
+                                idAnuncio={item.idAnuncio}
+                                sku={item.sku}
+                                titulo={item.titulo}
                                 conta={item.conta}
-                                colSpan={10} 
+                                isOpen={openAccordionId === item.idAnuncio}
+                                onClose={() => setOpenAccordionId(null)}
+                                colSpan={11}
                               />
                             </React.Fragment>
                           );

@@ -212,7 +212,7 @@ export function EstoquePage() {
         contas: [conta], customCobertura: skuCoberturaOverrides[sku],
       };
     });
-  }, [estoqueFullItems, estoqueTinyItems, vmdBySku, diasCoberturaAlvo, skuCoberturaOverrides]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuAndConta, diasCoberturaAlvo, skuCoberturaOverrides]);
 
   const totalSkus = mergedData.length;
   const skusRuptura = mergedData.filter(r => r.status === 'ruptura').length;
