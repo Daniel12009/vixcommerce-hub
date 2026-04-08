@@ -690,8 +690,8 @@ export function TarefasPage() {
                            }`}>{a.status || 'Pendente'}</span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{a.abaNome || '-'}</td>
-                        <td className="px-4 py-3 text-muted-foreground font-mono text-xs max-w-[120px] truncate" title={a.conta || a.sku || a.id}>
-                          {a.conta || a.sku || a.id || '-'}
+                         <td className="px-4 py-3 text-muted-foreground font-mono text-xs max-w-[120px] truncate" title={a.conta || a.sku || ''}>
+                           {a.conta || a.sku || '-'}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">{a.prazo || '-'}</td>
                       </tr>
