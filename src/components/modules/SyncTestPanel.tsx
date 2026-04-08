@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, Loader2, CheckCircle, XCircle, Clock, Zap, RefreshCw, Settings2, Power } from 'lucide-react';
+import { Play, Loader2, CheckCircle, XCircle, Clock, Zap, RefreshCw, Settings2, Power, Pencil, Save, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
