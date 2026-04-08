@@ -219,17 +219,40 @@ async function runTinyPlatform(plat: string, dIniBR: string): Promise<string[]> 
   return log;
 }
 
-async function runTinyEstoque(): Promise<string[]> {
+async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0): Promise<string[]> {
   const log: string[] = [];
-  let page = 1;
-  let offset = 0;
-  let sheetMode = 'write';
-  let totalSkus = 0;
+  let page = resumePage;
+  let offset = resumeOffset;
+  let sheetMode = page === 1 && offset === 0 ? 'write' : 'append';
+  let totalSkus = resumeTotal;
+  const startTime = Date.now();
 
   try {
     let hasMore = true;
     let i = 0;
     while (hasMore) {
+      if (Date.now() - startTime > 90000) { // 90 seconds (safe margin before 150s limit)
+        log.push(`⏳ Tempo limite se aproximando. Reinvocando em 2º plano a partir da pág ${page}, offset ${offset}...`);
+        
+        // Asynchronously invoke self to continue without waiting (fire and forget)
+        fetch(`${SUPABASE_URL}/functions/v1/daily-sync`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SERVICE_KEY}`
+          },
+          body: JSON.stringify({ 
+            module: 'tiny_estoque',
+            resume_page: page,
+            resume_offset: offset,
+            resume_total: totalSkus
+          })
+        }).catch(err => console.error("Falha ao reinvocar:", err));
+        
+        hasMore = false;
+        break; // exit current execution gracefully
+      }
+
       log.push(`📦 Estoque Tiny: pág ${page}, offset ${offset}...`);
       const r = await invokeFunction('tiny', {
         action: 'sync_estoque_tiny',
@@ -355,20 +378,23 @@ Deno.serve(async (req) => {
   });
 });
 
-async function executeModule(moduleKey: string, dIni: string, dIniBR: string, runDate: string): Promise<string[]> {
+async function executeModule(moduleKey: string, dIni: string, dIniBR: string, runDate: string, resumeData: any = {}): Promise<string[]> {
   const label = MODULE_LABELS[moduleKey] || moduleKey;
 
-  // Log start
-  const logEntry = await restPost('sync_run_log', {
-    run_date: runDate,
-    module: moduleKey,
-    status: 'running',
-    message: 'Iniciando...',
-  });
-  const logId = logEntry?.[0]?.id;
+  // Log start (only if not resuming to avoid log spam)
+  let logId: string | undefined;
+  if (!resumeData.is_resume) {
+    const logEntry = await restPost('sync_run_log', {
+      run_date: runDate,
+      module: moduleKey,
+      status: 'running',
+      message: 'Iniciando...',
+    });
+    logId = logEntry?.[0]?.id;
 
-  // Telegram: started
-  await sendTelegram(`<b>🔄 Iniciando: ${label}</b>\nData ref: ${dIni}`);
+    // Telegram: started
+    await sendTelegram(`<b>🔄 Iniciando: ${label}</b>\nData ref: ${dIni}`);
+  }
 
   let moduleLog: string[] = [];
   let hasError = false;
@@ -403,7 +429,7 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
         moduleLog = await runTinyPlatform('temu', dIniBR);
         break;
       case 'tiny_estoque':
-        moduleLog = await runTinyEstoque();
+        moduleLog = await runTinyEstoque(resumeData.resume_page, resumeData.resume_offset, resumeData.resume_total);
         break;
       default:
         moduleLog = [`⚠️ Módulo desconhecido: ${moduleKey}`];
