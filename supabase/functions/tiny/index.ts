@@ -736,7 +736,10 @@ Deno.serve(async (req) => {
 
             const saldoStr = sData?.retorno?.produto?.saldo;
             const saldo = parseFloat(saldoStr || '0');
-            allProducts.push([codigo, Math.round(saldo)]);
+            // Only include products with stock >= 1
+            if (Math.round(saldo) >= 1) {
+              allProducts.push([codigo, Math.round(saldo)]);
+            }
             success = true;
 
             // 1.5s delay between products to respect rate limit (~40/min)
