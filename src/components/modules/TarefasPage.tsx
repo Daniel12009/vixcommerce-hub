@@ -65,7 +65,7 @@ export function TarefasPage() {
     if (!newTask.title) return toast.error('Preencha o título da tarefa!');
 
     try {
-      const { error } = await supabase.from('team_tasks').insert([{
+      const { error } = await (supabase as any).from('team_tasks').insert([{
         title: newTask.title,
         type: newTask.type,
         points: newTask.points,
