@@ -377,7 +377,10 @@ export function TarefasPage() {
             {afazeres.map(task => (
               <div 
                 key={task.id} 
+                onClick={() => task.description ? setDetailTask(task) : undefined}
                 className={`group flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                  task.description ? 'cursor-pointer' : ''
+                } ${
                   task.status === 'concluido' 
                   ? 'bg-muted/30 border-border opacity-60 grayscale' 
                   : task.status === 'andamento'
@@ -445,18 +448,13 @@ export function TarefasPage() {
                   </div>
                 ) : (
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
-                    {task.description && (
-                      <button onClick={() => setDetailTask(task)} className="p-1 text-primary/70 hover:bg-primary/10 hover:text-primary rounded transition-colors" title="Ver detalhes">
-                        <Info className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                     {canManage && (
-                      <button onClick={() => handleDelete(task.id)} className="p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors" title="Excluir Afazer">
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors" title="Excluir Afazer">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
                     {task.status === 'pendente' && (
-                      <button onClick={() => setForwardingTaskId(task.id)} className="p-1 text-orange-500/70 hover:bg-orange-500/10 hover:text-orange-500 rounded transition-colors" title="Repassar Tarefa">
+                      <button onClick={(e) => { e.stopPropagation(); setForwardingTaskId(task.id); }} className="p-1 text-orange-500/70 hover:bg-orange-500/10 hover:text-orange-500 rounded transition-colors" title="Repassar Tarefa">
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     )}
