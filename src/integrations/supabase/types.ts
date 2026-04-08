@@ -364,6 +364,36 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_run_log: {
+        Row: {
+          finished_at: string | null
+          id: string
+          message: string | null
+          module: string
+          run_date: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          finished_at?: string | null
+          id?: string
+          message?: string | null
+          module: string
+          run_date?: string
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          finished_at?: string | null
+          id?: string
+          message?: string | null
+          module?: string
+          run_date?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       vendas_cache: {
         Row: {
           conta: string | null
