@@ -94,6 +94,7 @@ function FilaTab({ sellerId }: { sellerId: string }) {
   const [filterTab, setFilterTab] = useState<FilterTab>('UNANSWERED');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [forcingRobot, setForcingRobot] = useState(false);
   const [answerTexts, setAnswerTexts] = useState<Record<number, string>>({});
   const [sendingAnswers, setSendingAnswers] = useState<Record<number, boolean>>({});
 
@@ -114,6 +115,19 @@ function FilaTab({ sellerId }: { sellerId: string }) {
       toast.error(e.message || 'Erro ao enviar resposta');
     }
     setSendingAnswers(p => ({ ...p, [q.id]: false }));
+  };
+
+  const forceRobot = async () => {
+    setForcingRobot(true);
+    try {
+      await supabase.functions.invoke('ml-fetch-questions');
+      await supabase.functions.invoke('ml-auto-answer');
+      toast.success('Robô executado e filas atualizadas!');
+      await fetchQuestions();
+    } catch (e: any) {
+      toast.error('Erro ao forçar o robô: ' + (e.message || e));
+    }
+    setForcingRobot(false);
   };
 
   const { pending, loading: queueLoading, answer, ignore, saveAsTemplate } = useMLQuestions(sellerId);
@@ -198,9 +212,13 @@ function FilaTab({ sellerId }: { sellerId: string }) {
 
       {/* Standard question list */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <button onClick={() => fetchQuestions()} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50">
+        <button onClick={() => fetchQuestions()} disabled={loading || forcingRobot} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-colors">
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           {loading ? 'Carregando...' : 'Atualizar'}
+        </button>
+        <button onClick={forceRobot} disabled={forcingRobot || loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+          {forcingRobot ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+          {forcingRobot ? 'Rodando...' : 'Forçar Robô Agora'}
         </button>
         <div className="flex gap-1 bg-card border border-border rounded-lg p-1">
           {([
