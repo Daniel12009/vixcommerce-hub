@@ -370,22 +370,14 @@ function AutomationConfig() {
         </div>
       </div>
 
-      {/* Module Groups — only show enabled modules WITH a schedule time */}
-      {Object.entries(groups).map(([group, modules]) => {
-        const activeModules = modules.filter(mod => !!enabledModules[mod.key] && !!schedules[mod.key]);
-        const inactiveCount = modules.filter(mod => !enabledModules[mod.key] || !schedules[mod.key]).length;
-        if (activeModules.length === 0) return null; // hide group entirely if nothing active
-
-        return (
+      {/* Module Groups */}
+      {Object.entries(groups).map(([group, modules]) => (
         <div key={group} className="rounded-xl border border-border overflow-hidden">
           <div className="px-4 py-2.5 bg-muted/30 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">{group}</h3>
-            {inactiveCount > 0 && (
-              <span className="text-[10px] text-muted-foreground">{inactiveCount} inativo{inactiveCount > 1 ? 's' : ''} oculto{inactiveCount > 1 ? 's' : ''}</span>
-            )}
           </div>
           <div className="divide-y divide-border">
-            {activeModules.map(mod => {
+            {modules.map(mod => {
               const isEnabled = !!enabledModules[mod.key];
               const savedTime = schedules[mod.key];
               const isEditing = editMode[mod.key];
@@ -461,7 +453,7 @@ function AutomationConfig() {
             })}
           </div>
         </div>
-      ); })}
+      ))}
 
 
       <p className="text-xs text-muted-foreground text-center">
