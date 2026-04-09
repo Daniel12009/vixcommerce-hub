@@ -443,9 +443,13 @@ function AutomationConfig() {
                           </button>
                         </>
                       ) : (
-                        <span className="text-xs text-muted-foreground italic">
-                          Configure o horário para ativar a automação
-                        </span>
+                        <button
+                          onClick={() => startEditing(mod.key)}
+                          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          + Configurar horário
+                        </button>
                       )}
                     </div>
                   )}
