@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+﻿import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -19,17 +19,17 @@ const SHEET_MAP: Record<string, string> = {
 };
 
 const MODULE_LABELS: Record<string, string> = {
-  ml_vendas: '📦 Vendas ML',
-  ml_performance: '📊 Performance ML',
-  ml_v7: '📈 V7 ML',
-  ml_ads: '📢 ADS ML',
-  shopee_vendas: '🛒 Vendas Shopee',
-  tiny_shein: '👗 Shein (Tiny)',
-  tiny_amazon: '📦 Amazon (Tiny)',
-  tiny_tiktok: '🎵 TikTok (Tiny)',
-  tiny_temu: '🛍️ Temu (Tiny)',
-  tiny_estoque: '📋 Estoque Tiny',
-  verify: '🔍 Verificação Final',
+  ml_vendas: 'ðŸ“¦ Vendas ML',
+  ml_performance: 'ðŸ“Š Performance ML',
+  ml_v7: 'ðŸ“ˆ V7 ML',
+  ml_ads: 'ðŸ“¢ ADS ML',
+  shopee_vendas: 'ðŸ›’ Vendas Shopee',
+  tiny_shein: 'ðŸ‘— Shein (Tiny)',
+  tiny_amazon: 'ðŸ“¦ Amazon (Tiny)',
+  tiny_tiktok: 'ðŸŽµ TikTok (Tiny)',
+  tiny_temu: 'ðŸ›ï¸ Temu (Tiny)',
+  tiny_estoque: 'ðŸ“‹ Estoque Tiny',
+  verify: 'ðŸ” VerificaÃ§Ã£o Final',
 };
 
 function getYesterdayBR(): string {
@@ -130,17 +130,17 @@ async function getEnabledModules(): Promise<Record<string, boolean>> {
     const rows = await restGet('app_data?data_key=eq.daily_sync_modules&select=data_value');
     if (rows.length > 0 && rows[0].data_value) return rows[0].data_value;
   } catch (e) {
-    console.error('Erro ao ler módulos:', e);
+    console.error('Erro ao ler mÃ³dulos:', e);
   }
   return {};
 }
 
-// ━━━ MODULE HANDLERS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// â”â”â” MODULE HANDLERS â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
 async function runMLModule(moduleKey: string, action: string, extraParams: Record<string, any>, dIni: string): Promise<string[]> {
   const log: string[] = [];
   const mlAccounts = await restGet('ml_accounts?ativo=eq.true&select=id,nome,seller_id');
-  log.push(`📋 ${mlAccounts.length} contas ML ativas`);
+  log.push(`ðŸ“‹ ${mlAccounts.length} contas ML ativas`);
 
   for (const conta of mlAccounts) {
     const nome = conta.nome || conta.seller_id;
@@ -166,9 +166,9 @@ async function runMLModule(moduleKey: string, action: string, extraParams: Recor
         params.sheet_name_prefix = 'ADS-TOTAL-ML';
       }
       const r = await invokeFunction('mercado-livre', params);
-      log.push(`✅ ${MODULE_LABELS[moduleKey] || moduleKey} ${nome}: ${r.mensagem || r.error || 'ok'}`);
+      log.push(`âœ… ${MODULE_LABELS[moduleKey] || moduleKey} ${nome}: ${r.mensagem || r.error || 'ok'}`);
     } catch (e: any) {
-      log.push(`❌ ${MODULE_LABELS[moduleKey] || moduleKey} ${nome}: ${e.message}`);
+      log.push(`âŒ ${MODULE_LABELS[moduleKey] || moduleKey} ${nome}: ${e.message}`);
     }
   }
   return log;
@@ -177,7 +177,7 @@ async function runMLModule(moduleKey: string, action: string, extraParams: Recor
 async function runShopeeVendas(dIni: string, dIniBR: string): Promise<string[]> {
   const log: string[] = [];
   const shopeeAccounts = await restGet('shopee_accounts?ativo=eq.true&select=id,nome,source_mode');
-  log.push(`📋 ${shopeeAccounts.length} contas Shopee ativas`);
+  log.push(`ðŸ“‹ ${shopeeAccounts.length} contas Shopee ativas`);
 
   for (const conta of shopeeAccounts) {
     const nome = conta.nome;
@@ -189,16 +189,16 @@ async function runShopeeVendas(dIni: string, dIniBR: string): Promise<string[]> 
           date_from: dIni, date_to: dIni,
           spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'Shopee_Vendas',
         });
-        log.push(`✅ Shopee API ${nome}: ${r.mensagem || r.error || 'ok'}`);
+        log.push(`âœ… Shopee API ${nome}: ${r.mensagem || r.error || 'ok'}`);
       } else {
         const r = await invokeFunction('tiny', {
           action: 'sync_vendas_marketplace', date_from: dIniBR, date_to: dIniBR,
           plataforma: 'shopee', spreadsheet_id: PLANILHA_MESTRA, sheet_name: 'Shopee_Vendas',
         });
-        log.push(`✅ Shopee Tiny ${nome}: ${r.mensagem || r.error || 'ok'}`);
+        log.push(`âœ… Shopee Tiny ${nome}: ${r.mensagem || r.error || 'ok'}`);
       }
     } catch (e: any) {
-      log.push(`❌ Shopee ${nome}: ${e.message}`);
+      log.push(`âŒ Shopee ${nome}: ${e.message}`);
     }
   }
   return log;
@@ -212,9 +212,9 @@ async function runTinyPlatform(plat: string, dIniBR: string): Promise<string[]> 
       plataforma: plat, spreadsheet_id: PLANILHA_MESTRA,
       sheet_name: SHEET_MAP[plat] || 'Shopee_Vendas',
     });
-    log.push(`✅ ${plat.toUpperCase()} Tiny: ${r.mensagem || r.error || 'ok'}`);
+    log.push(`âœ… ${plat.toUpperCase()} Tiny: ${r.mensagem || r.error || 'ok'}`);
   } catch (e: any) {
-    log.push(`❌ ${plat}: ${e.message}`);
+    log.push(`âŒ ${plat}: ${e.message}`);
   }
   return log;
 }
@@ -232,7 +232,7 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
     let i = 0;
     while (hasMore) {
       if (Date.now() - startTime > 90000) { // 90 seconds (safe margin before 150s limit)
-        log.push(`⏳ Tempo limite se aproximando. Reinvocando em 2º plano a partir da pág ${page}, offset ${offset}...`);
+        log.push(`â³ Tempo limite se aproximando. Reinvocando em 2Âº plano a partir da pÃ¡g ${page}, offset ${offset}...`);
         
         // Asynchronously invoke self to continue without waiting (fire and forget)
         fetch(`${SUPABASE_URL}/functions/v1/daily-sync`, {
@@ -253,7 +253,7 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
         break; // exit current execution gracefully
       }
 
-      log.push(`📦 Estoque Tiny: pág ${page}, offset ${offset}...`);
+      log.push(`ðŸ“¦ Estoque Tiny: pÃ¡g ${page}, offset ${offset}...`);
       const r = await invokeFunction('tiny', {
         action: 'sync_estoque_tiny',
         page,
@@ -263,7 +263,7 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
       totalSkus += r.skus || 0;
 
       if (!r.hasMore) {
-        log.push(`✅ Estoque Tiny: ${totalSkus} SKUs sincronizados (${i + 1} batches)`);
+        log.push(`âœ… Estoque Tiny: ${totalSkus} SKUs sincronizados (${i + 1} batches)`);
         hasMore = false;
         break;
       }
@@ -277,9 +277,9 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
   } catch (e: any) {
-    log.push(`❌ Estoque Tiny (pág ${page}): ${e.message}`);
+    log.push(`âŒ Estoque Tiny (pÃ¡g ${page}): ${e.message}`);
     if (totalSkus > 0) {
-      log.push(`⚠️ Parcial: ${totalSkus} SKUs já sincronizados antes do erro`);
+      log.push(`âš ï¸ Parcial: ${totalSkus} SKUs jÃ¡ sincronizados antes do erro`);
     }
   }
   return log;
@@ -293,24 +293,24 @@ async function runVerify(runDate: string): Promise<string[]> {
   const successes = results.filter(r => r.status === 'success');
   const running = results.filter(r => r.status === 'running');
 
-  log.push(`📊 Resumo da sincronização de ${runDate}:`);
-  log.push(`  ✅ Sucesso: ${successes.length} módulos`);
-  if (running.length > 0) log.push(`  ⏳ Ainda rodando: ${running.length} módulos`);
+  log.push(`ðŸ“Š Resumo da sincronizaÃ§Ã£o de ${runDate}:`);
+  log.push(`  âœ… Sucesso: ${successes.length} mÃ³dulos`);
+  if (running.length > 0) log.push(`  â³ Ainda rodando: ${running.length} mÃ³dulos`);
   if (errors.length > 0) {
-    log.push(`  ❌ Erros: ${errors.length} módulos`);
+    log.push(`  âŒ Erros: ${errors.length} mÃ³dulos`);
     for (const err of errors) {
-      log.push(`    → ${MODULE_LABELS[err.module] || err.module}: ${err.message || 'erro desconhecido'}`);
+      log.push(`    â†’ ${MODULE_LABELS[err.module] || err.module}: ${err.message || 'erro desconhecido'}`);
     }
   }
 
   if (errors.length === 0 && running.length === 0) {
-    log.push(`\n🎉 Todos os módulos executados com sucesso!`);
+    log.push(`\nðŸŽ‰ Todos os mÃ³dulos executados com sucesso!`);
   }
 
   return log;
 }
 
-// ━━━ MAIN HANDLER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// â”â”â” MAIN HANDLER â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -327,7 +327,7 @@ Deno.serve(async (req) => {
   if (!targetModule) {
     const modules = await getEnabledModules();
     const enabledKeys = Object.entries(modules).filter(([_, v]) => v).map(([k]) => k);
-    const allLog: string[] = [`🚀 daily-sync completo iniciado. Data ref: ${dIni}`, `📋 Módulos: ${enabledKeys.join(', ') || 'NENHUM'}`];
+    const allLog: string[] = [`ðŸš€ daily-sync completo iniciado. Data ref: ${dIni}`, `ðŸ“‹ MÃ³dulos: ${enabledKeys.join(', ') || 'NENHUM'}`];
 
     if (enabledKeys.length === 0) {
       return new Response(JSON.stringify({ sucesso: true, log: allLog }), {
@@ -340,22 +340,22 @@ Deno.serve(async (req) => {
       allLog.push(...moduleLog);
     }
 
-    allLog.push(`\n✅ daily-sync completo concluído.`);
+    allLog.push(`\nâœ… daily-sync completo concluÃ­do.`);
     return new Response(JSON.stringify({ sucesso: true, log: allLog }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  // ━━━ SINGLE MODULE MODE (used by cron) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â” SINGLE MODULE MODE (used by cron) â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
   // Verify module
   if (targetModule === 'verify') {
     const verifyLog = await runVerify(runDate);
     const verifyText = verifyLog.join('\n');
 
-    const hasErrors = verifyText.includes('❌');
-    const emoji = hasErrors ? '⚠️' : '✅';
-    await sendTelegram(`<b>${emoji} Verificação Final - Sincronização Diária</b>\n\n<pre>${verifyText}</pre>`);
+    const hasErrors = verifyText.includes('âŒ');
+    const emoji = hasErrors ? 'âš ï¸' : 'âœ…';
+    await sendTelegram(`<b>${emoji} VerificaÃ§Ã£o Final - SincronizaÃ§Ã£o DiÃ¡ria</b>\n\n<pre>${verifyText}</pre>`);
 
     return new Response(JSON.stringify({ sucesso: true, log: verifyLog }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -365,7 +365,7 @@ Deno.serve(async (req) => {
   // Check if module is enabled
   const modules = await getEnabledModules();
   if (!modules[targetModule]) {
-    const msg = `⏭️ Módulo ${MODULE_LABELS[targetModule] || targetModule} desabilitado, pulando.`;
+    const msg = `â­ï¸ MÃ³dulo ${MODULE_LABELS[targetModule] || targetModule} desabilitado, pulando.`;
     return new Response(JSON.stringify({ sucesso: true, log: [msg], skipped: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -393,7 +393,7 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
     logId = logEntry?.[0]?.id;
 
     // Telegram: started
-    await sendTelegram(`<b>🔄 Iniciando: ${label}</b>\nData ref: ${dIni}`);
+    await sendTelegram(`<b>ðŸ”„ Iniciando: ${label}</b>\nData ref: ${dIni}`);
   }
 
   let moduleLog: string[] = [];
@@ -432,12 +432,12 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
         moduleLog = await runTinyEstoque(resumeData.resume_page, resumeData.resume_offset, resumeData.resume_total);
         break;
       default:
-        moduleLog = [`⚠️ Módulo desconhecido: ${moduleKey}`];
+        moduleLog = [`âš ï¸ MÃ³dulo desconhecido: ${moduleKey}`];
     }
 
-    hasError = moduleLog.some(l => l.includes('❌'));
+    hasError = moduleLog.some(l => l.includes('âŒ'));
   } catch (e: any) {
-    moduleLog.push(`❌ Erro geral: ${e.message}`);
+    moduleLog.push(`âŒ Erro geral: ${e.message}`);
     hasError = true;
   }
 
@@ -452,10 +452,11 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
   }
 
   // Telegram: finished
-  const emoji = hasError ? '❌' : '✅';
-  await sendTelegram(`<b>${emoji} Concluído: ${label}</b>\n\n<pre>${resultText}</pre>`);
+  const emoji = hasError ? 'âŒ' : 'âœ…';
+  await sendTelegram(`<b>${emoji} ConcluÃ­do: ${label}</b>\n\n<pre>${resultText}</pre>`);
 
   return moduleLog;
 }
-/ /   l o v a b l e   t r i g g e r  
+/ /   l o v a b l e   t r i g g e r 
+ 
  

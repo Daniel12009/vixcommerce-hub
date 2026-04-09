@@ -742,8 +742,8 @@ Deno.serve(async (req) => {
             }
             success = true;
 
-            // Shorter delay for zero-stock items, normal delay for items with stock
-            await new Promise(r => setTimeout(r, Math.round(saldo) >= 1 ? 1500 : 800));
+            // Delay for rate limits (Potencializar plan = 120 req/min = 500ms limit, using 600ms for safety)
+            await new Promise(r => setTimeout(r, 600));
           } catch (err) {
             console.error(`Erro buscando estoque ID ${p.id}:`, err);
             break;
