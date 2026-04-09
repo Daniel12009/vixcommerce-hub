@@ -502,6 +502,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           if (!parsed || parsed.length === 0) continue;
           const mod = config.moduloDestino;
           if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
+          else if (mod === 'vendas-7d') { setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
           else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
           else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
           else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
