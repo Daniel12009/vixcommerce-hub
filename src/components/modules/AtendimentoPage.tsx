@@ -80,7 +80,7 @@ export function AtendimentoPage() {
         </div>
       </div>
 
-      {mainTab === 'fila' && <FilaTab sellerId={selectedSeller} />}
+      {mainTab === 'fila' && <FilaTab sellerId={selectedSeller} sellerName={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.nome} />}
       {mainTab === 'templates' && <TemplatesTab sellerId={selectedSeller} />}
       {mainTab === 'ia' && <IATab sellerId={selectedSeller} />}
     </div>
@@ -88,7 +88,7 @@ export function AtendimentoPage() {
 }
 
 // ─── Aba Fila ─────────────────────────────────────────────────────────
-function FilaTab({ sellerId }: { sellerId: string }) {
+function FilaTab({ sellerId, sellerName }: { sellerId: string; sellerName?: string }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterTab, setFilterTab] = useState<FilterTab>('UNANSWERED');
@@ -161,8 +161,18 @@ function FilaTab({ sellerId }: { sellerId: string }) {
   const filtered = questions.filter(q => {
     if (search) {
       const s = search.toLowerCase();
-      return q.text.toLowerCase().includes(s) || q.item_title?.toLowerCase().includes(s) || q.item_id.toLowerCase().includes(s);
+      if (!q.text.toLowerCase().includes(s) && !q.item_title?.toLowerCase().includes(s) && !q.item_id.toLowerCase().includes(s)) return false;
     }
+    if (filterTab !== 'ALL' && q.status !== filterTab) return false;
+    
+    // Ocultar perguntas pendentes com mais de 7 dias
+    if (q.status === 'UNANSWERED') {
+      const qDate = new Date(q.date_created);
+      if (Date.now() - qDate.getTime() > 7 * 24 * 60 * 60 * 1000) {
+        return false;
+      }
+    }
+    
     return true;
   });
 
@@ -201,6 +211,7 @@ function FilaTab({ sellerId }: { sellerId: string }) {
           </h3>
           <MLQuestionsQueue
             sellerId={sellerId}
+            sellerName={sellerName}
             items={pending}
             botMode={config.mode}
             onAnswer={answer}

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 interface Props {
   sellerId: string;
+  sellerName?: string;
   items: QueueItem[];
   botMode: 'learning' | 'active';
   onAnswer: (id: string, text: string) => Promise<any>;
@@ -16,6 +17,7 @@ interface Props {
 function QueueCard({
   item,
   sellerId,
+  sellerName,
   botMode,
   minScore,
   onAnswer,
@@ -25,6 +27,7 @@ function QueueCard({
 }: {
   item: QueueItem;
   sellerId: string;
+  sellerName?: string;
   botMode: 'learning' | 'active';
   minScore: number;
   onAnswer: (id: string, text: string) => Promise<any>;
@@ -79,6 +82,7 @@ function QueueCard({
         {/* Header */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-[10px] text-muted-foreground font-mono">{item.item_id}</span>
+          {sellerName && <span className="text-[10px] text-muted-foreground font-semibold">{sellerName}</span>}
           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {formatAge(item.date_created)}
@@ -156,6 +160,7 @@ function QueueCard({
 
 export function MLQuestionsQueue({
   sellerId,
+  sellerName,
   items,
   botMode,
   onAnswer,
@@ -199,6 +204,7 @@ export function MLQuestionsQueue({
           key={item.id}
           item={item}
           sellerId={sellerId}
+          sellerName={sellerName}
           botMode={botMode}
           minScore={minScore}
           onAnswer={onAnswer}
