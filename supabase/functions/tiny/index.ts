@@ -116,7 +116,7 @@ function mapTinyStatus(situacao: string): string {
 }
 
 // Helper: chamar google-sheets edge function para append
-async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' = 'append') {
+async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' | 'clear' = 'append') {
   const url = Deno.env.get('SUPABASE_URL')!;
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const gsUrl = `${url}/functions/v1/google-sheets`;
@@ -754,6 +754,14 @@ Deno.serve(async (req) => {
       // Step 3: Write to sheets
       const header = ['SKU', 'TOTAL'];
       const writeData = sheetMode === 'write' ? [header, ...allProducts] : allProducts;
+
+      if (sheetMode === 'write') {
+        try {
+          await invokeSheets(PLANILHA_MESTRA, SHEET_TAB, [], 'clear');
+        } catch (e) {
+          console.warn('Erro ao limpar sheet antes de reescrever:', e);
+        }
+      }
 
       if (writeData.length > 0) {
         await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, sheetMode);

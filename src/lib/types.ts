@@ -129,7 +129,7 @@ export interface DevolucaoItem {
   retornoDevolucao: string;
 }
 
-export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar' | 'devolucao' | 'usuarios' | 'configuracoes' | 'atendimento' | 'metas' | 'compras' | 'mercado' | 'tarefas';
+export type ModuleName = 'dashboard' | 'estoque' | 'financeiro' | 'cadastro' | 'marketing' | 'atualizar' | 'devolucao' | 'usuarios' | 'configuracoes' | 'atendimento' | 'metas' | 'compras' | 'mercado' | 'tarefas' | 'performance';
 
 export type MarketplaceId = 'ml1' | 'ml2' | 'ml3' | 'ml4' | 'tiny' | 'shopee' | 'amazon';
 

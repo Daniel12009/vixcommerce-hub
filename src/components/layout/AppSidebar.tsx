@@ -22,6 +22,7 @@ const modules = [
   { id: 'compras' as ModuleName, label: 'Compras S&OP', icon: ShoppingBag },
   { id: 'mercado' as ModuleName, label: 'Monitor de Mercado', icon: TrendingUp },
   { id: 'tarefas' as ModuleName, label: 'Atividades', icon: CheckSquare },
+  { id: 'performance' as ModuleName, label: 'Produtividade', icon: Activity },
   { id: 'configuracoes' as ModuleName, label: 'Configurações', icon: Settings },
 ];
 
@@ -59,7 +60,7 @@ export function AppSidebar({ activeModule, onModuleChange, isOpen, onClose }: Ap
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {modules.filter(mod => {
             if (user?.role === 'admin') return true;
-            if (['dashboard', 'configuracoes', 'metas', 'tarefas'].includes(mod.id)) return true;
+            if (['dashboard', 'configuracoes', 'metas', 'tarefas', 'performance'].includes(mod.id)) return true;
             if (!user?.allowed_modules) return false;
             
             return user.allowed_modules.includes(mod.id);

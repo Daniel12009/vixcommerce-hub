@@ -18,11 +18,14 @@ import { MetasPage } from '@/components/modules/MetasPage';
 import { ComprasPage } from '@/components/modules/compras/ComprasPage';
 import { MarketIntelligence } from '@/components/modules/mercado/MarketIntelligence';
 import { TarefasPage } from '@/components/modules/TarefasPage';
+import PerformancePage from '@/components/modules/PerformancePage';
 import { SheetsDataProvider, useSheetsData } from '@/contexts/SheetsDataContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 import type { ModuleName } from '@/lib/types';
 
 function AppContent() {
+  const { track } = useActivityTracker();
   const [activeModule, setActiveModule] = useState<ModuleName>('dashboard');
   const { isLoaded } = useSheetsData();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -92,6 +95,7 @@ function AppContent() {
       case 'compras': return <ComprasPage />;
       case 'mercado': return <MarketIntelligence />;
       case 'tarefas': return <TarefasPage />;
+      case 'performance': return <PerformancePage />;
       case 'usuarios': return <UserManagementPage onBack={() => setActiveModule('configuracoes')} />;
     }
   };
