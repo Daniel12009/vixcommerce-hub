@@ -105,8 +105,8 @@ export function EstoquePage() {
   // Normalize conta names for fuzzy matching: "[VIAFLIX]", "(VIA FLIX)" and "VIA FLIX" → "VIAFLIX"
   // Aliases map known vendas-7d sheet names to their corresponding Estoque Full conta keys
   const CONTA_ALIASES: Record<string, string> = {
-    'GSTORNEIRAS': 'GSI',
-    'DECARIONTORNEIRAS': 'MONACO',
+    'GSTORNEIRAS': 'GS',       // "GS TORNEIRAS" → (GS) no Estoque Full
+    'DECARIONTORNEIRAS': 'MONACO', // "DECARION TORNEIRAS" → (MONACO) no Estoque Full
     // Add more aliases here if new accounts are added with mismatched names
   };
   const normalizeConta = (s: string) => {
