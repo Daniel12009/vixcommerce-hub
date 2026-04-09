@@ -30,7 +30,7 @@ interface SheetsData {
   setEstoqueTinyFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
-  setVendas7dFromSheet: (rows: Record<string, string>[]) => void;
+  setVendas7dFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   setAdsFromSheet: (rows: Record<string, string>[]) => void;
   setDevolucaoFromSheet: (rows: Record<string, string>[]) => void;
@@ -215,16 +215,20 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setVendasItems(items);
   }, []);
 
-  const setVendas7dFromSheet = useCallback((rows: Record<string, string>[]) => {
+  const setVendas7dFromSheet = useCallback((rows: Record<string, string>[], contaOverride?: string) => {
     const items: Vendas7dItem[] = rows
       .filter(r => r.sku)
       .map(r => ({
-        conta: (r.conta || '').trim(),
+        conta: (contaOverride || r.conta || '').trim(),
         sku: (r.sku || '').trim().toUpperCase(),
         quantidade: num(r.quantidade) || 1,
         data: r.data || '',
       }));
-    setVendas7dItems(items);
+    setVendas7dItems(prev => {
+      if (!contaOverride) return items;
+      const safePrev = prev || [];
+      return [...safePrev.filter(p => p.conta !== contaOverride), ...items];
+    });
   }, []);
 
   const setPerformanceFromSheet = useCallback((rows: Record<string, string>[], contaOverride?: string) => {
@@ -502,7 +506,12 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           if (!parsed || parsed.length === 0) continue;
           const mod = config.moduloDestino;
           if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
-          else if (mod === 'vendas-7d') { setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
+          else if (mod === 'vendas-7d') {
+            setVendas7dFromSheet(parsed, config.abaNome);
+            const existing = await loadFromCloud<any[]>('vendas_7d_data') || [];
+            const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+            saveToCloud('vendas_7d_data', merged);
+          }
           else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
           else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
           else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
@@ -580,7 +589,12 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
             else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
             else if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
-            else if (mod === 'vendas-7d') { setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
+            else if (mod === 'vendas-7d') {
+              setVendas7dFromSheet(parsed, config.abaNome);
+              const existing = await loadFromCloud<any[]>('vendas_7d_data') || [];
+              const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+              saveToCloud('vendas_7d_data', merged);
+            }
             else if (mod === 'performance') {
               setPerformanceFromSheet(parsed, config.abaNome);
               const existing = await loadFromCloud<any[]>('performance_data') || [];

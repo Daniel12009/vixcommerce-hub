@@ -102,9 +102,9 @@ export function EstoquePage() {
     return Array.from(set).sort();
   }, [estoqueFullItems]);
 
-  // Normalize conta names for fuzzy matching: "[VIAFLIX]" and "VIA FLIX" both → "VIAFLIX"
+  // Normalize conta names for fuzzy matching: "[VIAFLIX]", "(VIA FLIX)" and "VIA FLIX" → "VIAFLIX"
   const normalizeConta = (s: string) =>
-    s.toUpperCase().replace(/[\[\]\s\-\.]/g, '');
+    s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
   const vmdBySkuAndConta = useMemo(() => {
     const map = new Map<string, number>();

@@ -234,7 +234,12 @@ export function PlanilhasConfigSection() {
       else if (config.moduloDestino === 'estoque-tiny') { sheetsData.setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
       else if (config.moduloDestino === 'financeiro') { sheetsData.setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
       else if (config.moduloDestino === 'vendas') { sheetsData.setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
-      else if (config.moduloDestino === 'vendas-7d') { sheetsData.setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
+      else if (config.moduloDestino === 'vendas-7d') {
+        sheetsData.setVendas7dFromSheet(parsed, config.abaNome);
+        const existing = await loadFromCloud<any[]>('vendas_7d_data') || [];
+        const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+        saveToCloud('vendas_7d_data', merged);
+      }
       else if (config.moduloDestino === 'performance') {
         sheetsData.setPerformanceFromSheet(parsed, config.abaNome);
         const existing = await loadFromCloud<any[]>('performance_data') || [];
