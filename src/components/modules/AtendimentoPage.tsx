@@ -117,6 +117,8 @@ function FilaTab({ sellerId }: { sellerId: string }) {
     setSendingAnswers(p => ({ ...p, [q.id]: false }));
   };
 
+  const { pending, loading: queueLoading, answer, ignore, saveAsTemplate, refetchQueue } = useMLQuestions(sellerId);
+
   const forceRobot = async () => {
     setForcingRobot(true);
     try {
@@ -124,13 +126,13 @@ function FilaTab({ sellerId }: { sellerId: string }) {
       await supabase.functions.invoke('ml-auto-answer');
       toast.success('Robô executado e filas atualizadas!');
       await fetchQuestions();
+      refetchQueue();
     } catch (e: any) {
       toast.error('Erro ao forçar o robô: ' + (e.message || e));
     }
     setForcingRobot(false);
   };
 
-  const { pending, loading: queueLoading, answer, ignore, saveAsTemplate } = useMLQuestions(sellerId);
   const { config, loading: botLoading, setMode, incrementManual } = useMLBotMode(sellerId);
   const [templates, setTemplates] = useState<Template[]>([]);
 

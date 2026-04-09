@@ -16,9 +16,9 @@ export function useMLQuestions(sellerId: string) {
   const [pending, setPending] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!sellerId) { setLoading(false); return; }
-
+  const refetchQueue = () => {
+    if (!sellerId) return;
+    setLoading(true);
     supabase
       .from('ml_questions_queue')
       .select('*')
@@ -26,6 +26,10 @@ export function useMLQuestions(sellerId: string) {
       .eq('status', 'pending')
       .order('date_created', { ascending: true })
       .then(({ data }) => { setPending((data as QueueItem[]) ?? []); setLoading(false); });
+  };
+
+  useEffect(() => {
+    refetchQueue();
 
     // Realtime subscription
     const channel = supabase
@@ -88,5 +92,5 @@ export function useMLQuestions(sellerId: string) {
     });
   };
 
-  return { pending, loading, answer, ignore, saveAsTemplate };
+  return { pending, loading, answer, ignore, saveAsTemplate, refetchQueue };
 }
