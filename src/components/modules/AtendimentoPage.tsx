@@ -19,6 +19,7 @@ interface Question {
   text: string; status: string; date_created: string;
   answer: { text: string; date_created: string } | null;
   from: { id: number; nickname: string }; seller_id: number; conta: string;
+  account_id?: string;
 }
 interface Template {
   id: string; title: string; keywords: string[]; answer_text: string;
