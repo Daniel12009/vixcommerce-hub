@@ -104,9 +104,9 @@ export function EstoquePage() {
 
   const vmdBySkuAndConta = useMemo(() => {
     const map = new Map<string, number>();
-    const grouped = new Map<string, { totalQtd: number; dias: Set<string> }>();
-    const skuOnly = new Map<string, { totalQtd: number; dias: Set<string> }>();
-    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000; // last 30 days
+    const grouped = new Map<string, number>();
+    const skuOnly = new Map<string, number>();
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // last 7 days
 
     (vendasItems || []).forEach(item => {
       if (!item.sku || item.statusPedido === 'cancelado') return;
@@ -122,25 +122,19 @@ export function EstoquePage() {
       const sku = item.sku.trim().toUpperCase();
       const contaRaw = (item.conta || item.contaMae || '').trim();
       const normConta = normalizeConta(contaRaw);
-      const dateKey = item.data || 'sem-data';
       const qty = Number(item.quantidade || 1);
 
       // Per-account key (normalized)
       const key = `${sku}||${normConta}`;
-      const cur = grouped.get(key) || { totalQtd: 0, dias: new Set<string>() };
-      cur.totalQtd += qty;
-      cur.dias.add(dateKey);
-      grouped.set(key, cur);
+      grouped.set(key, (grouped.get(key) || 0) + qty);
 
       // SKU-only fallback
-      const skuCur = skuOnly.get(sku) || { totalQtd: 0, dias: new Set<string>() };
-      skuCur.totalQtd += qty;
-      skuCur.dias.add(dateKey);
-      skuOnly.set(sku, skuCur);
+      skuOnly.set(sku, (skuOnly.get(sku) || 0) + qty);
     });
 
-    grouped.forEach((v, key) => map.set(key, v.totalQtd / Math.max(1, v.dias.size)));
-    skuOnly.forEach((v, sku) => map.set(`${sku}||__ANY__`, v.totalQtd / Math.max(1, v.dias.size)));
+    // Divide total quantity by 7 (fixed window) to get daily average
+    grouped.forEach((total, key) => map.set(key, total / 7));
+    skuOnly.forEach((total, sku) => map.set(`${sku}||__ANY__`, total / 7));
     return map;
   }, [vendasItems]);
 
