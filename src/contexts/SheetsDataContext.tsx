@@ -76,6 +76,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [estoqueTinyItems, setEstoqueTinyItems] = useState<EstoqueTinyItem[] | null>(null);
   const [financeiroItems, setFinanceiroItems] = useState<FinancialItem[] | null>(null);
   const [vendasItems, setVendasItems] = useState<VendaItem[] | null>(null);
+  const [vendas7dItems, setVendas7dItems] = useState<Vendas7dItem[] | null>(null);
   const [performanceItems, setPerformanceItems] = useState<PerformanceItem[] | null>(null);
   const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
   const [devolucaoItems, setDevolucaoItems] = useState<DevolucaoItem[] | null>(null);
