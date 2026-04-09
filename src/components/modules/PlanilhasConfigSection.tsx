@@ -234,6 +234,7 @@ export function PlanilhasConfigSection() {
       else if (config.moduloDestino === 'estoque-tiny') { sheetsData.setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
       else if (config.moduloDestino === 'financeiro') { sheetsData.setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
       else if (config.moduloDestino === 'vendas') { sheetsData.setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
+      else if (config.moduloDestino === 'vendas-7d') { sheetsData.setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
       else if (config.moduloDestino === 'performance') {
         sheetsData.setPerformanceFromSheet(parsed, config.abaNome);
         const existing = await loadFromCloud<any[]>('performance_data') || [];
