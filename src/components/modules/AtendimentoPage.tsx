@@ -137,8 +137,8 @@ function FilaTab({ sellerId }: { sellerId: string }) {
   const [templates, setTemplates] = useState<Template[]>([]);
 
   useEffect(() => {
-    if (sellerId) supabase.from('ml_answer_templates').select('id').eq('seller_id', sellerId).eq('active', true)
-      .then(({ data }) => setTemplates((data as any[]) ?? []));
+    if (sellerId) (supabase.from('ml_answer_templates' as any).select('id') as any).eq('seller_id', sellerId).eq('active', true)
+      .then(({ data }: any) => setTemplates((data as any[]) ?? []));
   }, [sellerId]);
 
   const fetchQuestions = useCallback(async (status: FilterTab = filterTab) => {
@@ -340,7 +340,7 @@ function TemplatesTab({ sellerId }: { sellerId: string }) {
 
   const loadTemplates = async () => {
     setLoading(true);
-    const { data } = await supabase.from('ml_answer_templates').select('*')
+    const { data } = await (supabase.from('ml_answer_templates' as any).select('*') as any)
       .eq('seller_id', sellerId).order('use_count', { ascending: false });
     setTemplates((data as Template[]) ?? []);
     setLoading(false);
@@ -366,12 +366,12 @@ function TemplatesTab({ sellerId }: { sellerId: string }) {
       return;
     }
     if (editing) {
-      await supabase.from('ml_answer_templates').update({
+      await (supabase.from('ml_answer_templates' as any) as any).update({
         title: form.title, keywords: form.keywords, answer_text: form.answer_text, updated_at: new Date().toISOString(),
       }).eq('id', editing.id);
       toast.success('Template atualizado!');
     } else {
-      await supabase.from('ml_answer_templates').insert({
+      await (supabase.from('ml_answer_templates' as any) as any).insert({
         seller_id: sellerId, title: form.title, keywords: form.keywords, answer_text: form.answer_text, active: true,
       });
       toast.success('Template criado!');
@@ -383,13 +383,13 @@ function TemplatesTab({ sellerId }: { sellerId: string }) {
   };
 
   const toggleActive = async (t: Template) => {
-    await supabase.from('ml_answer_templates').update({ active: !t.active }).eq('id', t.id);
+    await (supabase.from('ml_answer_templates' as any) as any).update({ active: !t.active }).eq('id', t.id);
     setTemplates(prev => prev.map(x => x.id === t.id ? { ...x, active: !x.active } : x));
   };
 
   const deleteTemplate = async (id: string) => {
     if (!window.confirm('Excluir este template?')) return;
-    await supabase.from('ml_answer_templates').delete().eq('id', id);
+    await (supabase.from('ml_answer_templates' as any) as any).delete().eq('id', id);
     setTemplates(prev => prev.filter(x => x.id !== id));
     toast.success('Template excluído.');
   };
@@ -539,8 +539,8 @@ function IATab({ sellerId }: { sellerId: string }) {
 
   // Load competitors for source selection
   useEffect(() => {
-    supabase.from('ml_competitor_items').select('*').eq('seller_id', sellerId).eq('active', true)
-      .then(({ data }) => setCompetitorItems(data ?? []));
+    (supabase.from('ml_competitor_items' as any).select('*') as any).eq('seller_id', sellerId).eq('active', true)
+      .then(({ data }: any) => setCompetitorItems(data ?? []));
   }, [sellerId]);
 
   const handleAnalyze = () => {
