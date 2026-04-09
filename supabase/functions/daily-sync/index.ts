@@ -1,4 +1,4 @@
-﻿import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -274,7 +274,7 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
       i++;
 
       // Delay between batches to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   } catch (e: any) {
     log.push(`âŒ Estoque Tiny (pÃ¡g ${page}): ${e.message}`);
@@ -457,6 +457,3 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
 
   return moduleLog;
 }
-/ /   l o v a b l e   t r i g g e r 
- 
- 
