@@ -159,6 +159,12 @@ export function EstoquePage() {
     // Divide total quantity by 7 (fixed window) to get daily average
     grouped.forEach((total, key) => map.set(key, total / 7));
     skuOnly.forEach((total, sku) => map.set(`${sku}||__ANY__`, total / 7));
+
+    // DEBUG: log distinct conta keys so we can confirm alias mapping
+    const contaKeys = Array.from(new Set(
+      [...grouped.keys()].map(k => k.split('||')[1])
+    ));
+    console.log('[VMD DEBUG] conta keys from vendas-7d:', contaKeys);
     return map;
   }, [vendas7dItems, vendasItems]);
 
@@ -244,7 +250,8 @@ export function EstoquePage() {
       const { sku, conta, fullML, entradaPendente, emTransferencia } = item;
       const tinyLocal = tinyMap.get(sku) || 0;
       const normContaKey = `${sku}||${normalizeConta(conta)}`;
-      const vmd = vmdBySkuAndConta.get(normContaKey) ?? 0;
+      const vmd = vmdBySkuAndConta.get(normContaKey)
+        ?? vmdBySkuAndConta.get(`${sku}||__ANY__`) ?? 0;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
       const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
       const sugestaoEnvio = Math.max(0, Math.ceil((vmd * skuCobertura) - (fullML + entradaPendente + emTransferencia)));
