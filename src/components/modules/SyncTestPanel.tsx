@@ -318,9 +318,38 @@ function AutomationConfig() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-          <Power className="w-3.5 h-3.5" />
-          {enabledCount} ativo{enabledCount !== 1 ? 's' : ''}
+      <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+            <Power className="w-3.5 h-3.5" />
+            {enabledCount} ativo{enabledCount !== 1 ? 's' : ''}
+          </div>
+          {enabledCount > 0 && (
+            <button
+              onClick={async () => {
+                if (!window.confirm('Resetar todos os agendamentos de teste? Isso desativa todos os módulos e apaga os horários salvos.')) return;
+                setSaving(true);
+                try {
+                  await Promise.all([
+                    supabase.from('app_data').upsert({ data_key: 'daily_sync_modules', data_value: {} as any, updated_at: new Date().toISOString() }, { onConflict: 'data_key' }),
+                    supabase.from('app_data').upsert({ data_key: 'daily_sync_schedules', data_value: {} as any, updated_at: new Date().toISOString() }, { onConflict: 'data_key' }),
+                  ]);
+                  setEnabledModules({});
+                  setSchedules({});
+                  setEditMode({});
+                  toast.success('Todos os agendamentos foram resetados.');
+                } catch {
+                  toast.error('Erro ao resetar agendamentos.');
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-colors"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              Resetar tudo
+            </button>
+          )}
         </div>
       </div>
 
@@ -341,14 +370,22 @@ function AutomationConfig() {
         </div>
       </div>
 
-      {/* Module Groups */}
-      {Object.entries(groups).map(([group, modules]) => (
+      {/* Module Groups — only show enabled modules WITH a schedule time */}
+      {Object.entries(groups).map(([group, modules]) => {
+        const activeModules = modules.filter(mod => !!enabledModules[mod.key] && !!schedules[mod.key]);
+        const inactiveCount = modules.filter(mod => !enabledModules[mod.key] || !schedules[mod.key]).length;
+        if (activeModules.length === 0) return null; // hide group entirely if nothing active
+
+        return (
         <div key={group} className="rounded-xl border border-border overflow-hidden">
-          <div className="px-4 py-2.5 bg-muted/30 border-b border-border">
+          <div className="px-4 py-2.5 bg-muted/30 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">{group}</h3>
+            {inactiveCount > 0 && (
+              <span className="text-[10px] text-muted-foreground">{inactiveCount} inativo{inactiveCount > 1 ? 's' : ''} oculto{inactiveCount > 1 ? 's' : ''}</span>
+            )}
           </div>
           <div className="divide-y divide-border">
-            {modules.map(mod => {
+            {activeModules.map(mod => {
               const isEnabled = !!enabledModules[mod.key];
               const savedTime = schedules[mod.key];
               const isEditing = editMode[mod.key];
@@ -424,7 +461,8 @@ function AutomationConfig() {
             })}
           </div>
         </div>
-      ))}
+      ); })}
+
 
       <p className="text-xs text-muted-foreground text-center">
         Os horários são sincronizados automaticamente com o agendador. Desativar um módulo remove o agendamento.
