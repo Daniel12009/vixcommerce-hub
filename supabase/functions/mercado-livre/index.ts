@@ -424,7 +424,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, account_id, sku, item_id, fields, description_text, new_item, query, category_id, promotion_id, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget, spreadsheet_id: reqSpreadsheetId, sheet_name: reqSheetName, sheet_name_prefix: reqSheetPrefix, ad_type: reqAdType } = await req.json();
+    const { action, account_id, sku, item_id, fields, description_text, new_item, query, category_id, promotion_id, status: reqStatus, offset: reqOffset, limit: reqLimit, date_from: reqDateFrom, date_to: reqDateTo, campaign_id: reqCampaignId, budget: reqBudget, roas_target: reqRoasTarget, spreadsheet_id: reqSpreadsheetId, sheet_name: reqSheetName, sheet_name_prefix: reqSheetPrefix, ad_type: reqAdType, question_id, text, seller_id } = await req.json();
 
     if (action === 'list_accounts') {
       const res = await supabaseFetch('/ml_accounts?ativo=eq.true&select=id,nome,seller_id');
@@ -1351,7 +1351,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'answer_question') {
-      const { question_id, text, seller_id, account_id } = await req.json();
       if (!question_id || !text) throw new Error('question_id and text are required');
 
       const accountsRes = account_id 
