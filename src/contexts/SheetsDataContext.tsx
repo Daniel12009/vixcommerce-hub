@@ -215,7 +215,19 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setVendasItems(items);
   }, []);
 
-  const setPerformanceFromSheet = useCallback((rows: Record<string, string>[], contaOverride?: string) => {
+  const setVendas7dFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: Vendas7dItem[] = rows
+      .filter(r => r.sku)
+      .map(r => ({
+        conta: (r.conta || '').trim(),
+        sku: (r.sku || '').trim().toUpperCase(),
+        quantidade: num(r.quantidade) || 1,
+        data: r.data || '',
+      }));
+    setVendas7dItems(items);
+  }, []);
+
+
     const items: PerformanceItem[] = rows
       .filter(r => r.idAnuncio || r.sku)
       .map(r => ({
