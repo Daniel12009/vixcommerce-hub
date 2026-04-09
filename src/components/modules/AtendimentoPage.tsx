@@ -104,7 +104,7 @@ function FilaTab({ sellerId }: { sellerId: string }) {
     setSendingAnswers(p => ({ ...p, [q.id]: true }));
     try {
       const { data, error } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'answer_question', question_id: q.id, text, seller_id: q.seller_id },
+        body: { action: 'answer_question', question_id: q.id, text, account_id: q.account_id },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
