@@ -23,9 +23,9 @@ export function useMLBotMode(sellerId: string) {
 
   useEffect(() => {
     if (!sellerId) { setLoading(false); return; }
-    supabase
-      .from('ml_bot_config')
-      .select('*')
+    (supabase
+      .from('ml_bot_config' as any)
+      .select('*') as any)
       .eq('seller_id', sellerId)
       .maybeSingle()
       .then(({ data }) => {
@@ -45,8 +45,8 @@ export function useMLBotMode(sellerId: string) {
   };
 
   const incrementManual = async () => {
-    await supabase
-      .from('ml_bot_config')
+    await (supabase
+      .from('ml_bot_config' as any) as any)
       .update({ manual_count: config.manual_count + 1 })
       .eq('seller_id', sellerId);
     setConfig(prev => ({ ...prev, manual_count: prev.manual_count + 1 }));

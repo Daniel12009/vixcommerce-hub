@@ -17,9 +17,9 @@ export function CompetitorItemsManager({ sellerId }: Props) {
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    supabase
-      .from('ml_competitor_items')
-      .select('*')
+    (supabase
+      .from('ml_competitor_items' as any)
+      .select('*') as any)
       .eq('seller_id', sellerId)
       .eq('active', true)
       .order('created_at', { ascending: false })
@@ -29,8 +29,8 @@ export function CompetitorItemsManager({ sellerId }: Props) {
   const add = async () => {
     if (!newItemId.trim() || !newLabel.trim()) return;
     setAdding(true);
-    const { data } = await supabase
-      .from('ml_competitor_items')
+    const { data } = await (supabase
+      .from('ml_competitor_items' as any) as any)
       .insert({
         seller_id: sellerId,
         item_id: newItemId.trim().toUpperCase(),
@@ -45,7 +45,7 @@ export function CompetitorItemsManager({ sellerId }: Props) {
   };
 
   const remove = async (id: string) => {
-    await supabase.from('ml_competitor_items').update({ active: false }).eq('id', id);
+    await (supabase.from('ml_competitor_items' as any) as any).update({ active: false }).eq('id', id);
     setItems(prev => prev.filter(i => i.id !== id));
   };
 

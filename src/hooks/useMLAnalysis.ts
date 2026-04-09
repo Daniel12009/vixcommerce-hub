@@ -56,7 +56,7 @@ export function useMLAnalysis(sellerId: string) {
   };
 
   const acceptSuggestion = async (suggestion: AISuggestion) => {
-    await supabase.from('ml_answer_templates').insert({
+    await (supabase.from('ml_answer_templates' as any) as any).insert({
       seller_id: sellerId,
       title: suggestion.theme,
       keywords: suggestion.keywords,

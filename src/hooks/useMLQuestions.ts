@@ -19,13 +19,13 @@ export function useMLQuestions(sellerId: string) {
   const refetchQueue = () => {
     if (!sellerId) return;
     setLoading(true);
-    supabase
-      .from('ml_questions_queue')
-      .select('*')
+    (supabase
+      .from('ml_questions_queue' as any)
+      .select('*') as any)
       .eq('seller_id', sellerId)
       .eq('status', 'pending')
       .order('date_created', { ascending: true })
-      .then(({ data }) => { setPending((data as QueueItem[]) ?? []); setLoading(false); });
+      .then(({ data }: any) => { setPending((data as QueueItem[]) ?? []); setLoading(false); });
   };
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function useMLQuestions(sellerId: string) {
   };
 
   const ignore = async (queueId: string) => {
-    await supabase.from('ml_questions_queue').update({ status: 'ignored' }).eq('id', queueId);
+    await (supabase.from('ml_questions_queue' as any) as any).update({ status: 'ignored' }).eq('id', queueId);
     setPending(prev => prev.filter(q => q.id !== queueId));
   };
 
@@ -83,7 +83,7 @@ export function useMLQuestions(sellerId: string) {
       .filter(w => w.length > 3 && !stopWords.has(w))
       .slice(0, 6);
 
-    await supabase.from('ml_answer_templates').insert({
+    await (supabase.from('ml_answer_templates' as any) as any).insert({
       seller_id: sellerId,
       title: item.question_text.slice(0, 60),
       keywords,
