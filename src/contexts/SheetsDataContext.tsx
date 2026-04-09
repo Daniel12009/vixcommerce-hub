@@ -426,6 +426,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     // ━━━ PHASE 0: Instant load from localStorage (synchronous) ━━━
     const KEYS_MAP: [string, (d: any) => void][] = [
       ['vendas_data', setVendasFromSheet],
+      ['vendas_7d_data', setVendas7dFromSheet],
       ['performance_data', setPerformanceFromSheet],
       ['estoque_full_data', setEstoqueFullFromSheet],
       ['estoque_tiny_data', setEstoqueTinyFromSheet],
