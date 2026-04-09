@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora' | 'compras' | 'atividades';
+export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'vendas-7d' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora' | 'compras' | 'atividades';
 
 export interface SheetConfig {
   id: string;
