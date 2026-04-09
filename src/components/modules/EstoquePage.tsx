@@ -41,22 +41,26 @@ export function EstoquePage() {
   const { estoqueFullItems, estoqueTinyItems, vendasItems, vendas7dItems, refreshModule, refreshingModule } = useSheetsData();
 
   const handleRefresh = useCallback(async () => {
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, r3] = await Promise.all([
       refreshModule('estoque-full'),
       refreshModule('estoque-tiny'),
+      refreshModule('vendas-7d'),
     ]);
-    toast.success(`Estoque atualizado! ${r1 + r2} registros importados`);
+    toast.success(`Estoque atualizado! ${r1 + r2} registros, ${r3} vendas 7d importadas`);
   }, [refreshModule]);
-  const isRefreshing = refreshingModule === 'estoque-full' || refreshingModule === 'estoque-tiny';
+  const isRefreshing = refreshingModule === 'estoque-full' || refreshingModule === 'estoque-tiny' || refreshingModule === 'vendas-7d';
 
   const hasAutoLoaded = useRef(false);
   useEffect(() => {
     if (hasAutoLoaded.current) return;
+    hasAutoLoaded.current = true;
+    // Always load vendas-7d on mount; also load stock if missing
+    const promises: Promise<number>[] = [refreshModule('vendas-7d')];
     if (!estoqueFullItems && !estoqueTinyItems) {
-      hasAutoLoaded.current = true;
-      handleRefresh();
+      promises.push(refreshModule('estoque-full'), refreshModule('estoque-tiny'));
     }
-  }, [estoqueFullItems, estoqueTinyItems, handleRefresh]);
+    Promise.all(promises);
+  }, [estoqueFullItems, estoqueTinyItems, refreshModule]);
 
   // Master coverage + per-SKU overrides
   const [diasCoberturaAlvo, setDiasCoberturaAlvo] = useState<number>(() => {
