@@ -404,6 +404,7 @@ export function PlanilhasConfigSection() {
                         <SelectItem value="estoque-tiny">🏠 Estoque Tiny (Local)</SelectItem>
                         <SelectItem value="financeiro">💰 Financeiro</SelectItem>
                         <SelectItem value="vendas">🛒 Vendas / Pedidos</SelectItem>
+                        <SelectItem value="vendas-7d">📊 Vendas 7 Dias (Estoque)</SelectItem>
                         <SelectItem value="performance">📊 Performance Anúncios</SelectItem>
                         <SelectItem value="ads">📈 Performance ADS</SelectItem>
                         <SelectItem value="devolucao">🔄 Devoluções</SelectItem>
