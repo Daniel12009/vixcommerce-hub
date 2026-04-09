@@ -24,6 +24,7 @@ const moduloLabels: Record<ModuloDestino, string> = {
   'estoque-tiny': 'Estoque Tiny (Local)',
   financeiro: 'Financeiro',
   vendas: 'Vendas / Pedidos',
+  'vendas-7d': 'Vendas 7 Dias (Estoque)',
   performance: 'Performance Anúncios',
   ads: 'Performance ADS',
   devolucao: 'Devoluções',
@@ -39,6 +40,7 @@ const moduloColors: Record<ModuloDestino, string> = {
   'estoque-tiny': 'bg-[hsl(200,80%,50%,0.1)] text-[hsl(200,80%,50%)]',
   financeiro: 'bg-[hsl(var(--vix-success)/0.1)] text-[hsl(var(--vix-success))]',
   vendas: 'bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))]',
+  'vendas-7d': 'bg-[hsl(38,92%,50%,0.1)] text-[hsl(38,92%,50%)]',
   performance: 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]',
   ads: 'bg-[hsl(142,76%,36%,0.1)] text-[hsl(142,76%,36%)]',
   devolucao: 'bg-[hsl(0,72%,50%,0.1)] text-[hsl(0,72%,50%)]',
@@ -232,6 +234,7 @@ export function PlanilhasConfigSection() {
       else if (config.moduloDestino === 'estoque-tiny') { sheetsData.setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
       else if (config.moduloDestino === 'financeiro') { sheetsData.setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
       else if (config.moduloDestino === 'vendas') { sheetsData.setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
+      else if (config.moduloDestino === 'vendas-7d') { sheetsData.setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
       else if (config.moduloDestino === 'performance') {
         sheetsData.setPerformanceFromSheet(parsed, config.abaNome);
         const existing = await loadFromCloud<any[]>('performance_data') || [];

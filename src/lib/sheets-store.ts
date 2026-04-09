@@ -1,6 +1,6 @@
 // Sheets configuration store with localStorage persistence
 
-export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora' | 'compras' | 'atividades';
+export type ModuloDestino = 'estoque' | 'estoque-full' | 'estoque-tiny' | 'financeiro' | 'vendas' | 'vendas-7d' | 'performance' | 'ads' | 'devolucao' | 'marketplace-dia' | 'calculadora' | 'compras' | 'atividades';
 
 export interface SheetConfig {
   id: string;
@@ -77,6 +77,12 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'margem', label: 'Margem sobre Custo Real (AJ)' },
     { key: 'devolucao', label: 'Devolução' },
     { key: 'frete', label: 'Forma de entrega' },
+  ],
+  'vendas-7d': [
+    { key: 'conta', label: 'Conta', obrigatorio: true },
+    { key: 'sku', label: 'SKU', obrigatorio: true },
+    { key: 'quantidade', label: 'Unidades Vendidas', obrigatorio: true },
+    { key: 'data', label: 'Data Ref' },
   ],
   performance: [
     { key: 'plataforma', label: 'Plataforma', obrigatorio: true },

@@ -3,12 +3,20 @@ import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaI
 import { loadFromCloud, saveToCloud, syncVendasIncremental } from '@/lib/persistence';
 import type { ModuloDestino } from '@/lib/sheets-store';
 
+export interface Vendas7dItem {
+  conta: string;
+  sku: string;
+  quantidade: number;
+  data: string;
+}
+
 interface SheetsData {
   estoqueItems: StockItem[] | null;
   estoqueFullItems: EstoqueFullItem[] | null;
   estoqueTinyItems: EstoqueTinyItem[] | null;
   financeiroItems: FinancialItem[] | null;
   vendasItems: VendaItem[] | null;
+  vendas7dItems: Vendas7dItem[] | null;
   performanceItems: PerformanceItem[] | null;
   adsItems: AdsImportItem[] | null;
   devolucaoItems: DevolucaoItem[] | null;
@@ -22,6 +30,7 @@ interface SheetsData {
   setEstoqueTinyFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
+  setVendas7dFromSheet: (rows: Record<string, string>[]) => void;
   setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   setAdsFromSheet: (rows: Record<string, string>[]) => void;
   setDevolucaoFromSheet: (rows: Record<string, string>[]) => void;
@@ -34,6 +43,7 @@ interface SheetsData {
   clearEstoqueTiny: () => void;
   clearFinanceiro: () => void;
   clearVendas: () => void;
+  clearVendas7d: () => void;
   clearPerformance: () => void;
   clearAds: () => void;
   clearDevolucao: () => void;
@@ -66,6 +76,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   const [estoqueTinyItems, setEstoqueTinyItems] = useState<EstoqueTinyItem[] | null>(null);
   const [financeiroItems, setFinanceiroItems] = useState<FinancialItem[] | null>(null);
   const [vendasItems, setVendasItems] = useState<VendaItem[] | null>(null);
+  const [vendas7dItems, setVendas7dItems] = useState<Vendas7dItem[] | null>(null);
   const [performanceItems, setPerformanceItems] = useState<PerformanceItem[] | null>(null);
   const [adsItems, setAdsItems] = useState<AdsImportItem[] | null>(null);
   const [devolucaoItems, setDevolucaoItems] = useState<DevolucaoItem[] | null>(null);
@@ -202,6 +213,18 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         return Object.assign({}, r, baseItem);
       });
     setVendasItems(items);
+  }, []);
+
+  const setVendas7dFromSheet = useCallback((rows: Record<string, string>[]) => {
+    const items: Vendas7dItem[] = rows
+      .filter(r => r.sku)
+      .map(r => ({
+        conta: (r.conta || '').trim(),
+        sku: (r.sku || '').trim().toUpperCase(),
+        quantidade: num(r.quantidade) || 1,
+        data: r.data || '',
+      }));
+    setVendas7dItems(items);
   }, []);
 
   const setPerformanceFromSheet = useCallback((rows: Record<string, string>[], contaOverride?: string) => {
@@ -403,6 +426,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     // ━━━ PHASE 0: Instant load from localStorage (synchronous) ━━━
     const KEYS_MAP: [string, (d: any) => void][] = [
       ['vendas_data', setVendasFromSheet],
+      ['vendas_7d_data', setVendas7dFromSheet],
       ['performance_data', setPerformanceFromSheet],
       ['estoque_full_data', setEstoqueFullFromSheet],
       ['estoque_tiny_data', setEstoqueTinyFromSheet],
@@ -478,6 +502,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           if (!parsed || parsed.length === 0) continue;
           const mod = config.moduloDestino;
           if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
+          else if (mod === 'vendas-7d') { setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
           else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
           else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
           else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
@@ -505,6 +530,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       estoqueTinyItems,
       financeiroItems,
       vendasItems,
+      vendas7dItems,
       performanceItems,
       adsItems,
       devolucaoItems,
@@ -518,6 +544,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       setEstoqueTinyFromSheet,
       setFinanceiroFromSheet,
       setVendasFromSheet,
+      setVendas7dFromSheet,
       setPerformanceFromSheet,
       setAdsFromSheet,
       setDevolucaoFromSheet,
@@ -530,6 +557,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       clearEstoqueTiny: () => setEstoqueTinyItems(null),
       clearFinanceiro: () => setFinanceiroItems(null),
       clearVendas: () => setVendasItems(null),
+      clearVendas7d: () => setVendas7dItems(null),
       clearPerformance: () => setPerformanceItems(null),
       clearAds: () => setAdsItems(null),
       clearDevolucao: () => setDevolucaoItems(null),
@@ -552,6 +580,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
             else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
             else if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
+            else if (mod === 'vendas-7d') { setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
             else if (mod === 'performance') {
               setPerformanceFromSheet(parsed, config.abaNome);
               const existing = await loadFromCloud<any[]>('performance_data') || [];
