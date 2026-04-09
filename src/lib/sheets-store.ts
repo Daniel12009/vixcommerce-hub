@@ -78,6 +78,12 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'devolucao', label: 'Devolução' },
     { key: 'frete', label: 'Forma de entrega' },
   ],
+  'vendas-7d': [
+    { key: 'conta', label: 'Conta', obrigatorio: true },
+    { key: 'sku', label: 'SKU', obrigatorio: true },
+    { key: 'quantidade', label: 'Unidades Vendidas', obrigatorio: true },
+    { key: 'data', label: 'Data Ref' },
+  ],
   performance: [
     { key: 'plataforma', label: 'Plataforma', obrigatorio: true },
     { key: 'idAnuncio', label: 'ID Anúncio', obrigatorio: true },
