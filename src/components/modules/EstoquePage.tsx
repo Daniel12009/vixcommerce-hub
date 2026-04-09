@@ -106,37 +106,49 @@ export function EstoquePage() {
     const map = new Map<string, number>();
     const grouped = new Map<string, number>();
     const skuOnly = new Map<string, number>();
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // last 7 days
 
-    (vendasItems || []).forEach(item => {
-      if (!item.sku || item.statusPedido === 'cancelado') return;
-      let dateMs = 0;
-      if (item.data) {
-        const parts = item.data.split('/');
-        dateMs = parts.length === 3
-          ? new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime()
-          : new Date(item.data).getTime();
-      }
-      if (isNaN(dateMs) || dateMs < cutoff) return;
+    // Prefer vendas7dItems (dedicated 7-day sheet) over vendasItems
+    if (vendas7dItems && vendas7dItems.length > 0) {
+      vendas7dItems.forEach(item => {
+        if (!item.sku) return;
+        const sku = item.sku.trim().toUpperCase();
+        const normConta = normalizeConta(item.conta || '');
+        const qty = Number(item.quantidade || 1);
 
-      const sku = item.sku.trim().toUpperCase();
-      const contaRaw = (item.conta || item.contaMae || '').trim();
-      const normConta = normalizeConta(contaRaw);
-      const qty = Number(item.quantidade || 1);
+        const key = `${sku}||${normConta}`;
+        grouped.set(key, (grouped.get(key) || 0) + qty);
+        skuOnly.set(sku, (skuOnly.get(sku) || 0) + qty);
+      });
+    } else {
+      // Fallback: use vendasItems filtered to last 7 days
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      (vendasItems || []).forEach(item => {
+        if (!item.sku || item.statusPedido === 'cancelado') return;
+        let dateMs = 0;
+        if (item.data) {
+          const parts = item.data.split('/');
+          dateMs = parts.length === 3
+            ? new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime()
+            : new Date(item.data).getTime();
+        }
+        if (isNaN(dateMs) || dateMs < cutoff) return;
 
-      // Per-account key (normalized)
-      const key = `${sku}||${normConta}`;
-      grouped.set(key, (grouped.get(key) || 0) + qty);
+        const sku = item.sku.trim().toUpperCase();
+        const contaRaw = (item.conta || item.contaMae || '').trim();
+        const normConta = normalizeConta(contaRaw);
+        const qty = Number(item.quantidade || 1);
 
-      // SKU-only fallback
-      skuOnly.set(sku, (skuOnly.get(sku) || 0) + qty);
-    });
+        const key = `${sku}||${normConta}`;
+        grouped.set(key, (grouped.get(key) || 0) + qty);
+        skuOnly.set(sku, (skuOnly.get(sku) || 0) + qty);
+      });
+    }
 
     // Divide total quantity by 7 (fixed window) to get daily average
     grouped.forEach((total, key) => map.set(key, total / 7));
     skuOnly.forEach((total, sku) => map.set(`${sku}||__ANY__`, total / 7));
     return map;
-  }, [vendasItems]);
+  }, [vendas7dItems, vendasItems]);
 
 
   const mergedData = useMemo<MergedStockRow[]>(() => {
