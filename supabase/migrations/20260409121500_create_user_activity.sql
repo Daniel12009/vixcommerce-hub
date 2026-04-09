@@ -17,9 +17,11 @@ CREATE INDEX IF NOT EXISTS idx_user_activity_module ON user_activity_events (use
 -- Segurança e Políticas de Acesso
 ALTER TABLE public.user_activity_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users see own events" ON public.user_activity_events;
 CREATE POLICY "users see own events" ON public.user_activity_events
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "users insert own events" ON public.user_activity_events;
 CREATE POLICY "users insert own events" ON public.user_activity_events
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
