@@ -1350,6 +1350,35 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'answer_question') {
+      const { question_id, text, seller_id, account_id } = await req.json();
+      if (!question_id || !text) throw new Error('question_id and text are required');
+
+      const accountsRes = account_id 
+        ? await supabaseFetch(`/ml_accounts?id=eq.${account_id}&ativo=eq.true`)
+        : await supabaseFetch(`/ml_accounts?seller_id=eq.${seller_id}&ativo=eq.true`);
+      const accounts = await accountsRes.json();
+      if (!accounts?.length) throw new Error('Conta ML não encontrada');
+      const account = accounts[0];
+
+      let token = account.access_token;
+      if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+        token = await refreshToken(account);
+      }
+      
+      const mlRes = await fetch(`${ML_API}/answers`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ question_id, text })
+      });
+      
+      if (!mlRes.ok) throw new Error(`Erro ao responder no ML: ${await mlRes.text()}`);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     if (action === 'get_category_attributes') {
       const catId = category_id || (fields as any)?.category_id;
       if (!catId) throw new Error('category_id is required');

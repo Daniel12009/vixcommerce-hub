@@ -94,6 +94,27 @@ function FilaTab({ sellerId }: { sellerId: string }) {
   const [filterTab, setFilterTab] = useState<FilterTab>('UNANSWERED');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [answerTexts, setAnswerTexts] = useState<Record<number, string>>({});
+  const [sendingAnswers, setSendingAnswers] = useState<Record<number, boolean>>({});
+
+  const handleGeneralAnswer = async (q: Question) => {
+    const text = answerTexts[q.id]?.trim();
+    if (!text) return;
+    setSendingAnswers(p => ({ ...p, [q.id]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke('mercado-livre', {
+        body: { action: 'answer_question', question_id: q.id, text, seller_id: q.seller_id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      toast.success('Resposta enviada! ✓');
+      setQuestions(prev => prev.map(x => x.id === q.id ? { ...x, status: 'ANSWERED', answer: { text, date_created: new Date().toISOString() } } as Question : x));
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao enviar resposta');
+    }
+    setSendingAnswers(p => ({ ...p, [q.id]: false }));
+  };
 
   const { pending, loading: queueLoading, answer, ignore, saveAsTemplate } = useMLQuestions(sellerId);
   const { config, loading: botLoading, setMode, incrementManual } = useMLBotMode(sellerId);
@@ -244,12 +265,34 @@ function FilaTab({ sellerId }: { sellerId: string }) {
                       <p className="text-sm text-foreground">{q.answer.text}</p>
                     </div>
                   ) : (
-                    <div className="mt-3 bg-amber-500/5 rounded-lg p-3 text-center">
-                      <p className="text-xs text-amber-400">Aguardando resposta</p>
-                      <a href={`https://www.mercadolivre.com.br/perguntas/${q.id}`} target="_blank" rel="noopener"
-                        className="inline-flex items-center gap-1 mt-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90">
-                        <Send className="w-3 h-3" /> Responder no ML
-                      </a>
+                    <div className="mt-3 bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                      <textarea
+                        value={answerTexts[q.id] || ''}
+                        onChange={e => setAnswerTexts({ ...answerTexts, [q.id]: e.target.value })}
+                        maxLength={2000}
+                        rows={3}
+                        className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-primary/40 mb-2"
+                        placeholder="Digite sua resposta..."
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground ml-1">
+                          {(answerTexts[q.id] || '').length}/2000
+                        </span>
+                        <div className="flex gap-2">
+                          <a href={`https://www.mercadolivre.com.br/perguntas/${q.id}`} target="_blank" rel="noopener"
+                             className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">
+                            Abrir no ML ↗
+                          </a>
+                          <button
+                            onClick={() => handleGeneralAnswer(q)}
+                            disabled={sendingAnswers[q.id] || !(answerTexts[q.id] || '').trim()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-colors"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            {sendingAnswers[q.id] ? 'Enviando...' : 'Responder'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
