@@ -32,7 +32,7 @@ serve(async (req) => {
 
       // Buscar perguntas não respondidas
       const res = await fetch(
-        `https://api.mercadolibre.com/questions/search?seller_id=${seller.seller_id}&status=UNANSWERED&api_version=4&sort_fields=date_created&sort_types=ASC&limit=50`,
+        `https://api.mercadolibre.com/questions/search?seller_id=${seller.seller_id}&status=UNANSWERED&api_version=4&sort_fields=date_created&sort_types=DESC&limit=50`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
 
@@ -64,7 +64,7 @@ serve(async (req) => {
         }
         // Retry
         const retryRes = await fetch(
-          `https://api.mercadolibre.com/questions/search?seller_id=${seller.seller_id}&status=UNANSWERED&api_version=4&sort_fields=date_created&sort_types=ASC&limit=50`,
+          `https://api.mercadolibre.com/questions/search?seller_id=${seller.seller_id}&status=UNANSWERED&api_version=4&sort_fields=date_created&sort_types=DESC&limit=50`,
           { headers: { Authorization: `Bearer ${token}` } }
         )
         const json = await retryRes.json()
