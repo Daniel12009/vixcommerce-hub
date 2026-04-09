@@ -3,12 +3,20 @@ import type { StockItem, EstoqueFullItem, EstoqueTinyItem, FinancialItem, VendaI
 import { loadFromCloud, saveToCloud, syncVendasIncremental } from '@/lib/persistence';
 import type { ModuloDestino } from '@/lib/sheets-store';
 
+export interface Vendas7dItem {
+  conta: string;
+  sku: string;
+  quantidade: number;
+  data: string;
+}
+
 interface SheetsData {
   estoqueItems: StockItem[] | null;
   estoqueFullItems: EstoqueFullItem[] | null;
   estoqueTinyItems: EstoqueTinyItem[] | null;
   financeiroItems: FinancialItem[] | null;
   vendasItems: VendaItem[] | null;
+  vendas7dItems: Vendas7dItem[] | null;
   performanceItems: PerformanceItem[] | null;
   adsItems: AdsImportItem[] | null;
   devolucaoItems: DevolucaoItem[] | null;
@@ -22,6 +30,7 @@ interface SheetsData {
   setEstoqueTinyFromSheet: (rows: Record<string, string>[]) => void;
   setFinanceiroFromSheet: (rows: Record<string, string>[]) => void;
   setVendasFromSheet: (rows: Record<string, string>[]) => void;
+  setVendas7dFromSheet: (rows: Record<string, string>[]) => void;
   setPerformanceFromSheet: (rows: Record<string, string>[], contaOverride?: string) => void;
   setAdsFromSheet: (rows: Record<string, string>[]) => void;
   setDevolucaoFromSheet: (rows: Record<string, string>[]) => void;
@@ -34,6 +43,7 @@ interface SheetsData {
   clearEstoqueTiny: () => void;
   clearFinanceiro: () => void;
   clearVendas: () => void;
+  clearVendas7d: () => void;
   clearPerformance: () => void;
   clearAds: () => void;
   clearDevolucao: () => void;
