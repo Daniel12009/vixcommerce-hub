@@ -1335,6 +1335,7 @@ Deno.serve(async (req) => {
                 answer: q.answer ? { text: q.answer.text, date_created: q.answer.date_created } : null,
                 from: { id: q.from?.id, nickname: '' },
                 seller_id: account.seller_id,
+                account_id: account.id,
                 conta: account.nickname,
               });
             }
