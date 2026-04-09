@@ -8,6 +8,8 @@ export interface SheetConfig {
   nome: string;
   spreadsheetId: string;
   abaNome: string;
+  /** For vendas-7d: the Conta name as it appears in Estoque Full (to link VMD correctly). Falls back to abaNome. */
+  contaEstoqueNome?: string;
   moduloDestino: ModuloDestino;
   mapeamento: Record<string, string>; // fieldName -> column header name
   valoresFixos?: Record<string, string>; // fieldName -> fixed value (e.g. conta from a different row)

@@ -507,9 +507,10 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
           const mod = config.moduloDestino;
           if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
           else if (mod === 'vendas-7d') {
-            setVendas7dFromSheet(parsed, config.abaNome);
+            const contaKey = config.contaEstoqueNome || config.abaNome;
+            setVendas7dFromSheet(parsed, contaKey);
             const existing = await loadFromCloud<any[]>('vendas_7d_data') || [];
-            const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+            const merged = [...existing.filter((p: any) => p.conta !== contaKey), ...parsed.map(p => ({ ...p, conta: contaKey }))];
             saveToCloud('vendas_7d_data', merged);
           }
           else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
@@ -590,9 +591,10 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
             else if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
             else if (mod === 'vendas-7d') {
-              setVendas7dFromSheet(parsed, config.abaNome);
+              const contaKey = config.contaEstoqueNome || config.abaNome;
+              setVendas7dFromSheet(parsed, contaKey);
               const existing = await loadFromCloud<any[]>('vendas_7d_data') || [];
-              const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+              const merged = [...existing.filter((p: any) => p.conta !== contaKey), ...parsed.map(p => ({ ...p, conta: contaKey }))];
               saveToCloud('vendas_7d_data', merged);
             }
             else if (mod === 'performance') {

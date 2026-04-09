@@ -103,8 +103,16 @@ export function EstoquePage() {
   }, [estoqueFullItems]);
 
   // Normalize conta names for fuzzy matching: "[VIAFLIX]", "(VIA FLIX)" and "VIA FLIX" → "VIAFLIX"
-  const normalizeConta = (s: string) =>
-    s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Aliases map known vendas-7d sheet names to their corresponding Estoque Full conta keys
+  const CONTA_ALIASES: Record<string, string> = {
+    'GSTORNEIRAS': 'GSI',
+    'DECARIONTORNEIRAS': 'MONACO',
+    // Add more aliases here if new accounts are added with mismatched names
+  };
+  const normalizeConta = (s: string) => {
+    const base = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return CONTA_ALIASES[base] ?? base;
+  };
 
   const vmdBySkuAndConta = useMemo(() => {
     const map = new Map<string, number>();
@@ -236,8 +244,7 @@ export function EstoquePage() {
       const { sku, conta, fullML, entradaPendente, emTransferencia } = item;
       const tinyLocal = tinyMap.get(sku) || 0;
       const normContaKey = `${sku}||${normalizeConta(conta)}`;
-      const vmd = vmdBySkuAndConta.get(normContaKey)
-        ?? vmdBySkuAndConta.get(`${sku}||__ANY__`) ?? 0;
+      const vmd = vmdBySkuAndConta.get(normContaKey) ?? 0;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
       const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
       const sugestaoEnvio = Math.max(0, Math.ceil((vmd * skuCobertura) - (fullML + entradaPendente + emTransferencia)));

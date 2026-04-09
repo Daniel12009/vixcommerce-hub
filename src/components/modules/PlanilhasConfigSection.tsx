@@ -72,6 +72,7 @@ export function PlanilhasConfigSection() {
   const [mappingHeaders, setMappingHeaders] = useState<string[]>([]);
   const [newConfigValoresFixos, setNewConfigValoresFixos] = useState<Record<string, string>>({});
   const [customColumns, setCustomColumns] = useState<{ id: string; targetName: string; selectedSourceColumn: string }[]>([]);
+  const [newConfigContaEstoque, setNewConfigContaEstoque] = useState('');
 
   // Persist configs to localStorage AND Supabase
   const cloudReady = useRef(false);
@@ -174,6 +175,7 @@ export function PlanilhasConfigSection() {
     setNewConfigAba(config.abaNome);
     setNewConfigModulo(config.moduloDestino);
     setNewConfigLinhaInicial(config.linhaInicial);
+    setNewConfigContaEstoque(config.contaEstoqueNome || '');
     handleFetchHeadersForMapping(config.abaNome, config.mapeamento, config.valoresFixos);
   };
 
@@ -198,6 +200,7 @@ export function PlanilhasConfigSection() {
       spreadsheetId, abaNome: newConfigAba, moduloDestino: newConfigModulo,
       mapeamento: finalMapping, valoresFixos: Object.keys(fixos).length > 0 ? fixos : undefined,
       linhaInicial: newConfigLinhaInicial,
+      contaEstoqueNome: newConfigModulo === 'vendas-7d' && newConfigContaEstoque.trim() ? newConfigContaEstoque.trim() : undefined,
     };
     if (editingConfigId) {
       setSheetConfigs(prev => prev.map(c => c.id === editingConfigId ? config : c));
@@ -235,9 +238,10 @@ export function PlanilhasConfigSection() {
       else if (config.moduloDestino === 'financeiro') { sheetsData.setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
       else if (config.moduloDestino === 'vendas') { sheetsData.setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
       else if (config.moduloDestino === 'vendas-7d') {
-        sheetsData.setVendas7dFromSheet(parsed, config.abaNome);
+        const contaKey = config.contaEstoqueNome || config.abaNome;
+        sheetsData.setVendas7dFromSheet(parsed, contaKey);
         const existing = await loadFromCloud<any[]>('vendas_7d_data') || [];
-        const merged = [...existing.filter((p: any) => p.conta !== config.abaNome), ...parsed.map(p => ({ ...p, conta: config.abaNome }))];
+        const merged = [...existing.filter((p: any) => p.conta !== contaKey), ...parsed.map(p => ({ ...p, conta: contaKey }))];
         saveToCloud('vendas_7d_data', merged);
       }
       else if (config.moduloDestino === 'performance') {
@@ -430,6 +434,19 @@ export function PlanilhasConfigSection() {
                     />
                     <p className="text-[10px] text-muted-foreground">Linha onde estão os cabeçalhos das colunas</p>
                   </div>
+
+                  {newConfigModulo === 'vendas-7d' && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-amber-500">⚠️ Conta no Estoque Full</Label>
+                      <Input
+                        placeholder="Ex: [VIAFLIX] ou (GSI) — exatamente como aparece no Estoque"
+                        value={newConfigContaEstoque}
+                        onChange={e => setNewConfigContaEstoque(e.target.value)}
+                        className="text-xs"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Necessário quando o nome na planilha (ex: GS TORNEIRAS) é diferente do nome no Estoque Full (ex: [GSI]). Deixe vazio se são iguais.</p>
+                    </div>
+                  )}
 
                   <button
                     onClick={() => newConfigAba && handleFetchHeadersForMapping(newConfigAba)}
