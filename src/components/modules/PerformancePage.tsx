@@ -13,13 +13,13 @@ export default function PerformancePage() {
   } = useUserPerformance()
 
   return (
-    <div className="bg-[#0A0D0B] min-h-screen text-gray-200">
+    <div className="min-h-screen text-foreground">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold tracking-tight text-white mb-2">Performance &amp; Atividade</h1>
-          <p className="text-sm text-gray-400">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground mb-2">Performance &amp; Atividade</h1>
+          <p className="text-sm text-muted-foreground">
             Acompanhe o seu painel de produtividade detalhado baseado nas suas atividades no sistema.
           </p>
         </div>
@@ -37,9 +37,9 @@ export default function PerformancePage() {
         </div>
 
         {/* Section 2: Heatmap */}
-        <Card className="bg-[#121614] border-gray-800">
+        <Card className="border-border">
           <CardHeader>
-            <CardTitle className="text-lg font-medium text-gray-200">Heatmap de Contribuição (90 dias)</CardTitle>
+            <CardTitle className="text-lg font-medium text-foreground">Heatmap de Contribuição (90 dias)</CardTitle>
           </CardHeader>
           <CardContent>
             <ActivityHeatmap data={heatmap} />
