@@ -79,6 +79,9 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
   const [editWarrantyTime, setEditWarrantyTime] = useState('90 dias');
   const [publishing, setPublishing] = useState(false);
   const [publishMsg, setPublishMsg] = useState('');
+  const [catalogProductId, setCatalogProductId] = useState('');
+  const [publishingCatalog, setPublishingCatalog] = useState(false);
+  const [catalogMsg, setCatalogMsg] = useState('');
 
   if (!open) return null;
 
@@ -429,6 +432,67 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
       warranty_time: editWarrantyTime,
     });
     onClose();
+  }
+
+  async function handlePublishCatalog() {
+    if (!editPrice || !editCategoryId) {
+      setError('Preencha preço e categoria antes de publicar no catálogo.');
+      return;
+    }
+    if (!catalogProductId.trim()) {
+      setError('Informe o catalog_product_id (ex: MLB123456) para publicar no catálogo.');
+      return;
+    }
+    setPublishingCatalog(true);
+    setCatalogMsg('');
+    setError('');
+    try {
+      setCatalogMsg('Publicando no catálogo...');
+      const pictures = selectedPhotos.map(u => ({ source: u }));
+      const itemPayload: any = {
+        title: (editTitleSeo || editTitle).slice(0, 60),
+        price: Number(editPrice),
+        available_quantity: Number(editQuantity) || 1,
+        condition: 'new',
+        listing_type_id: editListingType || 'gold_special',
+        category_id: editCategoryId,
+        currency_id: 'BRL',
+        buying_mode: 'buy_it_now',
+        catalog_product_id: catalogProductId.trim(),
+        catalog_listing: true,
+      };
+      if (sku) itemPayload.seller_custom_field = sku;
+      if (pictures.length > 0) itemPayload.pictures = pictures;
+      if (editWarrantyType && editWarrantyTime) {
+        itemPayload.sale_terms = [
+          { id: 'WARRANTY_TYPE', value_name: editWarrantyType },
+          { id: 'WARRANTY_TIME', value_name: editWarrantyTime },
+        ];
+      }
+      itemPayload.attributes = [
+        { id: 'BRAND', value_name: attrValues['BRAND']?.trim() || 'Sem marca' },
+        { id: 'ITEM_CONDITION', value_name: 'Novo' },
+        ...Object.entries(attrValues || {})
+          .filter(([id, val]) => id !== 'BRAND' && id !== 'family_name' && id !== 'ITEM_CONDITION' && val?.trim())
+          .map(([id, value]) => ({ id, value_name: String(value).trim() })),
+      ];
+      itemPayload.channels = ['marketplace'];
+      const { data: result, error: fnError } = await supabase.functions.invoke('mercado-livre', {
+        body: { action: 'create_item', new_item: itemPayload, account_id: accountId },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (result?.error) {
+        const detail = result.cause ? ` (${JSON.stringify(result.cause)})` : '';
+        throw new Error(`ML: ${result.message || result.error}${detail}`);
+      }
+      if (!result?.id) throw new Error('ML não retornou ID do catálogo.');
+      setCatalogMsg(`✅ No catálogo! ID: ${result.id}`);
+    } catch (err: any) {
+      setError(`❌ Catálogo: ${err.message || 'Erro ao publicar.'}`);
+      setCatalogMsg('');
+    } finally {
+      setPublishingCatalog(false);
+    }
   }
 
   return (
@@ -942,10 +1006,38 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                 </div>
               )}
 
+              {/* Catálogo — catalog_product_id */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                  <span>🗂</span> Publicar no Catálogo (opcional)
+                </label>
+                <input
+                  value={catalogProductId}
+                  onChange={e => setCatalogProductId(e.target.value)}
+                  placeholder="catalog_product_id do ML — ex: MLB12345678"
+                  className="w-full px-3 py-2 rounded-lg bg-muted text-sm text-foreground outline-none border border-border focus:border-blue-500/50"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Busque o ID em <span className="text-blue-400">mercadolibre.com → produto → URL do produto de catálogo</span> ou via /products/search da API ML.
+                </p>
+              </div>
+
+              {catalogMsg && (
+                <div className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${catalogMsg.startsWith('✅') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+                  {catalogMsg.startsWith('✅') ? <CheckCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
+                  {catalogMsg}
+                  {catalogMsg.includes('ID:') && (
+                    <a href={`https://www.mercadolivre.com.br/anuncios/${catalogMsg.split('ID: ')[1]}`} target="_blank" rel="noopener noreferrer" className="ml-auto">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              )}
+
               {/* Botões */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setDraft(null); setCurrentStep(null); setError(''); setPublishMsg(''); }}
+                  onClick={() => { setDraft(null); setCurrentStep(null); setError(''); setPublishMsg(''); setCatalogMsg(''); }}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
                 >
                   <RefreshCw className="w-4 h-4" /> Gerar novamente
@@ -956,8 +1048,18 @@ export function AIAdCreator({ open, onClose, accountId, accountName, onPublish }
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
                 >
                   {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  {publishing ? 'Publicando...' : publishMsg.startsWith('✅') ? 'Publicado!' : 'Publicar no Mercado Livre'}
+                  {publishing ? 'Publicando...' : publishMsg.startsWith('✅') ? 'Publicado!' : 'Publicar Anúncio'}
                 </button>
+                {catalogProductId.trim() && (
+                  <button
+                    onClick={handlePublishCatalog}
+                    disabled={publishingCatalog || catalogMsg.startsWith('✅')}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {publishingCatalog ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>🗂</span>}
+                    {publishingCatalog ? 'Publicando...' : catalogMsg.startsWith('✅') ? 'No Catálogo!' : 'Publicar no Catálogo'}
+                  </button>
+                )}
               </div>
 
               {/* Fallback: enviar pro formulário manual */}
