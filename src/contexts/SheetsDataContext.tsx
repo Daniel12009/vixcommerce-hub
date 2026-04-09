@@ -227,7 +227,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
     setVendas7dItems(items);
   }, []);
 
-
+  const setPerformanceFromSheet = useCallback((rows: Record<string, string>[], contaOverride?: string) => {
     const items: PerformanceItem[] = rows
       .filter(r => r.idAnuncio || r.sku)
       .map(r => ({
