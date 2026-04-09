@@ -38,7 +38,7 @@ const STATUS_COLORS = {
 };
 
 export function EstoquePage() {
-  const { estoqueFullItems, estoqueTinyItems, vendasItems, refreshModule, refreshingModule } = useSheetsData();
+  const { estoqueFullItems, estoqueTinyItems, vendasItems, vendas7dItems, refreshModule, refreshingModule } = useSheetsData();
 
   const handleRefresh = useCallback(async () => {
     const [r1, r2] = await Promise.all([
