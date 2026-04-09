@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Package, Award, XCircle, CheckCircle, Truck, Loader2, RefreshCw, X, FileText, ChevronRight, ChevronLeft, Search, Plus, ExternalLink, ImageIcon, DollarSign, Edit3, Save, Upload, Ruler, Weight, Tag, AlertCircle, AlertTriangle, Filter, Layers, Trash2, PauseCircle, Clock, Megaphone, Star, Eye, Store, Settings2, Sparkles } from 'lucide-react';
 import { ShopeeCadastroTab } from './ShopeeCadastroTab';
 import { AIAdCreator } from './AIAdCreator';
+import { CatalogSuggestionDrawer } from './CatalogSuggestionDrawer';
 
 // ━━━ Types ━━━
 interface MLItemSummary {
@@ -133,6 +134,7 @@ export function CadastroPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [showAICreator, setShowAICreator] = useState(false);
+  const [showCatalogCreator, setShowCatalogCreator] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
   const [newItem, setNewItem] = useState({
@@ -445,13 +447,22 @@ export function CadastroPage() {
           {listLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Carregar
         </button>
         {selectedPlatform === 'ml' && (
-          <button
-            onClick={() => setShowAICreator(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
-          >
-            <Sparkles className="w-4 h-4" />
-            Criar com IA
-          </button>
+          <>
+            <button
+              onClick={() => setShowAICreator(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
+            >
+              <Sparkles className="w-4 h-4" />
+              Criar com IA
+            </button>
+            <button
+              onClick={() => setShowCatalogCreator(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            >
+              <span>🗂</span>
+              Criar Catálogo
+            </button>
+          </>
         )}
         <button onClick={() => { setShowCreate(!showCreate); setCreateMsg(''); }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
           <Plus className="w-4 h-4" /> Novo
@@ -929,6 +940,21 @@ export function CadastroPage() {
           </div>
         </div>
       )}
+      {showAICreator && (
+        <AIAdCreator
+          open={showAICreator}
+          onClose={() => setShowAICreator(false)}
+          accountId={selectedAccount}
+          accountName={accounts.find(a => a.id === selectedAccount)?.nome || ''}
+          onPublish={() => {}}
+        />
+      )}
+      <CatalogSuggestionDrawer
+        open={showCatalogCreator}
+        onClose={() => setShowCatalogCreator(false)}
+        accountId={selectedAccount}
+        accountName={accounts.find(a => a.id === selectedAccount)?.nome || ''}
+      />
     </div>
   );
 }

@@ -2268,6 +2268,50 @@ Deno.serve(async (req) => {
       });
     }
 
+
+    if (action === 'create_catalog_suggestion') {
+      const { suggestion, account_id } = body;
+      if (!suggestion) throw new Error('suggestion payload is required');
+      if (!account_id) throw new Error('account_id is required');
+
+      let accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&limit=1`);
+      let accts = await accountRes.json();
+      if (!Array.isArray(accts) || accts.length === 0) throw new Error(`Account not found: ${account_id}`);
+      const account = accts[0];
+
+      // POST to Brand Central
+      let res = await fetch(`${ML_API}/catalog_suggestions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${account.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(suggestion),
+      });
+
+      // Auto-refresh token if 401
+      if (res.status === 401) {
+        const newToken = await refreshToken(account);
+        res = await fetch(`${ML_API}/catalog_suggestions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${newToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(suggestion),
+        });
+      }
+
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.message || result.error || `ML catalog_suggestions failed: ${res.status}`);
+      }
+
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     console.error('ML API error:', error);
