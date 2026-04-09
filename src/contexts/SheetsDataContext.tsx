@@ -528,6 +528,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       estoqueTinyItems,
       financeiroItems,
       vendasItems,
+      vendas7dItems,
       performanceItems,
       adsItems,
       devolucaoItems,
@@ -541,6 +542,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       setEstoqueTinyFromSheet,
       setFinanceiroFromSheet,
       setVendasFromSheet,
+      setVendas7dFromSheet,
       setPerformanceFromSheet,
       setAdsFromSheet,
       setDevolucaoFromSheet,
@@ -553,6 +555,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       clearEstoqueTiny: () => setEstoqueTinyItems(null),
       clearFinanceiro: () => setFinanceiroItems(null),
       clearVendas: () => setVendasItems(null),
+      clearVendas7d: () => setVendas7dItems(null),
       clearPerformance: () => setPerformanceItems(null),
       clearAds: () => setAdsItems(null),
       clearDevolucao: () => setDevolucaoItems(null),
@@ -575,6 +578,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
             else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
             else if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }
+            else if (mod === 'vendas-7d') { setVendas7dFromSheet(parsed); saveToCloud('vendas_7d_data', parsed); }
             else if (mod === 'performance') {
               setPerformanceFromSheet(parsed, config.abaNome);
               const existing = await loadFromCloud<any[]>('performance_data') || [];
