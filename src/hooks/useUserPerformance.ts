@@ -34,7 +34,7 @@ export interface PerformanceData {
 export function useUserPerformance(): PerformanceData {
   const [data, setData] = useState<PerformanceData>({
     heatmap: [], currentWeek: null, previousWeek: null,
-    productivityScore: 0, streak: 0, loading: true,
+    productivityScore: 0, streak: 0, loading: false,
   })
 
   useEffect(() => {
@@ -137,10 +137,10 @@ export function useUserPerformance(): PerformanceData {
       }
     }
 
-    // Safety timeout: never stay in loading > 8s
+    // Safety timeout: never stay in loading > 5s
     const safetyTimer = setTimeout(() => {
       setData(prev => prev.loading ? { ...prev, loading: false } : prev)
-    }, 8000)
+    }, 5000)
 
     loadPerformance().finally(() => clearTimeout(safetyTimer))
 
