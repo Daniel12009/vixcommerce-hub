@@ -146,7 +146,9 @@ export function EstoquePage() {
         if (isNaN(dateMs) || dateMs < cutoff) return;
 
         const sku = item.sku.trim().toUpperCase();
-        const contaRaw = (item.conta || item.contaMae || '').trim();
+        let contaRaw = (item.conta || item.contaMae || '').trim();
+        // Remove V7- prefix from the sheet name so it normalizes back to the actual account alias
+        contaRaw = contaRaw.replace(/^V7\s*-?\s*/i, '');
         const normConta = normalizeConta(contaRaw);
         const qty = Number(item.quantidade || 1);
 
