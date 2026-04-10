@@ -81,7 +81,11 @@ export function AtendimentoPage() {
         </div>
       </div>
 
-      {mainTab === 'fila' && <FilaTab sellerId={selectedSeller} sellerName={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.nome} />}
+      {mainTab === 'fila' && <FilaTab
+        sellerId={selectedSeller}
+        accountId={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.id}
+        sellerName={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.nome}
+      />}
       {mainTab === 'templates' && <TemplatesTab sellerId={selectedSeller} />}
       {mainTab === 'ia' && <IATab sellerId={selectedSeller} />}
     </div>
@@ -89,7 +93,7 @@ export function AtendimentoPage() {
 }
 
 // ─── Aba Fila ─────────────────────────────────────────────────────────
-function FilaTab({ sellerId, sellerName }: { sellerId: string; sellerName?: string }) {
+function FilaTab({ sellerId, accountId, sellerName }: { sellerId: string; accountId?: string; sellerName?: string }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterTab, setFilterTab] = useState<FilterTab>('UNANSWERED');
@@ -146,7 +150,7 @@ function FilaTab({ sellerId, sellerName }: { sellerId: string; sellerName?: stri
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'get_questions', status, limit: 50 },
+        body: { action: 'get_questions', status, limit: 50, account_id: accountId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -155,9 +159,9 @@ function FilaTab({ sellerId, sellerName }: { sellerId: string; sellerName?: stri
       toast.error(e.message || 'Erro ao buscar perguntas');
     }
     setLoading(false);
-  }, [filterTab]);
+  }, [filterTab, accountId]);
 
-  useEffect(() => { fetchQuestions(); }, []);
+  useEffect(() => { if (accountId) fetchQuestions(); }, [accountId]);
 
   const filtered = questions.filter(q => {
     if (search) {
