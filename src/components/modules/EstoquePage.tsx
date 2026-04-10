@@ -166,6 +166,7 @@ export function EstoquePage() {
     const contaKeys = Array.from(new Set(
       [...grouped.keys()].map(k => k.split('||')[1])
     ));
+    console.log('Force Deploy 10/04');
     console.log('[VMD DEBUG] conta keys from vendas-7d:', contaKeys);
     return map;
   }, [vendas7dItems, vendasItems]);
