@@ -231,7 +231,7 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
     let hasMore = true;
     let i = 0;
     while (hasMore) {
-      if (Date.now() - startTime > 90000) { // 90 seconds (safe margin before 150s limit)
+      if (Date.now() - startTime > 45000) { // 45 seconds (safe margin before Supabase 60s hard limit)
         log.push(`â³ Tempo limite se aproximando. Reinvocando em 2Âº plano a partir da pÃ¡g ${page}, offset ${offset}...`);
         
         // Asynchronously invoke self to continue without waiting (fire and forget)
