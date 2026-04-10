@@ -132,8 +132,8 @@ Deno.serve(async (req) => {
       // contaColumn: optional zero-based index of the conta column — when set, dedup by date+conta together
       //              so multiple accounts can coexist for the same date without wiping each other
       const newRows = values || [];
-      // Read existing data with FORMULA render so =&quot;...&quot; formula cells are preserved when re-written
-      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMULA`, { headers });
+      // Read existing data with FORMATTED_VALUE render so dates come back as text ('10/04/2026') to match exactly with targetDate logic.
+      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`, { headers });
       let existingRows: any[][] = [];
       if (readRes.ok) {
         const readData = await readRes.json();
