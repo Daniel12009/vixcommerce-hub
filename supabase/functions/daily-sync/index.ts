@@ -331,7 +331,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const moduleLog = await executeModule(targetModule, dIni, dIniBR, runDate);
+  const moduleLog = await executeModule(targetModule, dIni, dIniBR, runDate, body);
 
   return new Response(JSON.stringify({ sucesso: true, log: moduleLog }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
