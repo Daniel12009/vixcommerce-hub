@@ -752,11 +752,25 @@ Deno.serve(async (req) => {
 
       // Step 3: Write to sheets
       const header = ['SKU', 'TOTAL', 'DATA SYNC'];
-      const writeData = sheetMode === 'write' ? [header, ...allProducts] : allProducts;
+      const isFirstBatch = startPage === 1 && startOffset === 0;
 
-      // DO NOT clear the sheet anymore! We just append, and when it finishes, we erase the old dates!
-      if (writeData.length > 0) {
-        await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, 'append');
+      if (isFirstBatch) {
+        // Clear entire sheet and write header + first batch
+        try {
+          await invokeSheets(PLANILHA_MESTRA, SHEET_TAB, [], 'clear');
+        } catch (e) {
+          console.warn('Erro ao limpar sheet antes de reescrever:', e);
+        }
+        if (allProducts.length > 0) {
+          await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, [header, ...allProducts], 'write');
+        } else {
+          await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, [header], 'write');
+        }
+      } else {
+        // Subsequent batches: just append rows
+        if (allProducts.length > 0) {
+          await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, allProducts, 'append');
+        }
       }
 
       // Determine next batch
@@ -772,15 +786,6 @@ Deno.serve(async (req) => {
         hasMore = true;
         nextPage = startPage + 1;
         returnOffset = 0;
-      }
-
-      // Step 4: If finished, clean up old dates from previous syncs!
-      if (!hasMore) {
-        try {
-          await invokeSheets(PLANILHA_MESTRA, SHEET_TAB, [[getTodayBR(), 2]], 'clear_old_dates');
-        } catch (e) {
-          console.warn('Erro ao apagar datas antigas no final do sync:', e);
-        }
       }
 
       const msg = `Estoque Tiny: ${allProducts.length} SKUs (pág ${startPage}, offset ${startOffset})`;
