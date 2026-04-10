@@ -103,6 +103,8 @@ export function AtualizarDadosPage() {
   const [filterDataFim, setFilterDataFim] = useState<string>('');
   const [pedidosPage, setPedidosPage] = useState(0);
   const [perfFilterConta, setPerfFilterConta] = useState<string>('all');
+  const [perfFilterSku, setPerfFilterSku] = useState<string>('');
+  const [perfFilterType, setPerfFilterType] = useState<string>('all');
   const [perfFilterPeriodo, setPerfFilterPeriodo] = useState<string>('7');
   const [perfSelectedPeriodo, setPerfSelectedPeriodo] = useState<string>('all');
   const [perfPage, setPerfPage] = useState(0);
@@ -1152,7 +1154,7 @@ export function AtualizarDadosPage() {
             const prevByConta = perfFilterConta === 'all' ? prevPeriodItems : prevPeriodItems.filter(p => normalizeConta(p.conta) === perfFilterConta);
 
             // Aggregate by idAnuncio: sum visitas/vendas/canceladas, avg conversao, keep latest preco/titulo/sku/link/conta
-            type AggItem = { idAnuncio: string; sku: string; titulo: string; preco: number; visitas: number; vendas: number; canceladas: number; conversao: number; link: string; conta: string; dataRef: string; plataforma: string };
+            type AggItem = { idAnuncio: string; sku: string; titulo: string; preco: number; visitas: number; vendas: number; canceladas: number; conversao: number; link: string; conta: string; dataRef: string; plataforma: string; listingType: string };
             const aggregate = (items: typeof curByConta): AggItem[] => {
               const map = new Map<string, { sum: AggItem; count: number }>();
               items.forEach(p => {
@@ -1170,7 +1172,7 @@ export function AtualizarDadosPage() {
                   }
                 } else {
                   map.set(p.idAnuncio, {
-                    sum: { idAnuncio: p.idAnuncio, sku: p.sku, titulo: p.titulo, preco: p.preco, visitas: p.visitas, vendas: p.vendas, canceladas: p.canceladas, conversao: p.conversao, link: p.link, conta: p.conta, dataRef: p.dataRef, plataforma: p.plataforma },
+                    sum: { idAnuncio: p.idAnuncio, sku: p.sku, titulo: p.titulo, preco: p.preco, visitas: p.visitas, vendas: p.vendas, canceladas: p.canceladas, conversao: p.conversao, link: p.link, conta: p.conta, dataRef: p.dataRef, plataforma: p.plataforma, listingType: p.listingType || '' },
                     count: 1,
                   });
                 }
@@ -1203,7 +1205,21 @@ export function AtualizarDadosPage() {
               if (!fn) return 0;
               return perfSortDir === 'desc' ? fn(b) - fn(a) : fn(a) - fn(b);
             });
-            const filtered = sorted;
+            // Apply SKU and listing type filters after aggregation
+            let filtered = [...sorted];
+            if (perfFilterSku.trim()) {
+              const q = perfFilterSku.trim().toLowerCase();
+              filtered = filtered.filter(p => p.sku.toLowerCase().includes(q) || p.titulo.toLowerCase().includes(q) || p.idAnuncio.toLowerCase().includes(q));
+            }
+            if (perfFilterType !== 'all') {
+              if (perfFilterType === 'catalog') {
+                filtered = filtered.filter(p => (p.listingType || '').toLowerCase().includes('catalog'));
+              } else if (perfFilterType === 'tradicional') {
+                filtered = filtered.filter(p => (p.listingType || '').toLowerCase().includes('gold_pro') || (p.listingType || '').toLowerCase() === 'premium');
+              } else if (perfFilterType === 'classico') {
+                filtered = filtered.filter(p => (p.listingType || '').toLowerCase().includes('gold_special') || (p.listingType || '').toLowerCase() === 'classico');
+              }
+            }
 
             const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
             const totalVendas = filtered.reduce((s, p) => s + p.vendas, 0);
@@ -1285,6 +1301,24 @@ export function AtualizarDadosPage() {
                       </select>
                     </div>
                   )}
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs text-muted-foreground">Tipo:</label>
+                    <select value={perfFilterType} onChange={(e) => { setPerfFilterType(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+                      <option value="all">Todos</option>
+                      <option value="catalog">Catálogo</option>
+                      <option value="tradicional">Tradicional (Premium)</option>
+                      <option value="classico">Clássico</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Buscar SKU ou título..."
+                      value={perfFilterSku}
+                      onChange={(e) => { setPerfFilterSku(e.target.value); setPerfPage(0); }}
+                      className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs w-40 outline-none focus:border-primary/50"
+                    />
+                  </div>
                   <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
                   {hasPrevPerf && <span className="px-2 py-1 rounded-md bg-primary/10 text-primary text-[11px] font-medium">vs {prevLabel}</span>}
                 </div>

@@ -247,6 +247,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
         link: r.link || '',
         conta: contaOverride || r.conta || '',
         dataRef: r.dataRef || '',
+        listingType: r.listingType || r.tipoAnuncio || '',
       }));
     const conta = contaOverride || items[0]?.conta || '';
     // Replace items from the same conta (dedup), keep items from other contas

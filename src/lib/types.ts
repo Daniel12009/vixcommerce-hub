@@ -239,6 +239,7 @@ export interface PerformanceItem {
   link: string;
   conta: string;
   dataRef: string;
+  listingType?: string; // 'gold_pro' = Premium/Tradicional, 'gold_special' = Clássico, 'catalog' = Catálogo
 }
 
 export interface AdsImportItem {
