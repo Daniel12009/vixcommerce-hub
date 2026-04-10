@@ -224,9 +224,9 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
   const page = resumePage;
   const offset = resumeOffset;
 
-  // Each invocation handles ONE batch; tiny auto-chains the next via auto_chain=true
+  // Cada invocação processa UM lote; tiny encadeia o próximo via auto_chain=true
   try {
-    log.push(`Estoque Tiny: pag ${page}, offset ${offset}...`);
+    log.push(`📦 Estoque Tiny: pág ${page}, offset ${offset}...`);
     const r = await invokeFunction('tiny', {
       action: 'sync_estoque_tiny',
       page,
@@ -235,12 +235,12 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
     });
     const totalSkus = (resumeTotal || 0) + (r.skus || 0);
     if (!r.hasMore) {
-      log.push(`Estoque Tiny: ${totalSkus} SKUs sincronizados (ultimo lote)`);
+      log.push(`✅ Estoque Tiny: ${totalSkus} SKUs sincronizados (último lote)`);
     } else {
-      log.push(`Estoque Tiny: ${r.skus || 0} SKUs neste lote. Proximo lote encadeado.`);
+      log.push(`⏭️ Estoque Tiny: ${r.skus || 0} SKUs neste lote. Próximo lote encadeado automaticamente.`);
     }
   } catch (e: any) {
-    log.push(`ERRO Estoque Tiny (pag ${page}): ${e.message}`);
+    log.push(`❌ Erro Estoque Tiny (pág ${page}): ${e.message}`);
   }
   return log;
 }
