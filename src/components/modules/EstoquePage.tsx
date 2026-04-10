@@ -168,6 +168,17 @@ export function EstoquePage() {
     return map;
   }, [vendas7dItems, vendasItems]);
 
+  // SKUs that have ANY per-conta vendas-7d data — used to guard __ANY__ fallback
+  const skusWithV7dData = useMemo(() => {
+    const set = new Set<string>();
+    if (vendas7dItems && vendas7dItems.length > 0) {
+      vendas7dItems.forEach(item => {
+        if (item.sku) set.add(item.sku.trim().toUpperCase());
+      });
+    }
+    return set;
+  }, [vendas7dItems]);
+
 
   const mergedData = useMemo<MergedStockRow[]>(() => {
     const fullMap = new Map<string, { fullML: number; entradaPendente: number; emTransferencia: number; contas: Set<string> }>();
@@ -201,11 +212,15 @@ export function EstoquePage() {
       const entradaPendente = full?.entradaPendente || 0;
       const emTransferencia = full?.emTransferencia || 0;
       
-      // Calculate global VMD (used purely for legacy grouped mapping or fallback)
+      // Calculate global VMD — sum per-conta VMDs, using normalized conta keys
       let vmdGlobal = 0;
       Array.from(full?.contas || []).forEach(c => {
-         vmdGlobal += vmdBySkuAndConta.get(`${sku}||${c}`) || 0;
+         vmdGlobal += vmdBySkuAndConta.get(`${sku}||${normalizeConta(c)}`) || 0;
       });
+      // Fallback to __ANY__ only if SKU has no per-conta vendas-7d data
+      if (vmdGlobal === 0 && !skusWithV7dData.has(sku)) {
+        vmdGlobal = vmdBySkuAndConta.get(`${sku}||__ANY__`) || 0;
+      }
       const vmd = vmdGlobal;
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
       const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
@@ -250,8 +265,10 @@ export function EstoquePage() {
       const { sku, conta, fullML, entradaPendente, emTransferencia } = item;
       const tinyLocal = tinyMap.get(sku) || 0;
       const normContaKey = `${sku}||${normalizeConta(conta)}`;
+      // Use __ANY__ fallback ONLY for SKUs that have no vendas-7d data at all
+      // (e.g. new products only in vendasItems). Never contaminate one conta with another's sales.
       const vmd = vmdBySkuAndConta.get(normContaKey)
-        ?? vmdBySkuAndConta.get(`${sku}||__ANY__`) ?? 0;
+        ?? (skusWithV7dData.has(sku) ? 0 : vmdBySkuAndConta.get(`${sku}||__ANY__`) ?? 0);
       const skuCobertura = skuCoberturaOverrides[sku] ?? diasCoberturaAlvo;
       const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
       const sugestaoEnvio = Math.max(0, Math.ceil((vmd * skuCobertura) - (fullML + entradaPendente + emTransferencia)));
