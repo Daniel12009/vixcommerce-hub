@@ -2403,15 +2403,22 @@ Deno.serve(async (req) => {
       }
 
       // Save updated cache back to app_data
-      await supabaseFetch('/app_data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-        body: JSON.stringify({
-          data_key: 'ml_listing_types_cache',
-          data_value: cachedTypes,
-          updated_at: new Date().toISOString(),
-        }),
+      let saveMethod = cacheRows && cacheRows.length > 0 ? 'PATCH' : 'POST';
+      let saveEndpoint = cacheRows && cacheRows.length > 0 ? '/app_data?data_key=eq.ml_listing_types_cache' : '/app_data';
+      
+      const saveBody = saveMethod === 'POST'
+        ? { data_key: 'ml_listing_types_cache', data_value: cachedTypes, updated_at: new Date().toISOString() }
+        : { data_value: cachedTypes, updated_at: new Date().toISOString() };
+
+      const saveRes = await supabaseFetch(saveEndpoint, {
+        method: saveMethod,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(saveBody),
       });
+
+      if (!saveRes.ok) {
+        console.error('Failed to save cache', await saveRes.text());
+      }
 
       return new Response(JSON.stringify({ types: cachedTypes, updated: missing.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
