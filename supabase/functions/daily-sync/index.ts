@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+﻿import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -322,14 +322,19 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Check if module is enabled
-  const modules = await getEnabledModules();
-  if (!modules[targetModule]) {
-    const msg = `â­ï¸ MÃ³dulo ${MODULE_LABELS[targetModule] || targetModule} desabilitado, pulando.`;
-    return new Response(JSON.stringify({ sucesso: true, log: [msg], skipped: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+  // Check if module is enabled (auto_chain continuations bypass this check)
+  const isAutoChain = body.auto_chain === true;
+  if (!isAutoChain) {
+    const modules = await getEnabledModules();
+    if (!modules[targetModule]) {
+      const msg = `Modulo desabilitado: ${MODULE_LABELS[targetModule] || targetModule}`;
+      return new Response(JSON.stringify({ sucesso: true, log: [msg], skipped: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
   }
+  // Mark auto_chain as resume to suppress duplicate Telegram 'Iniciando' messages
+  if (isAutoChain) body.is_resume = true;
 
   const moduleLog = await executeModule(targetModule, dIni, dIniBR, runDate, body);
 
