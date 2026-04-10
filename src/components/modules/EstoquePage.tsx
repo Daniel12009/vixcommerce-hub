@@ -124,7 +124,11 @@ export function EstoquePage() {
       vendas7dItems.forEach(item => {
         if (!item.sku) return;
         const sku = item.sku.trim().toUpperCase();
-        const normConta = normalizeConta(item.conta || '');
+        
+        let contaRaw = (item.conta || '').trim();
+        contaRaw = contaRaw.replace(/^V7\s*-?\s*/i, '');
+        const normConta = normalizeConta(contaRaw);
+        
         const qty = Number(item.quantidade || 1);
 
         const key = `${sku}||${normConta}`;
