@@ -196,6 +196,27 @@ Deno.serve(async (req) => {
         throw new Error(`Sheets API clear failed [${res.status}]: ${err}`);
       }
       result = await res.json();
+    } else if (action === 'clear_old_dates') {
+      // values[0][0] = targetDate, values[0][1] = dateColumn index
+      const targetDate = String(values[0]?.[0] ?? '');
+      const dCol = Number(values[0]?.[1] ?? 0);
+      
+      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`, { headers });
+      let existingRows: any[][] = [];
+      if (readRes.ok) existingRows = (await readRes.json()).values || [];
+      
+      const header = existingRows[0] ?? [];
+      const dataRows = existingRows.slice(1);
+      
+      // keep only rows where the date column matches targetDate exactly
+      const filtered = dataRows.filter(row => String(row[dCol] ?? '') === targetDate);
+      const combined = [header, ...filtered];
+      
+      const writeRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
+        method: 'PUT', headers, body: JSON.stringify({ values: combined }),
+      });
+      if (!writeRes.ok) throw new Error(`Sheets API clear_old_dates failed [${writeRes.status}]: ${await writeRes.text()}`);
+      result = await writeRes.json();
     } else if (action === 'create_sheet') {
       // Create a new sheet tab if it doesn't exist
       const title = sheetTitle || 'VIX_BACKUP';

@@ -734,11 +734,10 @@ Deno.serve(async (req) => {
               }
             }
 
-            const saldoStr = sData?.retorno?.produto?.saldo;
             const saldo = parseFloat(saldoStr || '0');
             // Only include products with stock >= 1
             if (Math.round(saldo) >= 1) {
-              allProducts.push([codigo, Math.round(saldo)]);
+              allProducts.push([codigo, Math.round(saldo), getTodayBR()]);
             }
             success = true;
 
@@ -752,36 +751,36 @@ Deno.serve(async (req) => {
       }
 
       // Step 3: Write to sheets
-      const header = ['SKU', 'TOTAL'];
+      const header = ['SKU', 'TOTAL', 'DATA SYNC'];
       const writeData = sheetMode === 'write' ? [header, ...allProducts] : allProducts;
 
-      if (sheetMode === 'write') {
-        try {
-          await invokeSheets(PLANILHA_MESTRA, SHEET_TAB, [], 'clear');
-        } catch (e) {
-          console.warn('Erro ao limpar sheet antes de reescrever:', e);
-        }
-      }
-
+      // DO NOT clear the sheet anymore! We just append, and when it finishes, we erase the old dates!
       if (writeData.length > 0) {
-        await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, sheetMode);
+        await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, writeData, 'append');
       }
 
-      // Step 4: Determine next batch
+      // Determine next batch
       const nextOffset = startOffset + MAX_PRODUCTS_PER_CALL;
       let hasMore = false;
       let nextPage = startPage;
       let returnOffset = 0;
 
       if (nextOffset < allProdutos.length) {
-        // More products on this page
         hasMore = true;
         returnOffset = nextOffset;
       } else if (startPage < totalPaginas) {
-        // Move to next page
         hasMore = true;
         nextPage = startPage + 1;
         returnOffset = 0;
+      }
+
+      // Step 4: If finished, clean up old dates from previous syncs!
+      if (!hasMore) {
+        try {
+          await invokeSheets(PLANILHA_MESTRA, SHEET_TAB, [[getTodayBR(), 2]], 'clear_old_dates');
+        } catch (e) {
+          console.warn('Erro ao apagar datas antigas no final do sync:', e);
+        }
       }
 
       const msg = `Estoque Tiny: ${allProducts.length} SKUs (pág ${startPage}, offset ${startOffset})`;
