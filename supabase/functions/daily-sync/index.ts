@@ -221,26 +221,36 @@ async function runTinyPlatform(plat: string, dIniBR: string): Promise<string[]> 
 
 async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0): Promise<string[]> {
   const log: string[] = [];
-  const page = resumePage;
-  const offset = resumeOffset;
+  let page = resumePage;
+  let offset = resumeOffset;
+  let sheetMode = (page === 1 && offset === 0) ? 'write' : 'append';
+  let totalSkus = resumeTotal;
 
-  // Cada invocação processa UM lote; tiny encadeia o próximo via auto_chain=true
+  // Simple loop - same as the manual test browser loop
   try {
-    log.push(`📦 Estoque Tiny: pág ${page}, offset ${offset}...`);
-    const r = await invokeFunction('tiny', {
-      action: 'sync_estoque_tiny',
-      page,
-      offset,
-      auto_chain: true,
-    });
-    const totalSkus = (resumeTotal || 0) + (r.skus || 0);
-    if (!r.hasMore) {
-      log.push(`✅ Estoque Tiny: ${totalSkus} SKUs sincronizados (último lote)`);
-    } else {
-      log.push(`⏭️ Estoque Tiny: ${r.skus || 0} SKUs neste lote. Próximo lote encadeado automaticamente.`);
+    while (true) {
+      log.push(`Estoque Tiny: pag ${page}, offset ${offset}...`);
+      const r = await invokeFunction('tiny', {
+        action: 'sync_estoque_tiny',
+        page,
+        offset,
+        sheetMode,
+      });
+      totalSkus += r.skus || 0;
+
+      if (!r.hasMore) {
+        log.push(`Estoque Tiny: ${totalSkus} SKUs sincronizados`);
+        break;
+      }
+
+      page = r.nextPage;
+      offset = r.nextOffset || 0;
+      sheetMode = 'append';
+      await new Promise(resolve => setTimeout(resolve, 600));
     }
   } catch (e: any) {
-    log.push(`❌ Erro Estoque Tiny (pág ${page}): ${e.message}`);
+    log.push(`ERRO Estoque Tiny (pag ${page}): ${e.message}`);
+    if (totalSkus > 0) log.push(`Parcial: ${totalSkus} SKUs sincronizados antes do erro`);
   }
   return log;
 }

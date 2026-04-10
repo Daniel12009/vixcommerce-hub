@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+﻿import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -752,22 +752,12 @@ Deno.serve(async (req) => {
 
       // Step 3: Write to sheets
       const header = ['SKU', 'TOTAL', 'DATA SYNC'];
-      const isFirstBatch = startPage === 1 && startOffset === 0;
-
-      if (isFirstBatch) {
-        // Clear entire sheet and write header + first batch
-        try {
-          await invokeSheets(PLANILHA_MESTRA, SHEET_TAB, [], 'clear');
-        } catch (e) {
-          console.warn('Erro ao limpar sheet antes de reescrever:', e);
-        }
-        if (allProducts.length > 0) {
-          await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, [header, ...allProducts], 'write');
-        } else {
-          await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, [header], 'write');
-        }
+      if (sheetMode === 'write') {
+        // First batch: clear the sheet then write header + data
+        await invokeSheets(PLANILHA_MESTRA, SHEET_TAB, [], 'clear');
+        await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, [header, ...allProducts], 'write');
       } else {
-        // Subsequent batches: just append rows
+        // Subsequent batches: just append rows (no header)
         if (allProducts.length > 0) {
           await invokeSheets(PLANILHA_MESTRA, `${SHEET_TAB}!A1`, allProducts, 'append');
         }
@@ -788,27 +778,8 @@ Deno.serve(async (req) => {
         returnOffset = 0;
       }
 
-      const msg = `Estoque Tiny: ${allProducts.length} SKUs (pág ${startPage}, offset ${startOffset})`;
+      const msg = `Estoque Tiny: ${allProducts.length} SKUs (pag ${startPage}, offset ${startOffset})`;
       console.log(`[ESTOQUE-TINY] ${msg}`);
-
-      // If running via automatic cron (auto_chain=true), tiny fires the next batch itself!
-      const autoChain = reqBody.auto_chain === true;
-      if (autoChain && hasMore) {
-        const SUPA_URL = Deno.env.get('SUPABASE_URL')!;
-        const SUPA_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        fetch(`${SUPA_URL}/functions/v1/daily-sync`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPA_KEY}` },
-          body: JSON.stringify({
-            module: 'tiny_estoque',
-            resume_page: nextPage,
-            resume_offset: returnOffset,
-            resume_total: allProducts.length,
-            auto_chain: true,
-          }),
-        }).catch(err => console.error('Erro ao encadear próximo lote:', err));
-      }
-
       return new Response(JSON.stringify({
         mensagem: msg,
         skus: allProducts.length,
