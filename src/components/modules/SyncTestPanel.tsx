@@ -504,12 +504,13 @@ function ManualTestSection() {
 
       if (action.id === 'tiny-estoque') {
         let page = 1;
+        let offset = 0;
         let hasMore = true;
         let sheetMode = 'write';
         
         while (hasMore) {
-          addLog(`Processando página ${page} do Tiny...`, 'running');
-          result = await callEdgeFunction(action.fn, { ...body, page, sheetMode });
+          addLog(`Processando página ${page} (offset ${offset}) do Tiny...`, 'running');
+          result = await callEdgeFunction(action.fn, { ...body, page, offset, sheetMode });
           
           if (result.error) {
             addLog(`❌ ${action.label}: ${result.error}`, 'error');
@@ -523,6 +524,7 @@ function ManualTestSection() {
           hasMore = result.hasMore === true;
           if (hasMore) {
             page = result.nextPage || page + 1;
+            offset = result.nextOffset || 0;
             sheetMode = result.sheetMode || 'append';
           }
         }
