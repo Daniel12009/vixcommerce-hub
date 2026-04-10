@@ -132,6 +132,33 @@ export function AtualizarDadosPage() {
   const [showColConfig, setShowColConfig] = useState(false);
 
   const sheetsData = useSheetsData();
+  const [listingTypeMap, setListingTypeMap] = useState<Record<string, { catalog: boolean; listingType: string }>>({});
+  const [listingTypesLoading, setListingTypesLoading] = useState(false);
+
+  // Load cached listing types from Supabase on mount
+  useEffect(() => {
+    supabase.from('app_data').select('data_value').eq('data_key', 'ml_listing_types_cache').maybeSingle().then(({ data }) => {
+      if (data?.data_value) setListingTypeMap(data.data_value as any);
+    });
+  }, []);
+
+  const fetchListingTypes = async (itemIds: string[]) => {
+    if (!itemIds.length || listingTypesLoading) return;
+    setListingTypesLoading(true);
+    try {
+      const { data } = await supabase.functions.invoke('mercado-livre', {
+        body: { action: 'get_listing_types', item_ids: [...new Set(itemIds)] },
+      });
+      if (data?.types) {
+        setListingTypeMap(data.types);
+        toast.success(`Tipos atualizados! ${data.updated ?? 0} novos anúncios identificados.`);
+      }
+    } catch (e: any) {
+      toast.error(`Erro ao buscar tipos: ${e.message}`);
+    } finally {
+      setListingTypesLoading(false);
+    }
+  };
 
   // Auto-detect new custom columns from imported data
   useEffect(() => {
@@ -1212,13 +1239,12 @@ export function AtualizarDadosPage() {
               filtered = filtered.filter(p => p.sku.toLowerCase().includes(q) || p.titulo.toLowerCase().includes(q) || p.idAnuncio.toLowerCase().includes(q));
             }
             if (perfFilterType !== 'all') {
-              if (perfFilterType === 'catalog') {
-                filtered = filtered.filter(p => (p.listingType || '').toLowerCase().includes('catalog'));
-              } else if (perfFilterType === 'tradicional') {
-                filtered = filtered.filter(p => (p.listingType || '').toLowerCase().includes('gold_pro') || (p.listingType || '').toLowerCase() === 'premium');
-              } else if (perfFilterType === 'classico') {
-                filtered = filtered.filter(p => (p.listingType || '').toLowerCase().includes('gold_special') || (p.listingType || '').toLowerCase() === 'classico');
-              }
+              filtered = filtered.filter(p => {
+                const lt = listingTypeMap[p.idAnuncio];
+                if (perfFilterType === 'catalog') return lt?.catalog === true;
+                if (perfFilterType === 'tradicional') return lt ? lt.catalog !== true : false;
+                return true;
+              });
             }
 
             const totalVisitas = filtered.reduce((s, p) => s + p.visitas, 0);
@@ -1306,8 +1332,7 @@ export function AtualizarDadosPage() {
                     <select value={perfFilterType} onChange={(e) => { setPerfFilterType(e.target.value); setPerfPage(0); }} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
                       <option value="all">Todos</option>
                       <option value="catalog">Catálogo</option>
-                      <option value="tradicional">Tradicional (Premium)</option>
-                      <option value="classico">Clássico</option>
+                      <option value="tradicional">Tradicional</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -1319,6 +1344,15 @@ export function AtualizarDadosPage() {
                       className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs w-40 outline-none focus:border-primary/50"
                     />
                   </div>
+                  <button
+                    onClick={() => fetchListingTypes(curAgg.map(p => p.idAnuncio))}
+                    disabled={listingTypesLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-50"
+                    title="Busca na API do Mercado Livre se cada anúncio é Catálogo ou Tradicional"
+                  >
+                    {listingTypesLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    {listingTypesLoading ? 'Buscando...' : 'Atualizar Tipos API'}
+                  </button>
                   <span className="text-xs text-muted-foreground">{filtered.length} anúncios</span>
                   {hasPrevPerf && <span className="px-2 py-1 rounded-md bg-primary/10 text-primary text-[11px] font-medium">vs {prevLabel}</span>}
                 </div>
@@ -1332,6 +1366,7 @@ export function AtualizarDadosPage() {
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">ID Anúncio</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">SKU</th>
                           <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Título</th>
+                          <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Tipo</th>
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Preço</th>
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('visitas')}>Visitas{sortIcon('visitas')}</th>
                           <th className="text-right px-3 py-2.5 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('vendas')}>Vendas{sortIcon('vendas')}</th>
@@ -1355,6 +1390,15 @@ export function AtualizarDadosPage() {
                                 </td>
                                 <td className="px-3 py-2 font-mono">{item.sku}</td>
                                 <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
+                                <td className="px-3 py-2 text-center">
+                                  {(() => {
+                                    const lt = listingTypeMap[item.idAnuncio];
+                                    if (!lt) return <span className="text-[10px] text-muted-foreground">—</span>;
+                                    return lt.catalog
+                                      ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400">Catálogo</span>
+                                      : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400">Tradicional</span>;
+                                  })()}
+                                </td>
                                 <td className="px-3 py-2 text-right">
                                   {formatBRL(item.preco)}
                                   {prev && <PerfDelta cur={item.preco} prev={prev.preco} />}

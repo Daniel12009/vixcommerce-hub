@@ -2344,6 +2344,80 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── get_listing_types: batch-fetch catalog_listing for performance items ───
+    if (action === 'get_listing_types') {
+      const { item_ids, account_id } = body;
+      if (!Array.isArray(item_ids) || item_ids.length === 0) {
+        return new Response(JSON.stringify({ types: {} }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Find any active ML account to use for API calls
+      let tokenToUse = '';
+      if (account_id) {
+        const accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&limit=1`);
+        const accts = await accountRes.json();
+        if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
+      }
+      if (!tokenToUse) {
+        const accountRes = await supabaseFetch(`/ml_accounts?ativo=eq.true&limit=1`);
+        const accts = await accountRes.json();
+        if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
+      }
+      if (!tokenToUse) throw new Error('No active ML account found');
+
+      // Load existing cache from app_data
+      const cacheRes = await supabaseFetch(`/app_data?data_key=eq.ml_listing_types_cache&limit=1`);
+      const cacheRows = await cacheRes.json();
+      const cachedTypes: Record<string, { catalog: boolean; listingType: string }> = 
+        (cacheRows?.[0]?.data_value as any) || {};
+
+      // Determine which IDs are missing from cache
+      const missing = item_ids.filter(id => !(id in cachedTypes));
+
+      // Batch fetch in groups of 20
+      const BATCH = 20;
+      for (let i = 0; i < missing.length; i += BATCH) {
+        const batch = missing.slice(i, i + BATCH);
+        try {
+          const res = await fetch(
+            `${ML_API}/items?ids=${batch.join(',')}&attributes=id,catalog_listing,listing_type_id`,
+            { headers: { Authorization: `Bearer ${tokenToUse}` } }
+          );
+          if (res.ok) {
+            const items = await res.json();
+            for (const item of (Array.isArray(items) ? items : [])) {
+              const b = item.body || item;
+              if (b?.id) {
+                cachedTypes[b.id] = {
+                  catalog: b.catalog_listing === true,
+                  listingType: b.catalog_listing === true ? 'Catálogo' : 'Tradicional',
+                };
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[listing_types] batch error', e);
+        }
+      }
+
+      // Save updated cache back to app_data
+      await supabaseFetch('/app_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify({
+          data_key: 'ml_listing_types_cache',
+          data_value: cachedTypes,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+
+      return new Response(JSON.stringify({ types: cachedTypes, updated: missing.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     console.error('ML API error:', error);
