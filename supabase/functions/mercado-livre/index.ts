@@ -146,7 +146,7 @@ async function invokeGsFunction(action: string, payload: any) {
 }
 
 // Helper: chamar google-sheets edge function
-async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' | 'dedup_write' = 'append', dateColumn?: number) {
+async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' | 'dedup_write' = 'append', dateColumn?: number, contaColumn?: number) {
   const url = Deno.env.get('SUPABASE_URL')!;
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const gsUrl = `${url}/functions/v1/google-sheets`;
@@ -174,6 +174,9 @@ async function invokeSheets(spreadsheetId: string, range: string, values: any[][
   const payload: any = { action, spreadsheetId, range: normalizedRange, values };
   if (action === 'dedup_write' && dateColumn !== undefined) {
     payload.dateColumn = dateColumn;
+  }
+  if (action === 'dedup_write' && contaColumn !== undefined) {
+    payload.contaColumn = contaColumn;
   }
 
   const res = await fetch(gsUrl, {
@@ -1336,7 +1339,7 @@ Deno.serve(async (req) => {
                 from: { id: q.from?.id, nickname: '' },
                 seller_id: account.seller_id,
                 account_id: account.id,
-                conta: account.nickname,
+                conta: account.nome || account.nickname || 'Conta ML',
               });
             }
           }
@@ -2208,19 +2211,19 @@ Deno.serve(async (req) => {
           await new Promise(r => setTimeout(r, 100));
         }
 
-        if (total_investido_dia >= 0) {
+        if (total_investido_dia > 0) {
           linhas_resumo.push([data_ref_br, nome_conta_upper, `R$ ${toStringDecimal(total_investido_dia)}`]);
         }
         await new Promise(r => setTimeout(r, 1000));
       }
 
       if (linhas_totais.length > 0) {
-        // For ADS _totais, 'Data Ref' is at column 1
-        await invokeSheets(sheetId, `${nome_aba}!A:O`, linhas_totais, 'dedup_write', 1);
+        // For ADS per-ad, dedup by date (col 1) + conta (col 2)
+        await invokeSheets(sheetId, `${nome_aba}!A:O`, linhas_totais, 'dedup_write', 1, 2);
       }
       if (linhas_resumo.length > 0) {
-        // For ADS _resumo, 'Data Ref' is at column 0
-        await invokeSheets(sheetId, `${nome_aba_total}!A:C`, linhas_resumo, 'dedup_write', 0);
+        // For ADS resumo: [data, conta, valor] — dedup by date (col 0) + conta (col 1)
+        await invokeSheets(sheetId, `${nome_aba_total}!A:C`, linhas_resumo, 'dedup_write', 0, 1);
       }
 
       const msg = `ADS ${account.nome}: ${linhas_totais.length} linhas em ${nome_aba}, ${linhas_resumo.length} resumos em ${nome_aba_total}`;

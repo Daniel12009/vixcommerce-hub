@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line, ComposedChart, Area, LabelList
 } from 'recharts';
-import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, Percent, Target, ArrowUpDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, Percent, Target, ArrowUpDown, RefreshCw } from 'lucide-react';
 
 const ACCOUNT_COLORS = [
   '#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6',
@@ -47,6 +47,18 @@ type SortField = 'faturamentoBruto' | 'lucroLiquidoDia' | 'pctAds' | 'origem';
 export function MarketplaceTab() {
   const sheetsData = useSheetsData();
   const allItems = sheetsData.marketplaceDiaItems || [];
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await sheetsData.refreshModule?.('marketplace-dia');
+    } catch (e) {
+      console.error('Marketplace refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const [filterDias, setFilterDias] = useState(30);
   const [customFrom, setCustomFrom] = useState(''); // YYYY-MM-DD
@@ -246,10 +258,18 @@ export function MarketplaceTab() {
           <BarChart2 className="w-10 h-10 text-purple-400" />
         </div>
         <h3 className="text-foreground font-semibold mb-1">Nenhum dado de Marketplace importado</h3>
-        <p className="text-sm text-muted-foreground max-w-md">
+        <p className="text-sm text-muted-foreground max-w-md mb-4">
           Vá em <strong>Configurações → Planilhas</strong>, adicione uma configuração com módulo
           <strong> Marketplace (Rentabilidade)</strong> e importe a aba "teste luiz ADS" da planilha.
         </p>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Atualizando...' : 'Atualizar Dados'}
+        </button>
       </div>
     );
   }
@@ -309,6 +329,15 @@ export function MarketplaceTab() {
         <span className="text-xs text-muted-foreground ml-auto">
           {items.length} registros | {origens.length} contas {hasPrev && `| comparando com período anterior`}
         </span>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Reimportar dados de Marketplace"
+          className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 disabled:opacity-50 text-indigo-400 text-xs font-medium transition-colors border border-indigo-500/30"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Atualizando...' : 'Atualizar'}
+        </button>
       </div>
 
       {/* KPIs */}

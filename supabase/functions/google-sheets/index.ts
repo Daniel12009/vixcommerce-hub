@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     const serviceAccountKey = JSON.parse(keyJson);
     const accessToken = await getAccessToken(serviceAccountKey);
 
-    const { action, spreadsheetId, range, values, sheetTitle, dateColumn } = await req.json();
+    const { action, spreadsheetId, range, values, sheetTitle, dateColumn, contaColumn } = await req.json();
 
     const baseUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
     const headers = {
@@ -128,9 +128,11 @@ Deno.serve(async (req) => {
       result = await res.json();
     } else if (action === 'dedup_write') {
       // values: new rows to write
-      // dateColumn: zero‑based index of the column that holds the date string (e.g. 11 for VendasML/PERF, 1 for ADS)
+      // dateColumn: zero-based index of the column that holds the date string
+      // contaColumn: optional zero-based index of the conta column — when set, dedup by date+conta together
+      //              so multiple accounts can coexist for the same date without wiping each other
       const newRows = values || [];
-      // Read existing data
+      // Read existing data with FORMULA render so =&quot;...&quot; formula cells are preserved when re-written
       const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMULA`, { headers });
       let existingRows: any[][] = [];
       if (readRes.ok) {
@@ -141,10 +143,22 @@ Deno.serve(async (req) => {
       const header = existingRows[0] ?? [];
       const dataRows = existingRows.slice(1);
       // Determine date to replace (use date of first new row)
-      const targetDate = newRows[0]?.[dateColumn];
-      const filtered = dataRows.filter(row => row[dateColumn] !== targetDate);
+      const targetDate = String(newRows[0]?.[dateColumn] ?? '');
+      const targetConta = contaColumn !== undefined ? String(newRows[0]?.[contaColumn] ?? '') : undefined;
+
+      let filtered: any[][];
+      if (targetConta !== undefined) {
+        // Dedup by date + conta: only remove rows that match BOTH date and conta
+        filtered = dataRows.filter(row =>
+          !(String(row[dateColumn] ?? '') === targetDate && String(row[contaColumn!] ?? '') === targetConta)
+        );
+      } else {
+        // Dedup by date only (legacy behaviour)
+        filtered = dataRows.filter(row => String(row[dateColumn] ?? '') !== targetDate);
+      }
+
       const combined = [header, ...filtered, ...newRows];
-      // Write back whole sheet
+      // Write back with USER_ENTERED so text/number types are preserved correctly
       const writeRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
         method: 'PUT',
         headers,
