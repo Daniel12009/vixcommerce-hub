@@ -2346,83 +2346,97 @@ Deno.serve(async (req) => {
 
     // ─── get_listing_types: batch-fetch catalog_listing for performance items ───
     if (action === 'get_listing_types') {
-      const { item_ids, account_id } = body;
-      if (!Array.isArray(item_ids) || item_ids.length === 0) {
-        return new Response(JSON.stringify({ types: {} }), {
+      try {
+        const { item_ids, account_id } = body;
+        if (!Array.isArray(item_ids) || item_ids.length === 0) {
+          return new Response(JSON.stringify({ types: {} }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Find any active ML account to use for API calls
+        let tokenToUse = '';
+        if (account_id) {
+          const accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&limit=1`);
+          const accts = await accountRes.json();
+          if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
+        }
+        if (!tokenToUse) {
+          const accountRes = await supabaseFetch(`/ml_accounts?ativo=eq.true&limit=1`);
+          const accts = await accountRes.json();
+          if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
+          if (!Array.isArray(accts)) throw new Error('Query ml_accounts failed: ' + JSON.stringify(accts));
+        }
+        if (!tokenToUse) throw new Error('No active ML account found');
+
+        // Load existing cache from app_data
+        const cacheRes = await supabaseFetch(`/app_data?data_key=eq.ml_listing_types_cache&limit=1`);
+        const cacheRows = await cacheRes.json();
+        if (!Array.isArray(cacheRows)) {
+            console.error('app_data issue: ', cacheRows);
+        }
+        const cachedTypes: Record<string, { catalog: boolean; listingType: string }> = 
+          (Array.isArray(cacheRows) && cacheRows[0]?.data_value) ? cacheRows[0].data_value as any : {};
+
+        // Determine which IDs are missing from cache
+        const missing = item_ids.filter(id => !(id in cachedTypes));
+
+        // Batch fetch in groups of 20
+        const BATCH = 20;
+        for (let i = 0; i < missing.length; i += BATCH) {
+          const batch = missing.slice(i, i + BATCH);
+          try {
+            const res = await fetch(
+              `${ML_API}/items?ids=${batch.join(',')}&attributes=id,catalog_listing,listing_type_id`,
+              { headers: { Authorization: `Bearer ${tokenToUse}` } }
+            );
+            if (res.ok) {
+              const items = await res.json();
+              for (const item of (Array.isArray(items) ? items : [])) {
+                const b = item.body || item;
+                if (b?.id) {
+                  cachedTypes[b.id] = {
+                    catalog: b.catalog_listing === true,
+                    listingType: b.catalog_listing === true ? 'Catálogo' : 'Tradicional',
+                  };
+                }
+              }
+            } else {
+              throw new Error(`ML API Error in batch: ${res.status}`);
+            }
+          } catch (e) {
+            console.error('[listing_types] batch error', e);
+          }
+        }
+
+        // Save updated cache back to app_data
+        let saveMethod = Array.isArray(cacheRows) && cacheRows.length > 0 ? 'PATCH' : 'POST';
+        let saveEndpoint = Array.isArray(cacheRows) && cacheRows.length > 0 ? '/app_data?data_key=eq.ml_listing_types_cache' : '/app_data';
+        
+        const saveBody = saveMethod === 'POST'
+          ? { data_key: 'ml_listing_types_cache', data_value: cachedTypes, updated_at: new Date().toISOString() }
+          : { data_value: cachedTypes, updated_at: new Date().toISOString() };
+
+        const saveRes = await supabaseFetch(saveEndpoint, {
+          method: saveMethod,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(saveBody),
+        });
+
+        if (!saveRes.ok) {
+          throw new Error('Failed to save cache: ' + await saveRes.text());
+        }
+
+        return new Response(JSON.stringify({ types: cachedTypes, updated: missing.length }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.message, stack: err.stack }), {
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-
-      // Find any active ML account to use for API calls
-      let tokenToUse = '';
-      if (account_id) {
-        const accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&limit=1`);
-        const accts = await accountRes.json();
-        if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
-      }
-      if (!tokenToUse) {
-        const accountRes = await supabaseFetch(`/ml_accounts?ativo=eq.true&limit=1`);
-        const accts = await accountRes.json();
-        if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
-      }
-      if (!tokenToUse) throw new Error('No active ML account found');
-
-      // Load existing cache from app_data
-      const cacheRes = await supabaseFetch(`/app_data?data_key=eq.ml_listing_types_cache&limit=1`);
-      const cacheRows = await cacheRes.json();
-      const cachedTypes: Record<string, { catalog: boolean; listingType: string }> = 
-        (cacheRows?.[0]?.data_value as any) || {};
-
-      // Determine which IDs are missing from cache
-      const missing = item_ids.filter(id => !(id in cachedTypes));
-
-      // Batch fetch in groups of 20
-      const BATCH = 20;
-      for (let i = 0; i < missing.length; i += BATCH) {
-        const batch = missing.slice(i, i + BATCH);
-        try {
-          const res = await fetch(
-            `${ML_API}/items?ids=${batch.join(',')}&attributes=id,catalog_listing,listing_type_id`,
-            { headers: { Authorization: `Bearer ${tokenToUse}` } }
-          );
-          if (res.ok) {
-            const items = await res.json();
-            for (const item of (Array.isArray(items) ? items : [])) {
-              const b = item.body || item;
-              if (b?.id) {
-                cachedTypes[b.id] = {
-                  catalog: b.catalog_listing === true,
-                  listingType: b.catalog_listing === true ? 'Catálogo' : 'Tradicional',
-                };
-              }
-            }
-          }
-        } catch (e) {
-          console.error('[listing_types] batch error', e);
-        }
-      }
-
-      // Save updated cache back to app_data
-      let saveMethod = cacheRows && cacheRows.length > 0 ? 'PATCH' : 'POST';
-      let saveEndpoint = cacheRows && cacheRows.length > 0 ? '/app_data?data_key=eq.ml_listing_types_cache' : '/app_data';
-      
-      const saveBody = saveMethod === 'POST'
-        ? { data_key: 'ml_listing_types_cache', data_value: cachedTypes, updated_at: new Date().toISOString() }
-        : { data_value: cachedTypes, updated_at: new Date().toISOString() };
-
-      const saveRes = await supabaseFetch(saveEndpoint, {
-        method: saveMethod,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(saveBody),
-      });
-
-      if (!saveRes.ok) {
-        console.error('Failed to save cache', await saveRes.text());
-      }
-
-      return new Response(JSON.stringify({ types: cachedTypes, updated: missing.length }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     throw new Error(`Unknown action: ${action}`);
