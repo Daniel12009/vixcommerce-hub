@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+﻿import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -221,66 +221,26 @@ async function runTinyPlatform(plat: string, dIniBR: string): Promise<string[]> 
 
 async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0): Promise<string[]> {
   const log: string[] = [];
-  let page = resumePage;
-  let offset = resumeOffset;
-  let sheetMode = page === 1 && offset === 0 ? 'write' : 'append';
-  let totalSkus = resumeTotal;
-  const startTime = Date.now();
+  const page = resumePage;
+  const offset = resumeOffset;
 
+  // Each invocation handles ONE batch; tiny auto-chains the next via auto_chain=true
   try {
-    let hasMore = true;
-    let i = 0;
-    while (hasMore) {
-      if (Date.now() - startTime > 45000) { // 45 seconds (safe margin before Supabase 60s hard limit)
-        log.push(`â³ Tempo limite se aproximando. Reinvocando em 2Âº plano a partir da pÃ¡g ${page}, offset ${offset}...`);
-        
-        // Asynchronously invoke self to continue without waiting (fire and forget)
-        fetch(`${SUPABASE_URL}/functions/v1/daily-sync`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SERVICE_KEY}`
-          },
-          body: JSON.stringify({ 
-            module: 'tiny_estoque',
-            resume_page: page,
-            resume_offset: offset,
-            resume_total: totalSkus
-          })
-        }).catch(err => console.error("Falha ao reinvocar:", err));
-        
-        hasMore = false;
-        break; // exit current execution gracefully
-      }
-
-      log.push(`ðŸ“¦ Estoque Tiny: pÃ¡g ${page}, offset ${offset}...`);
-      const r = await invokeFunction('tiny', {
-        action: 'sync_estoque_tiny',
-        page,
-        offset,
-        sheetMode,
-      });
-      totalSkus += r.skus || 0;
-
-      if (!r.hasMore) {
-        log.push(`âœ… Estoque Tiny: ${totalSkus} SKUs sincronizados (${i + 1} batches)`);
-        hasMore = false;
-        break;
-      }
-
-      page = r.nextPage;
-      offset = r.nextOffset || 0;
-      sheetMode = 'append';
-      i++;
-
-      // Delay between batches to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    log.push(Estoque Tiny: pag  + '' + , offset  + '' + ...);
+    const r = await invokeFunction('tiny', {
+      action: 'sync_estoque_tiny',
+      page,
+      offset,
+      auto_chain: true,
+    });
+    const totalSkus = (resumeTotal || 0) + (r.skus || 0);
+    if (!r.hasMore) {
+      log.push(Estoque Tiny:  + '' +  SKUs sincronizados (ultimo lote));
+    } else {
+      log.push(Estoque Tiny:  + '' +  SKUs neste lote. Proximo lote encadeado.);
     }
   } catch (e: any) {
-    log.push(`âŒ Estoque Tiny (pÃ¡g ${page}): ${e.message}`);
-    if (totalSkus > 0) {
-      log.push(`âš ï¸ Parcial: ${totalSkus} SKUs jÃ¡ sincronizados antes do erro`);
-    }
+    log.push(ERRO Estoque Tiny (pag  + '' + ):  + '');
   }
   return log;
 }
