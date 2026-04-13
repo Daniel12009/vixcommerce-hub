@@ -343,10 +343,9 @@ Deno.serve(async (req) => {
       });
     }
   }
-  // Mark auto_chain as resume to suppress duplicate Telegram 'Iniciando' messages
-  if (isAutoChain) body.is_resume = true;
-
-  const moduleLog = await executeModule(targetModule, dIni, dIniBR, runDate, body);
+  const isResume = body.resume_page !== undefined;
+  const resumeData = isResume ? { ...body, is_resume: true } : {};
+  const moduleLog = await executeModule(targetModule, dIni, dIniBR, runDate, resumeData);
 
   return new Response(JSON.stringify({ sucesso: true, log: moduleLog }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
