@@ -36,19 +36,30 @@ const PROPRIO_BUYERS = ['MONACO METAIS', 'GONTAREK'];
 const classifyCanal = (order: DashOrder): string => {
   // Use canal from Tiny API if available
   if (order.canal) return order.canal;
+
   const lower = (order.conta || '').toLowerCase();
-  // Via Flix vendor = dropshipping
+  
+  // Standard Marketplaces are B2C (buyer is always an external person, not our company)
+  // They are strictly standard retail - no dropshipping logic applies to them.
+  if (order.plataforma === 'mercadolivre' || order.plataforma === 'shopee') {
+    return 'marketplace';
+  }
+
+  // Explicit Dropshipping accounts (only for Tiny/Wholesale)
+  if (lower.includes('thiago')) return 'drop';
   if (lower.includes('via flix') || lower.includes('viaflix')) return 'drop';
-  // If buyer is not one of our own companies = dropshipping
+
+  // For Tiny/Atacado orders: if buyer is not one of our own companies = dropshipping
   const buyer = (order.buyer || '').toUpperCase();
   const isOwnBuyer = PROPRIO_BUYERS.some(b => buyer.includes(b));
-  if (!isOwnBuyer) return 'drop';
-  // Own buyer: classify by conta
-  if (lower.includes('thiago')) return 'drop';
+  if (!isOwnBuyer && buyer.length > 0) return 'drop';
+
+  // Own buyer or other Atacado channels: classify by conta
   if (lower.includes('alexia')) return 'atacado_alexia';
   if (lower.includes('atacado')) return 'atacado_vf';
   if (lower.includes('showroom')) return 'showroom';
   if (lower.includes('loja')) return 'loja';
+  
   return 'marketplace';
 };
 
@@ -461,43 +472,52 @@ export function DashboardPage() {
               )}
             </div>
 
-            <div className="flex overflow-x-auto pb-4 gap-4 snap-x hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-              {todosPedidosDia.map((o) => (
-                <div key={o.id} className="snap-start flex-none w-[280px] sm:w-[320px] bg-background border border-border rounded-xl p-4 hover:border-primary/50 transition-colors flex flex-col relative group">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[o.plataforma || ''] || '#999' }} />
-                      <span className="text-xs font-semibold text-foreground/80">{getPlatformLabel(o.plataforma || '')}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(o.date_created).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  
-                  <div className="mb-3">
-                    <p className="text-xs font-bold text-foreground truncate" title={o.conta}>{o.conta}</p>
-                    <p className="text-[10px] text-muted-foreground truncate" title={o.buyer}>{o.buyer}</p>
-                  </div>
-
-                  <div className="flex-1 mb-3">
-                    <p className="text-[11px] text-foreground/90 line-clamp-2 leading-relaxed" title={o.items.map(i => i.title).join(', ')}>
-                      {o.items.map(i => <span key={i.sku} className="bg-muted px-1 py-0.5 rounded mr-1">{i.quantity}x {i.sku || i.title?.slice(0,15)}</span>)}
-                    </p>
-                  </div>
-
-                  <div className="mt-auto pt-3 border-t border-border flex items-center justify-between">
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                      o.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' :
-                      o.status === 'cancelled' ? 'bg-red-500/10 text-red-500' :
-                      'bg-amber-500/10 text-amber-500'
-                    }`}>
-                      {o.status === 'paid' ? 'Pago' : o.status === 'cancelled' ? 'Cancelado' : classifyCanal(o) === 'drop' ? 'Drop' : o.status}
-                    </span>
-                    <span className="text-sm font-black text-[hsl(var(--vix-success))]">{formatBRL(o.total_amount)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/30">
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Hora</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Plataforma</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Conta</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Comprador</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Vendedor</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Produto</th>
+                    <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Qtd</th>
+                    <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Valor</th>
+                    <th className="text-center py-2.5 px-3 text-muted-foreground font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todosPedidosDia.map((o) => (
+                    <tr key={o.id} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
+                      <td className="py-2.5 px-3">{new Date(o.date_created).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[o.plataforma || ''] || '#999' }} />
+                          <span className="font-medium">{getPlatformLabel(o.plataforma || '')}</span>
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">{o.conta}</td>
+                      <td className="py-2.5 px-3">{o.buyer}</td>
+                      <td className="py-2.5 px-3 text-xs">{o.vendedor || '-'}</td>
+                      <td className="py-2.5 px-3 max-w-[180px] truncate" title={o.items.map(i => i.title).join(', ')}>
+                        {o.items.map(i => i.sku || i.title?.slice(0, 25)).join(', ')}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">{o.items.reduce((s, i) => s + i.quantity, 0)}</td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-[hsl(var(--vix-success))]">{formatBRL(o.total_amount)}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          o.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' :
+                          o.status === 'cancelled' ? 'bg-red-500/10 text-red-500' :
+                          'bg-amber-500/10 text-amber-500'
+                        }`}>
+                          {o.status === 'paid' ? 'Pago' : o.status === 'cancelled' ? 'Cancelado' : classifyCanal(o) === 'drop' ? 'Drop' : o.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
           </div>
         </>
       )}
