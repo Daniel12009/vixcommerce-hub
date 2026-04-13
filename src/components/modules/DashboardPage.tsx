@@ -29,12 +29,13 @@ interface DashOrder {
   error?: string;
 }
 
-type CanalFilter = 'all' | 'marketplace' | 'loja' | 'atacado_vf' | 'atacado_alexia' | 'atacado_all' | 'showroom';
+type CanalFilter = 'all' | 'marketplace' | 'loja' | 'atacado_vf' | 'atacado_alexia' | 'atacado_all' | 'showroom' | 'drop';
 
 const classifyCanal = (order: DashOrder): string => {
   // Use canal from Tiny API if available
   if (order.canal) return order.canal;
   const lower = (order.conta || '').toLowerCase();
+  if (lower.includes('thiago')) return 'drop';
   if (lower.includes('alexia')) return 'atacado_alexia';
   if (lower.includes('atacado')) return 'atacado_vf';
   if (lower.includes('showroom')) return 'showroom';
@@ -287,6 +288,7 @@ export function DashboardPage() {
             <option value="all">Todos os Canais</option>
             <option value="marketplace">Marketplace</option>
             <option value="loja">Loja</option>
+            <option value="drop">🎯 Drop (Thiago)</option>
             <option value="atacado_all">Atacado (Todos)</option>
             <option value="atacado_vf">Atacado VF</option>
             <option value="atacado_alexia">Atacado Alexia</option>
