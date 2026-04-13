@@ -186,11 +186,12 @@ export function ExpedicaoTab() {
       const isOwnBuyer = PROPRIO_BUYERS.some(b => buyerName.includes(b));
       
       let isDrop = false;
-      if (lowerConta.includes('thiago') || lowerConta.includes('via flix') || lowerConta.includes('viaflix')) {
-        isDrop = true;
-      } else if (s.plataforma !== 'ml' && s.plataforma !== 'shopee') {
-        if (buyerName.length > 0 && !isOwnBuyer) {
-            isDrop = true;
+      // Only apply Dropshipping logic to Tiny / Non-standard Marketplaces
+      if (s.plataforma !== 'ml' && s.plataforma !== 'shopee') {
+        if (lowerConta.includes('thiago') || lowerConta.includes('via flix') || lowerConta.includes('viaflix')) {
+          isDrop = true;
+        } else if (buyerName.length > 0 && !isOwnBuyer) {
+          isDrop = true;
         }
       }
 
