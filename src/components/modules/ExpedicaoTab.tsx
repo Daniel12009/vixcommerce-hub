@@ -16,9 +16,11 @@ export interface Shipment {
   conta: string;
   accountId: string;
   plataforma: string;
-  items: { title: string; sku: string; quantity: number; unitPrice: number }[];
   error?: string;
 }
+
+const PROPRIO_BUYERS = ['MONACO METAIS', 'GONTAREK'];
+
 
 // Module-level cache to survive tab changes within the same page session
 let cachedShipments: Shipment[] | null = null;
@@ -162,6 +164,7 @@ export function ExpedicaoTab() {
     let outrosMarketplaces = 0;
 
     const grupos = {
+      drop: [] as Shipment[],
       atrasados: [] as Shipment[],
       flex: [] as Shipment[],
       coletaMl: [] as Shipment[],
@@ -169,12 +172,25 @@ export function ExpedicaoTab() {
       outros: [] as Shipment[] // shein, amazon, tiny manual, etc
     };
 
+    let dropCount = 0;
+
     shipments.forEach(s => {
       // Ignora registros de erro devolvidos pelas functions
       if (s.error) return;
 
       const deadline = getShippingDeadline(s.dateCreated, s.plataforma, s.logisticType);
       const isLate = todayStart > deadline;
+
+      const lowerConta = (s.conta || '').toLowerCase();
+      const buyerName = (s.buyer || '').toUpperCase();
+      const isOwnBuyer = PROPRIO_BUYERS.some(b => buyerName.includes(b));
+      const isDrop = lowerConta.includes('via flix') || lowerConta.includes('viaflix') || (buyerName.length > 0 && !isOwnBuyer);
+
+      if (isDrop) {
+        dropCount++;
+        grupos.drop.push(s);
+        return; // Drop orders have their own dedicated box
+      }
 
       if (isLate) {
         atrasados++;
@@ -200,7 +216,7 @@ export function ExpedicaoTab() {
       }
     });
 
-    return { flexPendentes, atrasados, coletaNormal, outrosMarketplaces, grupos, total: shipments.length - shipments.filter(s=>s.error).length };
+    return { flexPendentes, atrasados, coletaNormal, outrosMarketplaces, dropCount, grupos, total: shipments.length - shipments.filter(s=>s.error).length };
   }, [shipments, todayStart]);
 
   const formatDate = (iso: string) => {
@@ -356,6 +372,43 @@ export function ExpedicaoTab() {
             colorClass="bg-[hsl(200,100%,50%,0.1)] text-[hsl(200,80%,50%)] border-[hsl(200,100%,50%,0.2)]"
             emptyMsg="Nenhum pedido pendente de outros canais via Tiny."
           />
+        )}
+
+        {stats.grupos.drop.length > 0 && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mb-6 animate-fade-in">
+            <div className={`px-4 py-3 border-b border-border flex items-center justify-between bg-amber-500/10 text-amber-500 border-amber-500/20`}>
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                🎯 Dropshipping (Pendente) ({stats.grupos.drop.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Horário</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Nº do Pedido</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Origem</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Conta (Comprador)</th>
+                    <th className="px-4 py-2 text-right font-medium text-muted-foreground w-32">Valor Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.grupos.drop.map((s: Shipment) => (
+                    <tr key={s.orderId} className="border-b border-border hover:bg-muted/10 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-foreground tracking-tight">{formatDate(s.dateCreated)}</td>
+                      <td className="px-4 py-3 font-semibold text-primary font-mono text-xs">{s.orderId}</td>
+                      <td className="px-4 py-3">{renderPlatformBadge(s.plataforma)}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-foreground truncate max-w-[200px]" title={s.buyer}>{s.buyer}</p>
+                        <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-0.5">{s.conta}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-foreground">{formatBRL(s.totalAmount || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
     </div>
