@@ -184,7 +184,15 @@ export function ExpedicaoTab() {
       const lowerConta = (s.conta || '').toLowerCase();
       const buyerName = (s.buyer || '').toUpperCase();
       const isOwnBuyer = PROPRIO_BUYERS.some(b => buyerName.includes(b));
-      const isDrop = lowerConta.includes('via flix') || lowerConta.includes('viaflix') || (buyerName.length > 0 && !isOwnBuyer);
+      
+      let isDrop = false;
+      if (lowerConta.includes('thiago') || lowerConta.includes('via flix') || lowerConta.includes('viaflix')) {
+        isDrop = true;
+      } else if (s.plataforma !== 'ml' && s.plataforma !== 'shopee') {
+        if (buyerName.length > 0 && !isOwnBuyer) {
+            isDrop = true;
+        }
+      }
 
       if (isDrop) {
         dropCount++;
