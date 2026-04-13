@@ -212,9 +212,22 @@ function AutomationConfig() {
       if (modulesRes.data?.data_value && typeof modulesRes.data.data_value === 'object') {
         setEnabledModules(modulesRes.data.data_value as Record<string, boolean>);
       }
+      // Load schedules from app_data first as fallback
+      let schedulesFromDB: Record<string, string> = {};
       if (schedulesRes.data?.data_value && typeof schedulesRes.data.data_value === 'object') {
-        setSchedules(schedulesRes.data.data_value as Record<string, string>);
+        schedulesFromDB = schedulesRes.data.data_value as Record<string, string>;
       }
+      // Then try to override with live cron schedules (source of truth)
+      try {
+        const cronData = await callManageCron({ action: 'get_schedules' });
+        if (cronData?.schedules && typeof cronData.schedules === 'object') {
+          // Merge: live cron overrides app_data
+          schedulesFromDB = { ...schedulesFromDB, ...cronData.schedules };
+        }
+      } catch (cronErr) {
+        console.warn('Não foi possível carregar schedules do cron, usando app_data:', cronErr);
+      }
+      setSchedules(schedulesFromDB);
     } catch (e) {
       console.error('Erro ao carregar config:', e);
     } finally {
