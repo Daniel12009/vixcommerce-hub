@@ -31,10 +31,19 @@ interface DashOrder {
 
 type CanalFilter = 'all' | 'marketplace' | 'loja' | 'atacado_vf' | 'atacado_alexia' | 'atacado_all' | 'showroom' | 'drop';
 
+const PROPRIO_BUYERS = ['MONACO METAIS', 'GONTAREK'];
+
 const classifyCanal = (order: DashOrder): string => {
   // Use canal from Tiny API if available
   if (order.canal) return order.canal;
   const lower = (order.conta || '').toLowerCase();
+  // Via Flix vendor = dropshipping
+  if (lower.includes('via flix') || lower.includes('viaflix')) return 'drop';
+  // If buyer is not one of our own companies = dropshipping
+  const buyer = (order.buyer || '').toUpperCase();
+  const isOwnBuyer = PROPRIO_BUYERS.some(b => buyer.includes(b));
+  if (!isOwnBuyer) return 'drop';
+  // Own buyer: classify by conta
   if (lower.includes('thiago')) return 'drop';
   if (lower.includes('alexia')) return 'atacado_alexia';
   if (lower.includes('atacado')) return 'atacado_vf';
@@ -153,6 +162,12 @@ export function DashboardPage() {
   // Filters
   const filteredOrders = useMemo(() => {
     let items = orders.filter(o => o.status !== 'cancelled');
+    // Drop orders are excluded from the default view — only visible when 'drop' filter is selected
+    if (filterCanal === 'drop') {
+      return items.filter(o => classifyCanal(o) === 'drop');
+    }
+    // Always exclude drop from regular totals
+    items = items.filter(o => classifyCanal(o) !== 'drop');
     if (filterPlataforma !== 'all') {
       items = items.filter(o => (o.plataforma || '') === filterPlataforma);
     }
@@ -244,10 +259,14 @@ export function DashboardPage() {
     return [...map.values()].sort((a, b) => b.vendas - a.vendas).slice(0, 10);
   }, [paidOrders]);
 
-  // Últimos pedidos
-  const ultimosPedidos = useMemo(() =>
-    [...paidOrders].sort((a, b) => new Date(b.date_created).getTime() - new Date(a.date_created).getTime()).slice(0, 20),
+  // Todos os pedidos do dia
+  const todosPedidosDia = useMemo(() =>
+    [...paidOrders].sort((a, b) => new Date(b.date_created).getTime() - new Date(a.date_created).getTime()),
   [paidOrders]);
+
+  // Drop stats
+  const dropOrders = useMemo(() => orders.filter(o => ['paid','partially_paid','payment_in_process','payment_required'].includes(o.status) && classifyCanal(o) === 'drop'), [orders]);
+  const dropTotal = dropOrders.reduce((s, o) => s + o.total_amount, 0);
 
   return (
     <div>
@@ -422,57 +441,62 @@ export function DashboardPage() {
             </div>
           )}
 
-          {/* Últimos Pedidos */}
-          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in">
-            <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-amber-500" /> Últimos Pedidos
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Hora</th>
-                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Plataforma</th>
-                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Conta</th>
-                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Comprador</th>
-                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Vendedor</th>
-                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Produto</th>
-                    <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Qtd</th>
-                    <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Valor</th>
-                    <th className="text-center py-2.5 px-3 text-muted-foreground font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ultimosPedidos.map((o) => (
-                    <tr key={o.id} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
-                      <td className="py-2.5 px-3">{new Date(o.date_created).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="py-2.5 px-3">
-                        <span className="inline-flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[o.plataforma || ''] || '#999' }} />
-                          <span className="font-medium">{getPlatformLabel(o.plataforma || '')}</span>
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3">{o.conta}</td>
-                      <td className="py-2.5 px-3">{o.buyer}</td>
-                      <td className="py-2.5 px-3 text-xs">{o.vendedor || '-'}</td>
-                      <td className="py-2.5 px-3 max-w-[180px] truncate" title={o.items.map(i => i.title).join(', ')}>
-                        {o.items.map(i => i.sku || i.title?.slice(0, 25)).join(', ')}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">{o.items.reduce((s, i) => s + i.quantity, 0)}</td>
-                      <td className="py-2.5 px-3 text-right font-semibold text-[hsl(var(--vix-success))]">{formatBRL(o.total_amount)}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          o.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' :
-                          o.status === 'cancelled' ? 'bg-red-500/10 text-red-500' :
-                          'bg-amber-500/10 text-amber-500'
-                        }`}>
-                          {o.status === 'paid' ? 'Pago' : o.status === 'cancelled' ? 'Cancelado' : o.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Últimos Pedidos - Scroll Horizontal */}
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in relative">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-foreground font-semibold flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-amber-500" /> Todos os Pedidos do Dia
+                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full ml-2">
+                  {todosPedidosDia.length}
+                </span>
+              </h3>
+              
+              {/* Drop Stats Badge */}
+              {dropOrders.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                  <span className="text-xs font-semibold text-amber-500">🎯 Drop: {dropOrders.length} ped.</span>
+                  <span className="w-1 h-1 rounded-full bg-amber-500/50" />
+                  <span className="text-xs font-semibold text-amber-500">{formatBRL(dropTotal)}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex overflow-x-auto pb-4 gap-4 snap-x hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {todosPedidosDia.map((o) => (
+                <div key={o.id} className="snap-start flex-none w-[280px] sm:w-[320px] bg-background border border-border rounded-xl p-4 hover:border-primary/50 transition-colors flex flex-col relative group">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[o.plataforma || ''] || '#999' }} />
+                      <span className="text-xs font-semibold text-foreground/80">{getPlatformLabel(o.plataforma || '')}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(o.date_created).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <p className="text-xs font-bold text-foreground truncate" title={o.conta}>{o.conta}</p>
+                    <p className="text-[10px] text-muted-foreground truncate" title={o.buyer}>{o.buyer}</p>
+                  </div>
+
+                  <div className="flex-1 mb-3">
+                    <p className="text-[11px] text-foreground/90 line-clamp-2 leading-relaxed" title={o.items.map(i => i.title).join(', ')}>
+                      {o.items.map(i => <span key={i.sku} className="bg-muted px-1 py-0.5 rounded mr-1">{i.quantity}x {i.sku || i.title?.slice(0,15)}</span>)}
+                    </p>
+                  </div>
+
+                  <div className="mt-auto pt-3 border-t border-border flex items-center justify-between">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                      o.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' :
+                      o.status === 'cancelled' ? 'bg-red-500/10 text-red-500' :
+                      'bg-amber-500/10 text-amber-500'
+                    }`}>
+                      {o.status === 'paid' ? 'Pago' : o.status === 'cancelled' ? 'Cancelado' : classifyCanal(o) === 'drop' ? 'Drop' : o.status}
+                    </span>
+                    <span className="text-sm font-black text-[hsl(var(--vix-success))]">{formatBRL(o.total_amount)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </>
