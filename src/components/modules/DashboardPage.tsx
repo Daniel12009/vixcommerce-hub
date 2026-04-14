@@ -183,11 +183,7 @@ export function DashboardPage() {
       items = items.filter(o => (o.plataforma || '') === filterPlataforma);
     }
     if (filterCanal !== 'all') {
-      items = items.filter(o => {
-        const c = classifyCanal(o);
-        if (filterCanal === 'atacado_all') return c === 'atacado_vf' || c === 'atacado_alexia';
-        return c === filterCanal;
-      });
+      items = items.filter(o => classifyCanal(o) === filterCanal);
     }
     if (filterConta !== 'all') {
       items = items.filter(o => (o.conta || 'Sem Conta') === filterConta);
