@@ -96,10 +96,11 @@ export function ExpedicaoTab() {
     fetchPromise = (async () => {
       try {
         // Fetch from all 3 platforms in parallel
-        const [mlRes, shopeeRes, tinyRes] = await Promise.allSettled([
+        const [mlRes, shopeeRes, tinyRes, dropRes] = await Promise.allSettled([
           supabase.functions.invoke('mercado-livre', { body: { action: 'get_pending_shipments' } }),
           supabase.functions.invoke('shopee', { body: { action: 'get_pending_shipments' } }),
-          supabase.functions.invoke('tiny', { body: { action: 'get_pending_shipments' } })
+          supabase.functions.invoke('tiny', { body: { action: 'get_pending_shipments' } }),
+          supabase.functions.invoke('tiny', { body: { action: 'get_drop_pending_shipments' } })
         ]);
 
         let all: Shipment[] = [];
@@ -124,6 +125,13 @@ export function ExpedicaoTab() {
           all = [...all, ...data.map((s: any) => ({ ...s, plataforma: s.plataforma || 'tiny' }))];
         } else {
           errors.push('Tiny ERP');
+        }
+
+        if (dropRes.status === 'fulfilled' && !dropRes.value.error) {
+          const data = dropRes.value.data?.shipments || [];
+          all = [...all, ...data.map((s: any) => ({ ...s, plataforma: 'tiny_drop' }))];
+        } else {
+          errors.push('Dropshipping');
         }
 
         cachedShipments = all;
@@ -187,8 +195,11 @@ export function ExpedicaoTab() {
       const isOwnBuyer = PROPRIO_BUYERS.some(b => buyerName.includes(b));
       
       let isDrop = false;
-      // Only apply Dropshipping logic to Tiny / Non-standard Marketplaces
-      if (s.plataforma !== 'ml' && s.plataforma !== 'shopee') {
+      // Dropshipping priority: explicit tiny_drop from API
+      if (s.plataforma === 'tiny_drop') {
+        isDrop = true;
+      } else if (s.plataforma !== 'ml' && s.plataforma !== 'shopee') {
+        // Fallback or existing manual logic for other accounts
         if (lowerConta.includes('thiago') || lowerConta.includes('via flix') || lowerConta.includes('viaflix')) {
           isDrop = true;
         } else if (buyerName.length > 0 && !isOwnBuyer) {
