@@ -1,7 +1,25 @@
+import { useMemo, useState } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { subDays, format } from 'date-fns';
 import { formatBRL, normalizeConta, getContasNormalizadas } from '@/lib/utils-vix';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 const COLORS = [
   'hsl(var(--primary))',
@@ -71,13 +89,13 @@ export function GraficosTab() {
   // Get unique marketplaces for sub-filter
   const uniqueMarketplaces = useMemo(() => {
     const origins = new Set<string>();
-    allVendas.forEach(v => {
-      if (v.pedidoOrigem && classifyCanal(v.pedidoOrigem) === 'marketplace') {
-        origins.add(v.pedidoOrigem);
+    dbDaily.forEach(v => {
+      if (v.origem && classifyCanal(v.origem) === 'marketplace') {
+        origins.add(v.origem);
       }
     });
     return [...origins].sort();
-  }, [allVendas]);
+  }, [dbDaily]);
 
   // Final cleanup: removed legacy info
 

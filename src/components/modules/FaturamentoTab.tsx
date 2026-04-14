@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { subDays, format } from 'date-fns';
@@ -71,7 +72,7 @@ export function FaturamentoTab() {
 
   const [filterCanal, setFilterCanal] = useState<'all' | 'marketplace' | 'atacado'>('all');
   const [sortField, setSortField] = useState('faturamento');
-  const [sortDir, setSortDir] = useState<'desc'>('desc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // All unique contas
   const contas = useMemo(() =>
