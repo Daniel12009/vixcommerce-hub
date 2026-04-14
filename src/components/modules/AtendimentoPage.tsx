@@ -652,6 +652,13 @@ function IATab({ sellerId }: { sellerId: string }) {
         </div>
       )}
 
+      {!loading && progressText && suggestions.length === 0 && (
+        <div className="bg-card border border-border rounded-xl p-4 mb-4">
+          <p className="text-sm font-medium text-foreground mb-1">Resultado da análise</p>
+          <p className="text-xs text-muted-foreground">{progressText}</p>
+        </div>
+      )}
+
       {/* Suggestions */}
       {suggestions.length > 0 && !loading && (
         <div>
