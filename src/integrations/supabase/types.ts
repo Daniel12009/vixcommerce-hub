@@ -247,6 +247,42 @@ export type Database = {
         }
         Relationships: []
       }
+      ml_answer_templates: {
+        Row: {
+          active: boolean
+          answer_text: string
+          created_at: string
+          id: string
+          keywords: string[]
+          seller_id: string
+          title: string
+          updated_at: string
+          use_count: number
+        }
+        Insert: {
+          active?: boolean
+          answer_text?: string
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          seller_id: string
+          title?: string
+          updated_at?: string
+          use_count?: number
+        }
+        Update: {
+          active?: boolean
+          answer_text?: string
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          seller_id?: string
+          title?: string
+          updated_at?: string
+          use_count?: number
+        }
+        Relationships: []
+      }
       performance_items: {
         Row: {
           canceladas: number
