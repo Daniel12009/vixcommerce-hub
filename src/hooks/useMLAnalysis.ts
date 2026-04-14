@@ -66,9 +66,18 @@ export function useMLAnalysis(sellerId: string) {
 
       if (payload?.error) throw new Error(payload.error);
 
-      setSuggestions(payload?.suggestions ?? []);
+      const nextSuggestions = payload?.suggestions ?? [];
+      const completionMessage = nextSuggestions.length > 0
+        ? `Concluído! ${nextSuggestions.length} temas identificados.`
+        : (payload?.message || 'Análise concluída, mas não houve perguntas suficientes para gerar sugestões.');
+
+      setSuggestions(nextSuggestions);
       setProgress(100);
-      setProgressText(`Concluído! ${payload?.suggestions?.length ?? 0} temas identificados.`);
+      setProgressText(completionMessage);
+
+      if (nextSuggestions.length === 0) {
+        toast.info(completionMessage);
+      }
     } catch (e: any) {
       setProgressText(`Erro: ${e.message}`);
       toast.error(`Falha na IA: ${e.message}`);
