@@ -518,10 +518,10 @@ export function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
           </div>
-        </>
-      )}
-
+          </>
+        )}
         </TabsContent>
 
         <TabsContent value="marketplace">
