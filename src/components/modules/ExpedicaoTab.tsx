@@ -16,6 +16,7 @@ export interface Shipment {
   conta: string;
   accountId: string;
   plataforma: string;
+  items?: { sku?: string; title?: string; quantity: number }[];
   error?: string;
 }
 
