@@ -116,10 +116,18 @@ ${allQuestions.slice(0, 400).join('\n')}`
       }),
     })
 
-    const aiData = await aiRes.json()
     if (!aiRes.ok) {
-      throw new Error(aiData.error?.message || 'Erro na API do Claude')
+      const errorBody = await aiRes.text();
+      console.error('Anthropic API Error:', errorBody);
+      return new Response(JSON.stringify({ 
+        error: `Anthropic API Error (Status ${aiRes.status}): ${errorBody}` 
+      }), {
+        status: 200, // Return 200 so the frontend can show the toast
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    const aiData = await aiRes.json()
 
     let raw = aiData.content?.[0]?.text ?? '{}'
     raw = raw.replace(/^```json/, '').replace(/```$/, '').trim() // remove markdown se houver
