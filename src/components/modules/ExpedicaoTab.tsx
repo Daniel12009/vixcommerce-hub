@@ -277,8 +277,8 @@ export function ExpedicaoTab() {
                   <td className="px-4 py-3 font-semibold text-primary font-mono text-xs">{s.orderId}</td>
                   <td className="px-4 py-3">
                     <p className="font-medium text-foreground truncate max-w-[200px]">{s.buyer}</p>
-                    <p className="text-xs text-muted-foreground truncate max-w-[200px]" title={s.items.map(i => `${i.quantity}x ${i.sku || i.title}`).join(', ')}>
-                      {s.items.length} item(s) • {s.items.map(i => i.sku || 'N/A').join(', ')}
+                    <p className="text-xs text-muted-foreground truncate max-w-[200px]" title={(s.items || []).map(i => `${i.quantity}x ${i.sku || i.title}`).join(', ')}>
+                      {(s.items || []).length} item(s) • {(s.items || []).map(i => i.sku || 'N/A').join(', ')}
                     </p>
                   </td>
                   <td className="px-4 py-3">
