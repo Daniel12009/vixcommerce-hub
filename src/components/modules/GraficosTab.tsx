@@ -1,3 +1,4 @@
+import { useState, useMemo, useEffect } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { subDays, format } from 'date-fns';
@@ -238,7 +239,7 @@ export function GraficosTab() {
           </div>
         )}
         <span className="text-xs text-muted-foreground ml-auto">
-          {vendas.length} vendas · {perf.length} anúncios
+          {dbDaily.length} registros · {perf.length} anúncios
         </span>
       </div>
 

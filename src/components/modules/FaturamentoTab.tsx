@@ -1,3 +1,4 @@
+import { useState, useMemo, useEffect } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { subDays, format } from 'date-fns';

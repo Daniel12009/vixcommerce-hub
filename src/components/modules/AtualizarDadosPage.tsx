@@ -235,8 +235,8 @@ export function AtualizarDadosPage() {
   };
 
   // Helper: parse date string (DD/MM/YYYY or ISO)
-  const parseDate = (d: string) => {
-    if (!d) return null;
+  const parseDate = (d: any) => {
+    if (!d || typeof d !== 'string') return null;
     const parts = d.split('/');
     if (parts.length === 3) {
       const year = parts[2].length === 2 ? 2000 + +parts[2] : +parts[2];
