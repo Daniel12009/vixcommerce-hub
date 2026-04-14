@@ -425,18 +425,29 @@ async function processarVendaMLSingle(
       ]);
 
       dbRows.push({
-        numero_pedido: id_referencia_pedido,
+        numero_pedido: String(id_venda_banco),
         data: ymd,
         conta: account.nome,
-        conta_id: account.id,
+        conta_mae: account.nome,
         sku: sku,
+        sku_produto: sku,
+        produto: item.item?.title || '',
         quantidade: qtd,
+        preco_unitario: preco,
         valor_total: valor_total_item,
         comissao: Math.abs(fee_total_neg),
-        frete: Math.abs(custo_calc),
-        marketplace: 'Mercado Livre',
-        origem: venda.seller?.nickname || account.nome || '',
-        payload: { status: venda.status, date_closed: venda.date_closed }
+        custo_envio: Math.abs(custo_calc),
+        frete: 0,
+        impostos: 0,
+        ads: 0,
+        cmv: 0,
+        liquido: 0,
+        devolucao: 0,
+        margem: '',
+        comprador: '',
+        origem: 'Mercado Livre',
+        pedido_origem: `Mercado Livre|${account.nome}`,
+        status_pedido: venda.status || '',
       });
     }
 
@@ -1672,7 +1683,7 @@ Deno.serve(async (req) => {
 
       if (loteDbRows.length > 0) {
         try {
-          const resDb = await supabaseFetch('/vendas_db?on_conflict=numero_pedido,sku', {
+          const resDb = await supabaseFetch('/vendas_items?on_conflict=numero_pedido,sku', {
             method: 'POST',
             headers: { 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify(loteDbRows)
