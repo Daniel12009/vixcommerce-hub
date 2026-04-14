@@ -395,7 +395,8 @@ async function processarVendaMLSingle(
       // Bug fix: prefixar datas com apóstrofo para forçar texto no Sheets
       const data_criacao = `'${formatarDataBR(venda.date_created || '')}`;
       const data_fechamento = `'${formatarDataBR(venda.date_closed || '')}`;
-      const id_venda_str = `="${id_referencia_pedido}"`;
+      const id_venda_planilha = `'${id_referencia_pedido}`;  // apóstrofo → força texto no Sheets
+      const id_venda_banco    = id_referencia_pedido;          // número limpo para o banco
 
       // Prioridade: batch lookup > order_item > item.item
       const listing_type_id = listingTypeMap[ml_id] || item.listing_type_id || item.item?.listing_type_id || item.item?.listing_type?.id || '';
@@ -406,7 +407,7 @@ async function processarVendaMLSingle(
         sku,
         data_criacao,
         data_fechamento,
-        id_venda_str,
+        id_venda_planilha,
         'Mercado Livre',
         ml_id,
         String(listing_type_id).toLowerCase().includes('gold_special') ? 'Clássico' : 'Premium',
