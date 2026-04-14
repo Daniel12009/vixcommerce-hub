@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export interface AISuggestion {
   theme: string;
@@ -44,11 +45,14 @@ export function useMLAnalysis(sellerId: string) {
         body: { seller_id: sellerId, include_own: includeOwn, competitor_item_ids: competitorItemIds },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
       setSuggestions(data?.suggestions ?? []);
       setProgress(100);
       setProgressText(`Concluído! ${data?.suggestions?.length ?? 0} temas identificados.`);
     } catch (e: any) {
       setProgressText(`Erro: ${e.message}`);
+      toast.error(`Falha na IA: ${e.message}`);
     } finally {
       clearInterval(interval);
       setLoading(false);

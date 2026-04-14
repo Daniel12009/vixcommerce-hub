@@ -131,8 +131,9 @@ ${allQuestions.slice(0, 400).join('\n')}`
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    console.error('Edge Function Fatal Error:', err.message, err.stack)
+    return new Response(JSON.stringify({ error: `Internal Error: ${err.message}` }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
 })
