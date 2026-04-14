@@ -101,13 +101,17 @@ ${allQuestions.slice(0, 400).join('\n')}`
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
       }),
     })
 
     const aiData = await aiRes.json()
+    if (!aiRes.ok) {
+      throw new Error(aiData.error?.message || 'Erro na API do Claude')
+    }
+
     const raw = aiData.content?.[0]?.text ?? '{}'
 
     let parsed: { suggestions: any[] } = { suggestions: [] }
