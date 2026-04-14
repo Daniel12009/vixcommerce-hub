@@ -11,10 +11,21 @@ interface TaxConfig {
   simples_pct: number;
 }
 
+interface TaxConfigRow {
+  conta_id: string;
+  regime: 'lucro_real' | 'simples';
+  icms_pct: number | null;
+  pis_cofins_pct: number | null;
+  simples_pct: number | null;
+  updated_at?: string | null;
+}
+
 interface MLAccount {
   id: string;
   nome: string;
 }
+
+const mlAccountTaxConfigTable = () => (supabase as any).from('ml_account_tax_config');
 
 export function TaxConfigModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [loading, setLoading] = useState(true);
@@ -35,14 +46,20 @@ export function TaxConfigModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
       if (errAcc) throw errAcc;
       setAccounts(accData || []);
 
-      const { data: taxData, error: errTax } = await supabase.from('ml_account_tax_config').select('*');
+      const { data: taxData, error: errTax } = await mlAccountTaxConfigTable().select('*');
       // If table doesn't exist yet gracefully ignore
       if (errTax && errTax.code !== '42P01') throw errTax;
 
       const confMap: Record<string, TaxConfig> = {};
       if (taxData) {
-        taxData.forEach(t => {
-          confMap[t.conta_id] = t as TaxConfig;
+        (taxData as TaxConfigRow[]).forEach((t) => {
+          confMap[t.conta_id] = {
+            conta_id: t.conta_id,
+            regime: t.regime,
+            icms_pct: Number(t.icms_pct || 0),
+            pis_cofins_pct: Number(t.pis_cofins_pct || 0),
+            simples_pct: Number(t.simples_pct || 0),
+          };
         });
       }
       setConfigs(confMap);
@@ -65,14 +82,16 @@ export function TaxConfigModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
     if (!conf) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('ml_account_tax_config').upsert({
+      const payload: TaxConfigRow = {
         conta_id: conf.conta_id,
         regime: conf.regime,
         icms_pct: conf.icms_pct,
         pis_cofins_pct: conf.pis_cofins_pct,
         simples_pct: conf.simples_pct,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'conta_id' });
+      };
+
+      const { error } = await mlAccountTaxConfigTable().upsert(payload, { onConflict: 'conta_id' });
       
       if (error) throw error;
       toast.success('Configuração fiscal salva com sucesso!');
