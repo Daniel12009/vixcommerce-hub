@@ -1,4 +1,3 @@
-import { useState, useMemo, useEffect } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { subDays, format } from 'date-fns';
@@ -100,10 +99,10 @@ export function GraficosTab() {
       dateMap.set(d, cur);
     });
     return [...dateMap.values()]
-      .sort((a,b) => {
+      .sort((a, b) => {
         const [da, ma] = a.dia.split('/').map(Number);
         const [db, mb] = b.dia.split('/').map(Number);
-        return (ma*100+da) - (mb*100+db);
+        return (ma * 100 + da) - (mb * 100 + db);
       });
   }, [dbDaily]);
 

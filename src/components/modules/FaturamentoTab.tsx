@@ -1,4 +1,3 @@
-import { useState, useMemo, useEffect } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { subDays, format } from 'date-fns';
@@ -59,7 +58,7 @@ export function FaturamentoTab() {
   const [isTaxModalOpen, setIsTaxModalOpen] = useState(false);
   const [filterDias, setFilterDias] = useState(30);
   const [filterConta, setFilterConta] = useState('all');
-  
+
   const dateFim = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const dateIni = useMemo(() => format(subDays(new Date(), filterDias), 'yyyy-MM-dd'), [filterDias]);
   const dateIniPrev = useMemo(() => format(subDays(new Date(), filterDias * 2), 'yyyy-MM-dd'), [filterDias]);
@@ -75,7 +74,7 @@ export function FaturamentoTab() {
   const [sortDir, setSortDir] = useState<'desc'>('desc');
 
   // All unique contas
-  const contas = useMemo(() => 
+  const contas = useMemo(() =>
     [...new Set((sheetsData.vendasItems || []).map(v => v.conta || v.origem || '').filter(Boolean))].sort(),
     [sheetsData.vendasItems]
   );
@@ -174,20 +173,20 @@ export function FaturamentoTab() {
       const ticket = d.pedidos > 0 ? d.faturamento_bruto / d.pedidos : 0;
       const pctAds = d.faturamento_bruto > 0 ? (d.ads / d.faturamento_bruto) * 100 : 0;
       const pctDev = d.quantidade > 0 ? (d.dev_qtd / d.quantidade) * 100 : 0;
-      return { 
-        sku: d.sku, 
-        faturamento: d.faturamento_bruto, 
-        liquido: d.liquido, 
-        qtd: d.quantidade, 
-        qtdDia: d.quantidade / diasDiv, 
-        ticket, 
-        margem, 
-        pctAds, 
-        pctDev, 
-        prevFat: prev?.faturamento_bruto || 0, 
-        prevLiq: prev?.liquido || 0, 
-        prevQtd: prev?.quantidade || 0, 
-        prevMargem 
+      return {
+        sku: d.sku,
+        faturamento: d.faturamento_bruto,
+        liquido: d.liquido,
+        qtd: d.quantidade,
+        qtdDia: d.quantidade / diasDiv,
+        ticket,
+        margem,
+        pctAds,
+        pctDev,
+        prevFat: prev?.faturamento_bruto || 0,
+        prevLiq: prev?.liquido || 0,
+        prevQtd: prev?.quantidade || 0,
+        prevMargem
       };
     });
 
@@ -281,7 +280,7 @@ export function FaturamentoTab() {
           <span className="text-xs text-muted-foreground mr-2">
             {dbDaily.length} registros | {skuTable.length} SKUs {hasPrev && '| comparando com período anterior'}
           </span>
-          <button 
+          <button
             onClick={() => setIsTaxModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border text-foreground text-xs font-semibold rounded-lg hover:bg-muted transition-colors"
           >

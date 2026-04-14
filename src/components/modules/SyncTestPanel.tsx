@@ -39,6 +39,8 @@ const AUTOMATION_MODULES = [
   { key: 'tiny_tiktok', label: '🎵 TikTok Vendas', description: 'Vendas TikTok via Tiny ERP → VENDASTK', group: 'Tiny ERP' },
   { key: 'tiny_temu', label: '🛍️ Temu Vendas', description: 'Vendas Temu via Tiny ERP → VENDASTM', group: 'Tiny ERP' },
   { key: 'tiny_estoque', label: '📦 Estoque Tiny', description: 'Saldo de todos os produtos ativos → ESTOQUE-TINY', group: 'Tiny ERP' },
+  { key: 'sync_cmv_db', label: '📦 Sync CMV DB', description: 'Planilha CMV → cmv_db', group: 'Banco de Dados' },
+  { key: 'sync_ads_db', label: '📢 Sync ADS DB', description: 'ADS por dia/conta → ads_db', group: 'Banco de Dados' },
 ];
 
 const SYNC_ACTIONS = [
@@ -171,6 +173,22 @@ const SYNC_ACTIONS = [
     fn: 'tiny',
     body: { action: 'sync_estoque_tiny' },
     color: 'bg-[hsl(160,60%,40%,0.15)]',
+  },
+  {
+    id: 'sync-cmv-db',
+    label: '📦 Sync CMV → Banco',
+    description: 'Lê planilha de CMV de cada conta e salva em cmv_db',
+    fn: 'daily-sync',
+    body: { module: 'sync_cmv_db' },
+    color: 'bg-[hsl(160,60%,40%,0.15)]',
+  },
+  {
+    id: 'sync-ads-db',
+    label: '📢 Sync ADS → Banco',
+    description: 'Consolida ADS por dia/conta e salva em ads_db',
+    fn: 'daily-sync',
+    body: { module: 'sync_ads_db' },
+    color: 'bg-[hsl(45,100%,50%,0.15)]',
   },
 ];
 

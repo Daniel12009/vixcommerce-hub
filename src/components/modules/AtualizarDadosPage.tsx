@@ -235,8 +235,8 @@ export function AtualizarDadosPage() {
   };
 
   // Helper: parse date string (DD/MM/YYYY or ISO)
-  const parseDate = (d: any) => {
-    if (!d || typeof d !== 'string') return null;
+  const parseDate = (d: string) => {
+    if (!d) return null;
     const parts = d.split('/');
     if (parts.length === 3) {
       const year = parts[2].length === 2 ? 2000 + +parts[2] : +parts[2];
@@ -573,9 +573,8 @@ export function AtualizarDadosPage() {
             <div
               key={card.id}
               onClick={() => { setActiveCard(card.id); setMessages([]); setChatInput(''); }}
-              className={`bg-card border rounded-xl p-4 md:p-5 cursor-pointer transition-all ${
-                activeCard === card.id ? 'border-primary ring-1 ring-primary/20' : 'border-border hover:border-primary/40'
-              }`}
+              className={`bg-card border rounded-xl p-4 md:p-5 cursor-pointer transition-all ${activeCard === card.id ? 'border-primary ring-1 ring-primary/20' : 'border-border hover:border-primary/40'
+                }`}
             >
               <div className="flex items-center gap-3 mb-3">
                 <div className={`p-2 rounded-lg ${card.bg}`}>{card.icon}</div>
@@ -628,22 +627,20 @@ export function AtualizarDadosPage() {
               )}
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[88%] px-3 py-2 rounded-xl text-sm ${
-                    msg.role === 'user'
+                  <div className={`max-w-[88%] px-3 py-2 rounded-xl text-sm ${msg.role === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-foreground'
-                  }`}>
+                    }`}>
                     {msg.role === 'assistant' ? (
                       <>
                         <div className="prose prose-sm max-w-none [&_strong]:font-semibold [&_ul]:mt-1 [&_li]:text-sm [&_p]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-semibold">
                           <ReactMarkdown>{msg.content}</ReactMarkdown>
                         </div>
                         {msg.execute_result && (
-                          <div className={`mt-2 px-3 py-2 rounded-lg text-xs font-medium ${
-                            msg.execute_result.ok
+                          <div className={`mt-2 px-3 py-2 rounded-lg text-xs font-medium ${msg.execute_result.ok
                               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                               : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                          }`}>
+                            }`}>
                             {msg.execute_result.message}
                           </div>
                         )}
@@ -656,9 +653,8 @@ export function AtualizarDadosPage() {
                               <div key={ci} className="px-3 py-2 rounded-lg bg-background/50 border border-border text-xs">
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="font-medium text-foreground truncate">{camp.name}</span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                    camp.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-muted text-muted-foreground'
-                                  }`}>{camp.status === 'active' ? 'Ativa' : 'Pausada'}</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${camp.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-muted text-muted-foreground'
+                                    }`}>{camp.status === 'active' ? 'Ativa' : 'Pausada'}</span>
                                 </div>
                                 <div className="flex gap-3 mt-1 text-muted-foreground">
                                   <span>Budget: R$ {camp.budget}/dia</span>
@@ -740,8 +736,8 @@ export function AtualizarDadosPage() {
               key={d}
               onClick={() => { setFilterDias(d); setShowCustomDate(false); setPedidosPage(0); }}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${!showCustomDate && filterDias === d
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-card border border-border text-muted-foreground hover:text-foreground'
                 }`}
             >
               {d}d
@@ -750,8 +746,8 @@ export function AtualizarDadosPage() {
           <button
             onClick={() => setShowCustomDate(prev => !prev)}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${showCustomDate
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-card border border-border text-muted-foreground hover:text-foreground'
               }`}
           >
             <CalendarDays className="w-3 h-3" />
@@ -832,16 +828,16 @@ export function AtualizarDadosPage() {
             const sortableVendasCols = ['data', 'quantidade', 'valorTotal', 'impostos', 'comissao', 'cmv', 'liquido', 'margem', 'devolucao'];
             const sortedDisplayList = vendasSortField && sortableVendasCols.includes(vendasSortField)
               ? [...displayList].sort((a: any, b: any) => {
-                  if (vendasSortField === 'data') {
-                    const pa = (a.data || '').split('/');
-                    const pb = (b.data || '').split('/');
-                    const da = pa.length === 3 ? new Date(+pa[2] < 100 ? 2000 + +pa[2] : +pa[2], +pa[1] - 1, +pa[0]).getTime() : 0;
-                    const db = pb.length === 3 ? new Date(+pb[2] < 100 ? 2000 + +pb[2] : +pb[2], +pb[1] - 1, +pb[0]).getTime() : 0;
-                    return vendasSortDir === 'desc' ? db - da : da - db;
-                  }
-                  const va = typeof a[vendasSortField] === 'string' ? parseFloat(a[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (a[vendasSortField] || 0);
-                  const vb = typeof b[vendasSortField] === 'string' ? parseFloat(b[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (b[vendasSortField] || 0);
-                  return vendasSortDir === 'desc' ? vb - va : va - vb;
+                if (vendasSortField === 'data') {
+                  const pa = (a.data || '').split('/');
+                  const pb = (b.data || '').split('/');
+                  const da = pa.length === 3 ? new Date(+pa[2] < 100 ? 2000 + +pa[2] : +pa[2], +pa[1] - 1, +pa[0]).getTime() : 0;
+                  const db = pb.length === 3 ? new Date(+pb[2] < 100 ? 2000 + +pb[2] : +pb[2], +pb[1] - 1, +pb[0]).getTime() : 0;
+                  return vendasSortDir === 'desc' ? db - da : da - db;
+                }
+                const va = typeof a[vendasSortField] === 'string' ? parseFloat(a[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (a[vendasSortField] || 0);
+                const vb = typeof b[vendasSortField] === 'string' ? parseFloat(b[vendasSortField]?.replace(/[^\d.,-]/g, '')?.replace(',', '.') || '0') : (b[vendasSortField] || 0);
+                return vendasSortDir === 'desc' ? vb - va : va - vb;
               })
               : displayList;
 
@@ -1127,7 +1123,7 @@ export function AtualizarDadosPage() {
             today.setHours(23, 59, 59, 999);
             let curEnd = new Date(today);
             let curStart = new Date(today);
-            
+
             if (showCustomDate && filterDataInicio && filterDataFim) {
               const startParts = filterDataInicio.split('-');
               curStart = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]), 0, 0, 0, 0);
@@ -1137,19 +1133,19 @@ export function AtualizarDadosPage() {
               curStart.setDate(curStart.getDate() - filterDias + 1);
               curStart.setHours(0, 0, 0, 0);
             }
-            
+
             const prevEnd = new Date(curStart);
             prevEnd.setDate(prevEnd.getDate() - 1);
             prevEnd.setHours(23, 59, 59, 999);
             const prevStart = new Date(prevEnd);
-            
+
             if (showCustomDate && filterDataInicio && filterDataFim) {
-               // Calculate diff in days
-               const diffTime = Math.abs(curEnd.getTime() - curStart.getTime());
-               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-               prevStart.setDate(prevStart.getDate() - diffDays + 1);
+              // Calculate diff in days
+              const diffTime = Math.abs(curEnd.getTime() - curStart.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              prevStart.setDate(prevStart.getDate() - diffDays + 1);
             } else {
-               prevStart.setDate(prevStart.getDate() - filterDias + 1);
+              prevStart.setDate(prevStart.getDate() - filterDias + 1);
             }
             prevStart.setHours(0, 0, 0, 0);
 
