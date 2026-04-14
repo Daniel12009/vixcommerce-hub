@@ -11,6 +11,13 @@ export interface AISuggestion {
   priority: 'alta' | 'media' | 'baixa';
 }
 
+const ML_ANALYZE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ml-analyze-questions`;
+const BACKEND_HEADERS = {
+  'Content-Type': 'application/json',
+  apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+};
+
 export function useMLAnalysis(sellerId: string) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -41,15 +48,27 @@ export function useMLAnalysis(sellerId: string) {
     }, 1500);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ml-analyze-questions', {
-        body: { seller_id: sellerId, include_own: includeOwn, competitor_item_ids: competitorItemIds },
+      const response = await fetch(ML_ANALYZE_FUNCTION_URL, {
+        method: 'POST',
+        headers: BACKEND_HEADERS,
+        body: JSON.stringify({
+          seller_id: sellerId,
+          include_own: includeOwn,
+          competitor_item_ids: competitorItemIds,
+        }),
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
-      setSuggestions(data?.suggestions ?? []);
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.error || `Falha ao analisar perguntas (${response.status})`);
+      }
+
+      if (payload?.error) throw new Error(payload.error);
+
+      setSuggestions(payload?.suggestions ?? []);
       setProgress(100);
-      setProgressText(`Concluído! ${data?.suggestions?.length ?? 0} temas identificados.`);
+      setProgressText(`Concluído! ${payload?.suggestions?.length ?? 0} temas identificados.`);
     } catch (e: any) {
       setProgressText(`Erro: ${e.message}`);
       toast.error(`Falha na IA: ${e.message}`);
