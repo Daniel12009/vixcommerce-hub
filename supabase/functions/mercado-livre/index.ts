@@ -1689,9 +1689,9 @@ Deno.serve(async (req) => {
             body: JSON.stringify(loteDbRows)
           });
           if (!resDb.ok) {
-             console.error('[SYNC VENDAS DB ML] Upsert failed:', await resDb.text());
+             console.error('[VENDAS_ITEMS] upsert error:', await resDb.text());
           } else {
-             console.log('[SYNC DB] Upsert em vendas_db OK (' + loteDbRows.length + ' linhas)');
+             console.log('[VENDAS_ITEMS] upsert ok:', loteDbRows.length, 'linhas');
           }
         } catch (e) {
           console.error('[SYNC VENDAS DB ML] Erro fatal no fetch do banco:', e);
