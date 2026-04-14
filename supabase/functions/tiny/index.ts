@@ -1,4 +1,4 @@
-﻿import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -521,8 +521,69 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ═══ SYNC VENDAS MARKETPLACE → GOOGLE SHEETS ═══════════════════════════
-    if (action === 'sync_vendas_marketplace') {
+    // ═══ GET DROP PENDING SHIPMENTS (TINY V3) ══════════════════════════════
+    if (action === 'get_drop_pending_shipments') {
+      const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
+      const accounts = await accountsRes.json();
+
+      if (!accounts || accounts.length === 0) {
+        return new Response(JSON.stringify({ shipments: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const allShipments: any[] = [];
+      const accountPromises = accounts.map(async (account: any) => {
+        const accountShipments: any[] = [];
+        try {
+          // Fetch from V3 /separacao
+          // situations=0 is usually "Aguardando separação" in Tiny V3 docs
+          const res = await fetch('https://api.tiny.com.br/public-api/v3/separacao?situacoes=0', {
+            headers: { 'Authorization': `Bearer ${account.api_token}` },
+          });
+
+          if (!res.ok) throw new Error(`Tiny V3 Error: ${res.status}`);
+          const data = await res.json();
+          
+          const separacoes = data?.itens || [];
+          for (const s of separacoes) {
+            // Fetch detail for items if needed, but /separacao usually has enough or we can map it
+            // Tiny V3 list might be simplified, let's map what we have
+            accountShipments.push({
+              orderId: s.idOrigem || s.id,
+              status: 'Aguardando Separação',
+              shippingStatus: 'open',
+              logisticType: 'Dropshipping',
+              dateCreated: s.dataCriacao || new Date().toISOString(),
+              totalAmount: s.valorTotal || 0,
+              buyer: s.contato?.nome || 'N/A',
+              items: (s.itens || []).map((i: any) => ({
+                title: i.descricao || 'Produto',
+                sku: i.codigo || '',
+                quantity: i.quantidade || 1,
+                unitPrice: i.valorUnitario || 0,
+              })),
+              conta: account.nome,
+              accountId: account.id,
+              plataforma: 'tiny_drop'
+            });
+          }
+        } catch (err) {
+          console.error(`Error fetching Tiny Drop shipments for ${account.nome}:`, err);
+          accountShipments.push({ error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`, conta: account.nome });
+        }
+        return accountShipments;
+      });
+
+      const results = await Promise.all(accountPromises);
+      const flattened = results.flat();
+
+      return new Response(JSON.stringify({ shipments: flattened }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'sync_estoque_tiny') {
       const body = await req.clone().then(r => r.json()).catch(() => ({}));
       const { date_from, date_to, plataforma, spreadsheet_id, sheet_name } = body;
 
