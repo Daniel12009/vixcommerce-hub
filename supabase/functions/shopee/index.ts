@@ -164,9 +164,8 @@ Deno.serve(async (req) => {
       const timeFrom = Math.floor((todayStart.getTime() - (spOffset + now.getTimezoneOffset()) * 60000) / 1000);
       const timeTo = Math.floor(now.getTime() / 1000);
 
-      const allOrders: any[] = [];
-
-      for (const account of accounts) {
+      const accountPromises = accounts.map(async (account: any) => {
+        const accountOrders: any[] = [];
         try {
           // Step 1: Get order list (with pagination)
           let cursor = '';
@@ -213,16 +212,20 @@ Deno.serve(async (req) => {
               account_id: account.id,
             }));
 
-            allOrders.push(...orders);
+            accountOrders.push(...orders);
             
             hasMore = listData.response?.more || false;
             cursor = listData.response?.next_cursor || '';
           }
         } catch (err) {
           console.error(`Error fetching Shopee orders for ${account.nome}:`, err);
-          allOrders.push({ error: `Shopee|${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`, conta: `Shopee|${account.nome}` });
+          accountOrders.push({ error: `Shopee|${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`, conta: `Shopee|${account.nome}` });
         }
-      }
+        return accountOrders;
+      });
+
+      const results = await Promise.all(accountPromises);
+      const allOrders = results.flat();
 
       return new Response(JSON.stringify({ orders: allOrders }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
