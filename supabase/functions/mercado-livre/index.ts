@@ -407,7 +407,7 @@ async function processarVendaMLSingle(
         sku,
         data_criacao,
         data_fechamento,
-        id_venda_str,
+        id_venda_planilha,
         'Mercado Livre',
         ml_id,
         String(listing_type_id).toLowerCase().includes('gold_special') ? 'Clássico' : 'Premium',
