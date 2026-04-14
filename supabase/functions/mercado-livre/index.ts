@@ -309,9 +309,9 @@ async function processarVendaMLSingle(
   contagemPacks: Record<string, number>,
   sellerId: string | number,
   listingTypeMap: Record<string, string> = {}
-): Promise<any[][]> {
+): Promise<{ linhasSheets: any[][]; dbRows: any[] }> {
   try {
-    if (venda.status === 'cancelled') return [];
+    if (venda.status === 'cancelled') return { linhasSheets: [], dbRows: [] };
 
     const dtVendaStr = venda.date_created;
     if (dtVendaStr) {
@@ -343,8 +343,18 @@ async function processarVendaMLSingle(
     let tipo_log = tipoLogInicial;
     let estado = estadoFrete;
 
-    const linhas: any[][] = [];
+    const linhasSheets: any[][] = [];
+    const dbRows: any[] = [];
     const orderItems: any[] = venda.order_items || [];
+
+    let ymd = new Date().toISOString().slice(0, 10);
+    if (venda.date_created) {
+      try {
+        const dt = new Date(venda.date_created.replace('Z', '+00:00'));
+        dt.setHours(dt.getHours() - 3);
+        ymd = dt.toISOString().slice(0, 10);
+      } catch { }
+    }
 
     for (const item of orderItems) {
       const item_obj = item.item || {};
@@ -391,7 +401,7 @@ async function processarVendaMLSingle(
       const listing_type_id = listingTypeMap[ml_id] || item.listing_type_id || item.item?.listing_type_id || item.item?.listing_type?.id || '';
       console.log('[listing_type_id]', ml_id, 'map:', listingTypeMap[ml_id], 'item:', item.listing_type_id, 'final:', listing_type_id);
 
-      linhas.push([
+      linhasSheets.push([
         sku,
         sku,
         data_criacao,
@@ -412,12 +422,27 @@ async function processarVendaMLSingle(
         venda.seller?.nickname || account.nome || '',
         estado,
       ]);
+
+      dbRows.push({
+        numero_pedido: id_referencia_pedido,
+        data: ymd,
+        conta: account.nome,
+        conta_id: account.id,
+        sku: sku,
+        quantidade: qtd,
+        valor_total: valor_total_item,
+        comissao: Math.abs(fee_total_neg),
+        frete: Math.abs(custo_calc),
+        marketplace: 'Mercado Livre',
+        origem: venda.seller?.nickname || account.nome || '',
+        payload: { status: venda.status, date_closed: venda.date_closed }
+      });
     }
 
-    return linhas;
+    return { linhasSheets, dbRows };
   } catch (err) {
     console.error('[processarVendaMLSingle] erro:', err);
-    return [];
+    return { linhasSheets: [], dbRows: [] };
   }
 }
 
@@ -1621,6 +1646,7 @@ Deno.serve(async (req) => {
       console.log(`[SYNC] listingTypeMap: ${Object.keys(listingTypeMap).length} itens mapeados`);
 
       const loteLinhas: any[][] = [];
+      const loteDbRows: any[] = [];
       const BATCH = 10;
 
       for (let i = 0; i < todasVendas.length; i += BATCH) {
@@ -1628,8 +1654,9 @@ Deno.serve(async (req) => {
         const batchResults = await Promise.all(
           batch.map(venda => processarVendaMLSingle(venda, token, account, dtIni, dtFim, contagemPacks, sellerId, listingTypeMap))
         );
-        for (const linhas of batchResults) {
-          if (linhas.length > 0) loteLinhas.push(...linhas);
+        for (const res of batchResults) {
+          if (res.linhasSheets?.length > 0) loteLinhas.push(...res.linhasSheets);
+          if (res.dbRows?.length > 0) loteDbRows.push(...res.dbRows);
         }
       }
 
@@ -1640,6 +1667,23 @@ Deno.serve(async (req) => {
         // For vendas, the data processed is 'dateFrom', which might be passed as a ref.
         // Actually earlier it was appending. Let's use column 2 (Data de Criação) for VendasML which has `'DD/MM/YYYY`.
         await invokeSheets(sheetId, `${sheetTab}!A:S`, loteLinhas, 'dedup_write', 2);
+      }
+
+      if (loteDbRows.length > 0) {
+        try {
+          const resDb = await supabaseFetch('/vendas_db?on_conflict=numero_pedido,sku', {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify(loteDbRows)
+          });
+          if (!resDb.ok) {
+             console.error('[SYNC VENDAS DB ML] Upsert failed:', await resDb.text());
+          } else {
+             console.log('[SYNC DB] Upsert em vendas_db OK (' + loteDbRows.length + ' linhas)');
+          }
+        } catch (e) {
+          console.error('[SYNC VENDAS DB ML] Erro fatal no fetch do banco:', e);
+        }
       }
 
       const msg = `ML Vendas ${account.nome}: ${loteLinhas.length} linhas em ${sheetTab} (${dateFrom})`;
@@ -2123,6 +2167,7 @@ Deno.serve(async (req) => {
 
       const linhas_totais: any[][] = [];
       const linhas_resumo: any[][] = [];
+      const loteAdsDbRows: any[] = [];
 
       const dtStart = new Date(`${dateFrom}T12:00:00`);
       const dtEnd   = new Date(`${dateTo}T12:00:00`);
@@ -2131,6 +2176,9 @@ Deno.serve(async (req) => {
         const dia_atual = d.toISOString().slice(0, 10);
         const data_ref_br = fmtDataRef(dia_atual);
         let total_investido_dia = 0;
+        let total_receita_dia = 0;
+        let total_vendas_dia = 0;
+        let total_cliques_dia = 0;
         let offset = 0;
         const limit = 50;
 
@@ -2193,6 +2241,9 @@ Deno.serve(async (req) => {
             }
 
             total_investido_dia += custo;
+            total_receita_dia += receita;
+            total_vendas_dia += vendas_qtd;
+            total_cliques_dia += (metrics.clicks || 0);
 
             if (custo > 0 || (metrics.clicks || 0) > 0) {
               const acos = receita > 0 ? (custo / receita * 100) : 0;
@@ -2214,6 +2265,17 @@ Deno.serve(async (req) => {
 
         if (total_investido_dia > 0) {
           linhas_resumo.push([data_ref_br, nome_conta_upper, `R$ ${toStringDecimal(total_investido_dia)}`]);
+          
+          loteAdsDbRows.push({
+            data_ref: dia_atual,
+            conta: account.nome,
+            conta_id: account.id,
+            investimento: total_investido_dia,
+            receita: total_receita_dia,
+            vendas: total_vendas_dia,
+            cliques: total_cliques_dia,
+            roas: total_investido_dia > 0 ? (total_receita_dia / total_investido_dia) : 0
+          });
         }
         await new Promise(r => setTimeout(r, 1000));
       }
@@ -2225,6 +2287,23 @@ Deno.serve(async (req) => {
       if (linhas_resumo.length > 0) {
         // For ADS resumo: [data, conta, valor] — dedup by date (col 0) + conta (col 1)
         await invokeSheets(sheetId, `${nome_aba_total}!A:C`, linhas_resumo, 'dedup_write', 0, 1);
+      }
+
+      if (loteAdsDbRows.length > 0) {
+        try {
+          const resDb = await supabaseFetch('/ads_db?on_conflict=data_ref,conta_id', {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify(loteAdsDbRows)
+          });
+          if (!resDb.ok) {
+             console.error('[SYNC ADS DB] Upsert failed:', await resDb.text());
+          } else {
+             console.log('[SYNC DB] Upsert em ads_db OK (' + loteAdsDbRows.length + ' dias)');
+          }
+        } catch (e) {
+          console.error('[SYNC ADS DB] Erro fatal no fetch do banco:', e);
+        }
       }
 
       const msg = `ADS ${account.nome}: ${linhas_totais.length} linhas em ${nome_aba}, ${linhas_resumo.length} resumos em ${nome_aba_total}`;

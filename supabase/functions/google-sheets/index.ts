@@ -212,10 +212,16 @@ Deno.serve(async (req) => {
       const filtered = dataRows.filter(row => String(row[dCol] ?? '') === targetDate);
       const combined = [header, ...filtered];
       
+      // Before writing, we MUST clear the entire sheet or the old data trailing at the bottom won't be erased!
+      const clearRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}:clear`, {
+        method: 'POST', headers, body: JSON.stringify({}),
+      });
+      if (!clearRes.ok) throw new Error(`Sheets API clear inside clear_old_dates failed [${clearRes.status}]: ${await clearRes.text()}`);
+
       const writeRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
         method: 'PUT', headers, body: JSON.stringify({ values: combined }),
       });
-      if (!writeRes.ok) throw new Error(`Sheets API clear_old_dates failed [${writeRes.status}]: ${await writeRes.text()}`);
+      if (!writeRes.ok) throw new Error(`Sheets API clear_old_dates write failed [${writeRes.status}]: ${await writeRes.text()}`);
       result = await writeRes.json();
     } else if (action === 'create_sheet') {
       // Create a new sheet tab if it doesn't exist

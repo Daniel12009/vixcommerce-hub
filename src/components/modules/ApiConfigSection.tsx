@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 
 // Tipos para as contas
 interface MLAccount {
-  id: string; nome: string; seller_id: string; client_id: string; client_secret: string; access_token?: string; refresh_token?: string; ativo: boolean;
+  id: string; nome: string; seller_id: string; client_id: string; client_secret: string; access_token?: string; refresh_token?: string; ativo: boolean; cmv_spreadsheet_id?: string; cmv_sheet_tab?: string;
 }
 interface ShopeeAccount {
   id: string; nome: string; shop_id: string; partner_id: string; partner_key: string; access_token?: string; refresh_token?: string; ativo: boolean;
@@ -156,9 +156,16 @@ export function ApiConfigSection() {
                   </td>
                   <td className="px-6 py-4 text-muted-foreground text-xs">
                     {plataforma === 'ml' || plataforma === 'shopee' ? (
-                      <span className={acc.access_token ? 'text-[hsl(var(--vix-success))] font-medium' : 'text-muted-foreground'}>
-                        {acc.access_token ? '✓ Token Válido' : '⚠️ Faltam Tokens'}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={acc.access_token ? 'text-[hsl(var(--vix-success))] font-medium' : 'text-muted-foreground'}>
+                          {acc.access_token ? '✓ Token Válido' : '⚠️ Faltam Tokens'}
+                        </span>
+                        {plataforma === 'ml' && (
+                          <span className={acc.cmv_spreadsheet_id ? 'text-[hsl(var(--vix-success))] font-medium' : 'text-muted-foreground opacity-80'}>
+                            {acc.cmv_spreadsheet_id ? '✓ Planilha CMV' : '⚠️ Sem Planilha CMV'}
+                          </span>
+                        )}
+                      </div>
                     ) : null}
                     {plataforma === 'tiny' && <span className="text-[hsl(var(--vix-success))] font-medium">✓ Chave Fixa configurada</span>}
                     {plataforma === 'other' && <span className="text-[hsl(var(--vix-success))] font-medium">✓ Credenciais salvas</span>}
@@ -236,6 +243,16 @@ export function ApiConfigSection() {
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Refresh Token</label>
                       <input type="text" value={formData.refresh_token || ''} onChange={e => setFormData({ ...formData, refresh_token: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono opacity-80" placeholder="TG-..." />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2 pt-2 border-t border-border">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1" title="Copie o ID longo que fica na URL da URL da Planilha Google (depois de /d/)">ID da Planilha CMV <AlertCircle className="w-3 h-3" /></label>
+                      <input type="text" value={formData.cmv_spreadsheet_id || ''} onChange={e => setFormData({ ...formData, cmv_spreadsheet_id: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" placeholder="Ex: 1aB2c..." />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Aba do CMV</label>
+                      <input type="text" value={formData.cmv_sheet_tab || ''} onChange={e => setFormData({ ...formData, cmv_sheet_tab: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" placeholder="Ex: CMV (Padrão)" />
                     </div>
                   </div>
                 </>

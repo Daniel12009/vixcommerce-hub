@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart, LineChart, Line } from 'recharts';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
+import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
+import { subDays, format } from 'date-fns';
 import { formatBRL, normalizeConta, getContasNormalizadas } from '@/lib/utils-vix';
 
 const COLORS = [
@@ -47,18 +47,26 @@ const isMarketplace = (origem: string) => classifyCanal(origem) === 'marketplace
 
 export function GraficosTab() {
   const sheetsData = useSheetsData();
-  const allVendas = sheetsData.vendasItems || [];
   const allPerf = sheetsData.performanceItems || [];
 
   // ---- Filters ----
   const [filterConta, setFilterConta] = useState('all');
   const [filterDias, setFilterDias] = useState(30);
+
+  const dateFim = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  const dateIni = useMemo(() => format(subDays(new Date(), filterDias), 'yyyy-MM-dd'), [filterDias]);
+
+  const { data: dbDaily, loading: loadingDaily } = useVendasFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
+  const { data: dbSku, loading: loadingSku } = useVendasSKUFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
+
   const [filterCanal, setFilterCanal] = useState<CanalTipo>('all');
   const [filterMarketplace, setFilterMarketplace] = useState('all');
 
-  const contasVendas = useMemo(() => getContasNormalizadas(allVendas.map(v => v.conta).filter(Boolean)), [allVendas]);
-  const contasPerf = useMemo(() => getContasNormalizadas(allPerf.map(p => p.conta).filter(Boolean)), [allPerf]);
-  const todasContas = useMemo(() => [...new Set([...contasVendas, ...contasPerf])].sort(), [contasVendas, contasPerf]);
+  const todasContas = useMemo(() => {
+    const contasVendas = [...new Set((sheetsData.vendasItems || []).map(v => normalizeConta(v.conta)).filter(Boolean))];
+    const contasPerf = [...new Set(allPerf.map(p => normalizeConta(p.conta)).filter(Boolean))];
+    return [...new Set([...contasVendas, ...contasPerf])].sort();
+  }, [sheetsData.vendasItems, allPerf]);
 
   // Get unique marketplaces for sub-filter
   const uniqueMarketplaces = useMemo(() => {
@@ -71,124 +79,75 @@ export function GraficosTab() {
     return [...origins].sort();
   }, [allVendas]);
 
-  // Apply filters
-  const vendas = useMemo(() => {
-    let items = allVendas;
-    if (filterConta !== 'all') {
-      items = items.filter(v => normalizeConta(v.conta) === filterConta);
-    }
-    if (filterCanal !== 'all') {
-      items = items.filter(v => classifyCanal(v.pedidoOrigem) === filterCanal);
-      if (filterCanal === 'marketplace' && filterMarketplace !== 'all') {
-        items = items.filter(v => v.pedidoOrigem === filterMarketplace);
-      }
-    }
-    if (filterDias > 0) {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - filterDias);
-      items = items.filter(v => {
-        if (!v.data) return true;
-        const parts = v.data.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-        if (parts) {
-          const d = new Date(parseInt(parts[3]), parseInt(parts[2]) - 1, parseInt(parts[1]));
-          return d >= cutoff;
-        }
-        const d = new Date(v.data);
-        return !isNaN(d.getTime()) && d >= cutoff;
-      });
-    }
-    return items;
-  }, [allVendas, filterConta, filterDias, filterCanal, filterMarketplace]);
+  // Final cleanup: removed legacy info
+
 
   const perf = useMemo(() => {
     if (filterConta === 'all') return allPerf;
     return allPerf.filter(p => normalizeConta(p.conta) === filterConta);
   }, [allPerf, filterConta]);
 
-  // ---- Vendas aggregations ----
+  // ---- Vendas aggregations (using DB) ----
   const vendasPorDia = useMemo(() => {
-    if (vendas.length === 0) return [];
-    const map = new Map<string, { dia: string; pedidos: number; faturamento: number; liquido: number }>();
-    vendas.forEach(v => {
-      const d = v.data?.slice(0, 10) || 'N/A';
-      const cur = map.get(d) || { dia: d, pedidos: 0, faturamento: 0, liquido: 0 };
-      cur.pedidos += 1;
-      cur.faturamento += v.valorTotal || 0;
-      cur.liquido += v.liquido || 0;
-      map.set(d, cur);
+    const dateMap = new Map<string, { dia: string; pedidos: number; faturamento: number; liquido: number }>();
+    dbDaily.forEach(v => {
+      const d = format(new Date(v.data), 'dd/MM');
+      const cur = dateMap.get(d) || { dia: d, pedidos: 0, faturamento: 0, liquido: 0 };
+      cur.pedidos += v.pedidos;
+      cur.faturamento += v.faturamento_bruto;
+      cur.liquido += v.lucro_liquido;
+      dateMap.set(d, cur);
     });
-    return [...map.values()]
-      .map(x => ({ ...x, faturamento: Math.round(x.faturamento), liquido: Math.round(x.liquido) }))
-      .sort((a, b) => a.dia.localeCompare(b.dia)).slice(-30);
-  }, [vendas]);
+    return [...dateMap.values()]
+      .sort((a,b) => {
+        const [da, ma] = a.dia.split('/').map(Number);
+        const [db, mb] = b.dia.split('/').map(Number);
+        return (ma*100+da) - (mb*100+db);
+      });
+  }, [dbDaily]);
 
   const vendasPorConta = useMemo(() => {
-    if (vendas.length === 0) return [];
     const map = new Map<string, { conta: string; faturamento: number; pedidos: number; liquido: number }>();
-    vendas.forEach(v => {
-      const c = normalizeConta(v.conta) || 'Outros';
+    dbDaily.forEach(v => {
+      const c = v.origem || 'Outros';
       const cur = map.get(c) || { conta: c, faturamento: 0, pedidos: 0, liquido: 0 };
-      cur.faturamento += v.valorTotal || 0;
-      cur.pedidos += 1;
-      cur.liquido += v.liquido || 0;
+      cur.faturamento += v.faturamento_bruto;
+      cur.pedidos += v.pedidos;
+      cur.liquido += v.lucro_liquido;
       map.set(c, cur);
     });
-    return [...map.values()]
-      .map(x => ({ ...x, faturamento: Math.round(x.faturamento), liquido: Math.round(x.liquido) }))
-      .sort((a, b) => b.faturamento - a.faturamento);
-  }, [vendas]);
+    return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
+  }, [dbDaily]);
 
   const vendasPorOrigem = useMemo(() => {
-    if (vendas.length === 0) return [];
     const map = new Map<string, { origem: string; value: number }>();
-    vendas.forEach(v => {
-      const o = v.pedidoOrigem || 'Outros';
+    dbDaily.forEach(v => {
+      const o = v.origem || 'Outros';
       const cur = map.get(o) || { origem: o, value: 0 };
-      cur.value += v.valorTotal || 0;
+      cur.value += v.faturamento_bruto;
       map.set(o, cur);
     });
     return [...map.values()]
-      .map(x => ({ ...x, value: Math.round(x.value) }))
       .sort((a, b) => b.value - a.value).slice(0, 8);
-  }, [vendas]);
+  }, [dbDaily]);
 
   const topSkus = useMemo(() => {
-    if (vendas.length === 0) return [];
-    const map = new Map<string, { sku: string; vendas: number; faturamento: number }>();
-    vendas.forEach(v => {
-      const s = v.sku || 'N/A';
-      const cur = map.get(s) || { sku: s, vendas: 0, faturamento: 0 };
-      cur.vendas += v.quantidade || 1;
-      cur.faturamento += v.valorTotal || 0;
-      map.set(s, cur);
-    });
-    return [...map.values()]
-      .map(x => ({ ...x, faturamento: Math.round(x.faturamento) }))
-      .sort((a, b) => b.vendas - a.vendas).slice(0, 10);
-  }, [vendas]);
+    return dbSku
+      .sort((a, b) => b.quantidade - a.quantidade)
+      .slice(0, 10)
+      .map(d => ({ sku: d.sku, vendas: d.quantidade, faturamento: d.faturamento_bruto }));
+  }, [dbSku]);
 
-  // Margem only from marketplaces (exclude showroom, atacado, loja)
+  // Margem from DB
   const margemPorSku = useMemo(() => {
-    if (vendas.length === 0) return [];
-    const marketplaceVendas = vendas.filter(v => isMarketplace(v.pedidoOrigem));
-    const map = new Map<string, { sku: string; margem: number; count: number }>();
-    marketplaceVendas.forEach(v => {
-      const s = v.sku || 'N/A';
-      const m = typeof v.margem === 'string' ? parseFloat(v.margem.replace(/[^0-9.,-]/g,'').replace(',','.')) : 0;
-      if (isNaN(m)) return;
-      const cur = map.get(s) || { sku: s, margem: 0, count: 0 };
-      cur.margem += m;
-      cur.count += 1;
-      map.set(s, cur);
-    });
-    return [...map.values()]
-      .map(x => ({ sku: x.sku, margem: x.count > 0 ? x.margem / x.count : 0 }))
+    return dbSku
+      .map(d => ({ sku: d.sku, margem: d.faturamento_bruto > 0 ? (d.liquido / d.faturamento_bruto) * 100 : 0 }))
       .filter(x => Math.abs(x.margem) > 0)
       .sort((a, b) => b.margem - a.margem);
-  }, [vendas]);
+  }, [dbSku]);
 
-  const melhoresMargens = margemPorSku.slice(0, 8);
-  const pioresMargens = [...margemPorSku].sort((a, b) => a.margem - b.margem).slice(0, 8);
+  const melhoresMargens = margemPorSku.slice(0, 10);
+  const pioresMargens = [...margemPorSku].sort((a, b) => a.margem - b.margem).slice(0, 10);
 
   // ---- Performance aggregations (using SKU) ----
   const perfPorSku = useMemo(() => {
@@ -225,7 +184,7 @@ export function GraficosTab() {
     return [...map.values()].sort((a, b) => b.vendas - a.vendas);
   }, [perf]);
 
-  const hasData = allVendas.length > 0 || allPerf.length > 0;
+  const hasData = dbDaily.length > 0 || dbSku.length > 0 || allPerf.length > 0;
   const isMarketplaceView = filterCanal === 'all' || filterCanal === 'marketplace';
 
   if (!hasData) {

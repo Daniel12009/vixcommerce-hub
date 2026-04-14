@@ -1,4 +1,4 @@
-﻿import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -255,6 +255,84 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
   return log;
 }
 
+async function runCMVSync(): Promise<string[]> {
+  const log: string[] = [];
+  try {
+    const mlAccounts = await restGet('ml_accounts?ativo=eq.true&select=id,nome,cmv_spreadsheet_id,cmv_sheet_tab');
+    log.push(`📋 Analisando ${mlAccounts.length} contas para sincronia de CMV`);
+
+    for (const conta of mlAccounts) {
+      const sheetId = conta.cmv_spreadsheet_id;
+      const sheetName = conta.cmv_sheet_tab || 'CMV';
+      if (!sheetId) {
+        log.push(`⚠️ ${conta.nome}: spreadsheet_id não configurado. Pulo.`);
+        continue;
+      }
+
+      try {
+        const data = await invokeFunction('google-sheets', {
+          action: 'read',
+          spreadsheetId: sheetId,
+          range: `${sheetName}!A:C`
+        });
+
+        const rows: any[][] = data.values || [];
+        if (rows.length < 2) {
+          log.push(`⚠️ ${conta.nome}: Planilha vazia ou sem cabeçalho.`);
+          continue;
+        }
+
+        const header = rows[0].map(h => String(h).trim().toLowerCase());
+        const iSku = header.indexOf('sku');
+        const iSimples = header.findIndex(h => h.includes('simples'));
+        const iReal = header.findIndex(h => h.includes('real'));
+
+        if (iSku === -1 || iSimples === -1 || iReal === -1) {
+          log.push(`❌ ${conta.nome}: Colunas "SKU", "CMV Simples" ou "CMV Lucro Real" não encontradas.`);
+          continue;
+        }
+
+        const dbRows = rows.slice(1).map(row => {
+          const sku = String(row[iSku] || '').trim();
+          if (!sku) return null;
+          return {
+            sku: sku,
+            conta: conta.nome,
+            cmv_simples: parseFloat(String(row[iSimples]).replace(',', '.')) || 0,
+            cmv_lucro_real: parseFloat(String(row[iReal]).replace(',', '.')) || 0,
+            spreadsheet_id: sheetId,
+            synced_at: new Date().toISOString()
+          };
+        }).filter(Boolean);
+
+        if (dbRows.length > 0) {
+          const resDb = await fetch(`${SUPABASE_URL}/rest/v1/cmv_db?on_conflict=sku,conta`, {
+            method: 'POST',
+            headers: {
+              apikey: SERVICE_KEY,
+              Authorization: `Bearer ${SERVICE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(dbRows)
+          });
+
+          if (!resDb.ok) {
+            log.push(`❌ ${conta.nome}: Erro upsert DB: ${await resDb.text()}`);
+          } else {
+            log.push(`✅ ${conta.nome}: ${dbRows.length} SKUs sincronizados.`);
+          }
+        }
+      } catch (e: any) {
+        log.push(`❌ ${conta.nome}: ${e.message}`);
+      }
+    }
+  } catch (e: any) {
+    log.push(`❌ Erro fatal CMV Sync: ${e.message}`);
+  }
+  return log;
+}
+
 async function runVerify(runDate: string): Promise<string[]> {
   const log: string[] = [];
   const results = await restGet(`sync_run_log?run_date=eq.${runDate}&select=module,status,message&order=started_at.asc`);
@@ -404,6 +482,9 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
         break;
       case 'tiny_estoque':
         moduleLog = await runTinyEstoque(resumeData.resume_page, resumeData.resume_offset, resumeData.resume_total);
+        break;
+      case 'ml_cmv':
+        moduleLog = await runCMVSync();
         break;
       default:
         moduleLog = [`âš ï¸ MÃ³dulo desconhecido: ${moduleKey}`];

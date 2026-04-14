@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
+import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
+import { subDays, format } from 'date-fns';
 import { formatBRL } from '@/lib/utils-vix';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ScatterChart, Scatter, ZAxis, LabelList,
   AreaChart, Area
 } from 'recharts';
-import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, Percent, Target, ArrowUpDown, Users } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, Percent, Target, ArrowUpDown, Users, Settings, RefreshCw } from 'lucide-react';
+import { TaxConfigModal } from './TaxConfigModal';
 
 const COLORS = [
   '#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6',
@@ -26,13 +28,6 @@ function formatDateShort(d: string): string {
   const dt = parseDate(d);
   if (!dt) return d;
   return `${dt.getDate().toString().padStart(2, '0')}/${(dt.getMonth() + 1).toString().padStart(2, '0')}`;
-}
-
-function num(v: any): number {
-  if (!v && v !== 0) return 0;
-  if (typeof v === 'number') return isNaN(v) ? 0 : v;
-  const s = String(v).replace(/[R$\s%]/g, '').replace(/\./g, '').replace(',', '.');
-  return parseFloat(s) || 0;
 }
 
 function DeltaArrow({ current, previous, invert }: { current: number; previous: number; invert?: boolean }) {
@@ -59,82 +54,55 @@ const isAtacado = (conta: string) =>
 
 export function FaturamentoTab() {
   const sheetsData = useSheetsData();
-  const allVendas = sheetsData.vendasItems || [];
 
+  const [isTaxModalOpen, setIsTaxModalOpen] = useState(false);
   const [filterDias, setFilterDias] = useState(30);
   const [filterConta, setFilterConta] = useState('all');
+  
+  const dateFim = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  const dateIni = useMemo(() => format(subDays(new Date(), filterDias), 'yyyy-MM-dd'), [filterDias]);
+  const dateIniPrev = useMemo(() => format(subDays(new Date(), filterDias * 2), 'yyyy-MM-dd'), [filterDias]);
+  const dateFimPrev = useMemo(() => format(subDays(new Date(), filterDias), 'yyyy-MM-dd'), [filterDias]);
+
+  const { data: dbDaily, loading: loadingDaily } = useVendasFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
+  const { data: dbDailyPrev, loading: loadingDailyPrev } = useVendasFromDB(dateIniPrev, dateFimPrev, filterConta !== 'all' ? [filterConta] : undefined);
+  const { data: dbSku, loading: loadingSku } = useVendasSKUFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
+  const { data: dbSkuPrev } = useVendasSKUFromDB(dateIniPrev, dateFimPrev, filterConta !== 'all' ? [filterConta] : undefined);
+
   const [filterCanal, setFilterCanal] = useState<'all' | 'marketplace' | 'atacado'>('all');
   const [sortField, setSortField] = useState('faturamento');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [sortDir, setSortDir] = useState<'desc'>('desc');
 
   // All unique contas
-  const contas = useMemo(() =>
-    [...new Set(allVendas.map(v => v.conta || v.origem || '').filter(Boolean))].sort(),
-    [allVendas]
+  const contas = useMemo(() => 
+    [...new Set((sheetsData.vendasItems || []).map(v => v.conta || v.origem || '').filter(Boolean))].sort(),
+    [sheetsData.vendasItems]
   );
 
-  // Filter by date + conta + canal
-  const vendas = useMemo(() => {
-    let base = allVendas;
-    if (filterDias > 0) {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - filterDias);
-      base = base.filter(v => {
-        const d = parseDate(v.data);
-        return d ? d >= cutoff : true;
-      });
-    }
-    if (filterConta !== 'all') {
-      base = base.filter(v => (v.conta || v.origem || '') === filterConta);
-    }
-    if (filterCanal !== 'all') {
-      base = base.filter(v => {
-        const c = v.conta || v.origem || '';
-        return filterCanal === 'atacado' ? isAtacado(c) : !isAtacado(c);
-      });
-    }
-    return base;
-  }, [allVendas, filterDias, filterConta, filterCanal]);
-
-  const prevVendas = useMemo(() => {
-    if (filterDias <= 0) return [];
-    const now = new Date();
-    const cutoffCur = new Date(); cutoffCur.setDate(now.getDate() - filterDias);
-    const cutoffPrev = new Date(); cutoffPrev.setDate(now.getDate() - filterDias * 2);
-    let base = allVendas.filter(v => {
-      const d = parseDate(v.data);
-      return d ? d >= cutoffPrev && d < cutoffCur : false;
-    });
-    if (filterConta !== 'all') base = base.filter(v => (v.conta || v.origem || '') === filterConta);
-    if (filterCanal !== 'all') base = base.filter(v => {
-      const c = v.conta || v.origem || '';
-      return filterCanal === 'atacado' ? isAtacado(c) : !isAtacado(c);
-    });
-    return base;
-  }, [allVendas, filterDias, filterConta, filterCanal]);
+  // Final cleanup: removed legacy Sheets-based filtering
 
   // ── KPIs ──
-  const totalFat = useMemo(() => vendas.reduce((s, v) => s + num(v.valorTotal), 0), [vendas]);
-  const totalLiq = useMemo(() => vendas.reduce((s, v) => s + num(v.liquido), 0), [vendas]);
-  const totalQtd = useMemo(() => vendas.reduce((s, v) => s + num(v.quantidade), 0), [vendas]);
-  const totalAds = useMemo(() => vendas.reduce((s, v) => s + num(v.ads), 0), [vendas]);
+  const totalFat = useMemo(() => dbDaily.reduce((s, v) => s + v.faturamento_bruto, 0), [dbDaily]);
+  const totalLiq = useMemo(() => dbDaily.reduce((s, v) => s + v.lucro_liquido, 0), [dbDaily]);
+  const totalQtd = useMemo(() => dbSku.reduce((s, v) => s + v.quantidade, 0), [dbSku]);
+  const totalAds = useMemo(() => dbDaily.reduce((s, v) => s + v.ads, 0), [dbDaily]);
   const margem = totalFat > 0 ? (totalLiq / totalFat) * 100 : 0;
-  const ticket = vendas.length > 0 ? totalFat / new Set(vendas.map(v => v.numeroPedido)).size : 0;
-  const pctAds = totalFat > 0 ? (totalAds / totalFat) * 100 : 0;
+  const totalPedidos = useMemo(() => dbDaily.reduce((s, v) => s + v.pedidos, 0), [dbDaily]);
+  const ticket = totalPedidos > 0 ? totalFat / totalPedidos : 0;
 
-  const prevFat = prevVendas.reduce((s, v) => s + num(v.valorTotal), 0);
-  const prevLiq = prevVendas.reduce((s, v) => s + num(v.liquido), 0);
+  const prevFat = dbDailyPrev.reduce((s, v) => s + v.faturamento_bruto, 0);
+  const prevLiq = dbDailyPrev.reduce((s, v) => s + v.lucro_liquido, 0);
   const prevMargem = prevFat > 0 ? (prevLiq / prevFat) * 100 : 0;
 
   // ── Chart 1: Faturamento diário por conta (Stacked Area) ──
   const stackedAreaData = useMemo(() => {
     const dateMap = new Map<string, Record<string, number>>();
-    vendas.forEach(v => {
+    dbDaily.forEach(v => {
       const dateKey = formatDateShort(v.data);
       if (!dateKey) return;
-      const conta = v.conta || v.origem || 'Outros';
+      const conta = v.origem || 'Outros';
       const row = dateMap.get(dateKey) || {};
-      row[conta] = (row[conta] || 0) + num(v.valorTotal);
+      row[conta] = (row[conta] || 0) + v.faturamento_bruto;
       dateMap.set(dateKey, row);
     });
     const sortedDates = [...dateMap.keys()].sort((a, b) => {
@@ -143,22 +111,22 @@ export function FaturamentoTab() {
       return (ma * 100 + da) - (mb * 100 + db);
     });
     return sortedDates.map(date => ({ date, ...dateMap.get(date)! }));
-  }, [vendas]);
+  }, [dbDaily]);
 
   const contasNoChart = useMemo(() =>
-    [...new Set(vendas.map(v => v.conta || v.origem || 'Outros').filter(Boolean))].sort(),
-    [vendas]
+    [...new Set(dbDaily.map(v => v.origem || 'Outros').filter(Boolean))].sort(),
+    [dbDaily]
   );
 
   // ── Chart 2: Faturamento + Margem por dia (Bar + Line) ──
   const fatMargemDia = useMemo(() => {
     const dateMap = new Map<string, { fat: number; liq: number }>();
-    vendas.forEach(v => {
+    dbDaily.forEach(v => {
       const dateKey = formatDateShort(v.data);
       if (!dateKey) return;
       const row = dateMap.get(dateKey) || { fat: 0, liq: 0 };
-      row.fat += num(v.valorTotal);
-      row.liq += num(v.liquido);
+      row.fat += v.faturamento_bruto;
+      row.liq += v.lucro_liquido;
       dateMap.set(dateKey, row);
     });
     const sortedDates = [...dateMap.keys()].sort((a, b) => {
@@ -174,70 +142,52 @@ export function FaturamentoTab() {
         pctMargem: row.fat > 0 ? parseFloat(((row.liq / row.fat) * 100).toFixed(1)) : 0,
       };
     });
-  }, [vendas]);
+  }, [dbDaily]);
 
   // ── Chart 3: Scatter — QTDE vs Ticket Médio (bubble = Margem%) ──
   const scatterData = useMemo(() => {
-    const skuMap = new Map<string, { qtd: number; fat: number; liq: number; pedidos: Set<string>; ads: number }>();
-    vendas.forEach(v => {
-      const sku = v.skuProduto || v.sku || 'N/A';
-      const cur = skuMap.get(sku) || { qtd: 0, fat: 0, liq: 0, pedidos: new Set<string>(), ads: 0 };
-      cur.qtd += num(v.quantidade);
-      cur.fat += num(v.valorTotal);
-      cur.liq += num(v.liquido);
-      cur.ads += num(v.ads);
-      if (v.numeroPedido) cur.pedidos.add(v.numeroPedido);
-      skuMap.set(sku, cur);
-    });
-    return [...skuMap.entries()]
-      .filter(([, d]) => d.fat > 1000)
-      .map(([sku, d]) => ({
-        sku,
-        x: d.qtd,
-        y: d.pedidos.size > 0 ? Math.round(d.fat / d.pedidos.size) : 0,
-        z: d.fat > 0 ? Math.round((d.liq / d.fat) * 100) : 0, // margem%
-        faturamento: d.fat,
-        pctAds: d.fat > 0 ? (d.ads / d.fat) * 100 : 0,
+    return dbSku
+      .filter(d => d.faturamento_bruto > 500)
+      .map(d => ({
+        sku: d.sku,
+        x: d.quantidade,
+        y: d.pedidos > 0 ? Math.round(d.faturamento_bruto / d.pedidos) : 0,
+        z: d.faturamento_bruto > 0 ? Math.round((d.liquido / d.faturamento_bruto) * 100) : 0,
+        faturamento: d.faturamento_bruto,
+        pctAds: d.faturamento_bruto > 0 ? (d.ads / d.faturamento_bruto) * 100 : 0,
       }))
       .sort((a, b) => b.faturamento - a.faturamento)
       .slice(0, 40);
-  }, [vendas]);
+  }, [dbSku]);
 
   // ── Table: SKU-level ──
   const skuTable = useMemo(() => {
-    const skuMap = new Map<string, { qtd: number; fat: number; liq: number; pedidos: Set<string>; ads: number; devQtd: number }>();
-    const prevSkuMap = new Map<string, { fat: number; liq: number; qtd: number }>();
-
-    vendas.forEach(v => {
-      const sku = v.skuProduto || v.sku || 'N/A';
-      const cur = skuMap.get(sku) || { qtd: 0, fat: 0, liq: 0, pedidos: new Set<string>(), ads: 0, devQtd: 0 };
-      cur.qtd += num(v.quantidade);
-      cur.fat += num(v.valorTotal);
-      cur.liq += num(v.liquido);
-      cur.ads += num(v.ads);
-      if (v.numeroPedido) cur.pedidos.add(v.numeroPedido);
-      if ((v.statusPedido || '').toLowerCase().match(/cancel|devolv/)) cur.devQtd += num(v.quantidade);
-      skuMap.set(sku, cur);
-    });
-
-    prevVendas.forEach(v => {
-      const sku = v.skuProduto || v.sku || 'N/A';
-      const cur = prevSkuMap.get(sku) || { fat: 0, liq: 0, qtd: 0 };
-      cur.fat += num(v.valorTotal);
-      cur.liq += num(v.liquido);
-      cur.qtd += num(v.quantidade);
-      prevSkuMap.set(sku, cur);
-    });
+    const prevSkuMap = new Map<string, typeof dbSku[0]>();
+    (dbSkuPrev || []).forEach(v => prevSkuMap.set(v.sku, v));
 
     const diasDiv = filterDias > 0 ? filterDias : 30;
-    const rows = [...skuMap.entries()].map(([sku, d]) => {
-      const prev = prevSkuMap.get(sku) || { fat: 0, liq: 0, qtd: 0 };
-      const margem = d.fat > 0 ? (d.liq / d.fat) * 100 : 0;
-      const prevMargem = prev.fat > 0 ? (prev.liq / prev.fat) * 100 : 0;
-      const ticket = d.pedidos.size > 0 ? d.fat / d.pedidos.size : 0;
-      const pctAds = d.fat > 0 ? (d.ads / d.fat) * 100 : 0;
-      const pctDev = d.qtd > 0 ? (d.devQtd / d.qtd) * 100 : 0;
-      return { sku, faturamento: d.fat, liquido: d.liq, qtd: d.qtd, qtdDia: d.qtd / diasDiv, ticket, margem, pctAds, pctDev, prevFat: prev.fat, prevLiq: prev.liq, prevQtd: prev.qtd, prevMargem };
+    const rows = dbSku.map(d => {
+      const prev = prevSkuMap.get(d.sku);
+      const margem = d.faturamento_bruto > 0 ? (d.liquido / d.faturamento_bruto) * 100 : 0;
+      const prevMargem = prev && prev.faturamento_bruto > 0 ? (prev.liquido / prev.faturamento_bruto) * 100 : 0;
+      const ticket = d.pedidos > 0 ? d.faturamento_bruto / d.pedidos : 0;
+      const pctAds = d.faturamento_bruto > 0 ? (d.ads / d.faturamento_bruto) * 100 : 0;
+      const pctDev = d.quantidade > 0 ? (d.dev_qtd / d.quantidade) * 100 : 0;
+      return { 
+        sku: d.sku, 
+        faturamento: d.faturamento_bruto, 
+        liquido: d.liquido, 
+        qtd: d.quantidade, 
+        qtdDia: d.quantidade / diasDiv, 
+        ticket, 
+        margem, 
+        pctAds, 
+        pctDev, 
+        prevFat: prev?.faturamento_bruto || 0, 
+        prevLiq: prev?.liquido || 0, 
+        prevQtd: prev?.quantidade || 0, 
+        prevMargem 
+      };
     });
 
     return rows.sort((a, b) => {
@@ -245,7 +195,7 @@ export function FaturamentoTab() {
       if (sortField === 'sku') return dir * a.sku.localeCompare(b.sku);
       return dir * ((a as any)[sortField] - (b as any)[sortField]);
     });
-  }, [vendas, prevVendas, filterDias, sortField, sortDir]);
+  }, [dbSku, dbSkuPrev, filterDias, sortField, sortDir]);
 
   function toggleSort(field: string) {
     if (sortField === field) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
@@ -270,22 +220,28 @@ export function FaturamentoTab() {
     return null;
   };
 
-  if (allVendas.length === 0) {
+  if (dbDaily.length === 0 && dbSku.length === 0 && !loadingDaily && !loadingSku) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 mb-4">
           <BarChart2 className="w-10 h-10 text-indigo-400" />
         </div>
-        <h3 className="text-foreground font-semibold mb-1">Nenhum dado de Vendas importado</h3>
+        <h3 className="text-foreground font-semibold mb-1">Nenhum dado encontrado no Banco</h3>
         <p className="text-sm text-muted-foreground max-w-md">
-          Importe a planilha de <strong>Vendas</strong> em Configurações → Planilhas para visualizar a análise de faturamento por SKU.
+          Os dados do Banco são populados via <strong>Daily Sync</strong>. Certifique-se de que a sincronização automática está ativa.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {(loadingDaily || loadingSku) && (
+        <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] z-50 flex items-center justify-center rounded-xl">
+          <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-xl p-4">
         <div className="flex items-center gap-1.5">
@@ -320,10 +276,21 @@ export function FaturamentoTab() {
           </div>
         </div>
 
-        <span className="text-xs text-muted-foreground ml-auto">
-          {vendas.length.toLocaleString('pt-BR')} linhas | {skuTable.length} SKUs {hasPrev && '| comparando com período anterior'}
-        </span>
+        <div className="flex items-center ml-auto gap-3">
+          <span className="text-xs text-muted-foreground mr-2">
+            {vendas.length.toLocaleString('pt-BR')} linhas | {skuTable.length} SKUs {hasPrev && '| comparando com período anterior'}
+          </span>
+          <button 
+            onClick={() => setIsTaxModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border text-foreground text-xs font-semibold rounded-lg hover:bg-muted transition-colors"
+          >
+            <Settings className="w-4 h-4 text-indigo-400" />
+            Configurar Impostos
+          </button>
+        </div>
       </div>
+
+      <TaxConfigModal isOpen={isTaxModalOpen} onClose={() => setIsTaxModalOpen(false)} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

@@ -583,7 +583,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (action === 'sync_estoque_tiny') {
+    if (action === 'sync_vendas_marketplace') {
       const body = await req.clone().then(r => r.json()).catch(() => ({}));
       const { date_from, date_to, plataforma, spreadsheet_id, sheet_name } = body;
 
@@ -606,6 +606,7 @@ Deno.serve(async (req) => {
       }
 
       const allRows: any[][] = [];
+      const allDbRows: any[] = [];
 
       for (const account of accounts) {
         try {
@@ -668,7 +669,7 @@ Deno.serve(async (req) => {
                   sku,                                      // 1  SKU
                   dataVenda,                                // 2  Data da venda
                   dataVenda,                                // 3  EMISSAO
-                  `'${numEcom || orderId}`,                 // 4  N.º de venda
+                  "'" + (numEcom || orderId),                 // 4  N.º de venda
                   platLabel,                                // 5  origem
                   numEcom || '',                            // 6  # de anúncio
                   'Padrão',                                 // 7  tipo de anuncio
@@ -684,6 +685,21 @@ Deno.serve(async (req) => {
                   account.nome,                             // 17 conta
                   uf,                                       // 18 Estado
                 ]);
+
+                allDbRows.push({
+                  numero_pedido: String(numEcom || orderId),
+                  data: parseTinyDate(dp.data_pedido).slice(0,10),
+                  conta: account.nome,
+                  conta_id: account.id, // Tiny accounts also have ID in table
+                  sku: sku,
+                  quantidade: qtd,
+                  valor_total: receita,
+                  comissao: Math.abs(comissaoFinal),
+                  frete: Math.abs(frete),
+                  marketplace: platLabel,
+                  origem: account.nome,
+                  payload: { situacao: dp.situacao, ecommerce: dp.ecommerce }
+                });
               }
             }
 
@@ -699,6 +715,23 @@ Deno.serve(async (req) => {
       // Escrever no Google Sheets
       if (allRows.length > 0) {
         await invokeSheets(sheetId, `${sheetTab}!A:S`, allRows, 'append');
+      }
+
+      if (allDbRows.length > 0) {
+        try {
+          const resDb = await supabaseFetch('/vendas_db?on_conflict=numero_pedido,sku', {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify(allDbRows)
+          });
+          if (!resDb.ok) {
+             console.error('[SYNC VENDAS DB TINY] Upsert failed:', await resDb.text());
+          } else {
+             console.log('[SYNC DB] Upsert em vendas_db OK (' + allDbRows.length + ' linhas)');
+          }
+        } catch (e) {
+          console.error('[SYNC VENDAS DB TINY] Erro no fetch do banco:', e);
+        }
       }
 
       const msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}`;

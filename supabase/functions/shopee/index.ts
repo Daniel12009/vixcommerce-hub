@@ -248,9 +248,8 @@ Deno.serve(async (req) => {
       const timeFrom = Math.floor(past.getTime() / 1000);
       const timeTo = Math.floor(now.getTime() / 1000);
 
-      const allShipments: any[] = [];
-
-      for (const account of accounts) {
+      const accountPromises = accounts.map(async (account: any) => {
+        const accountShipments: any[] = [];
         try {
           let cursor = '';
           let hasMore = true;
@@ -286,34 +285,38 @@ Deno.serve(async (req) => {
                 return s === 'READY_TO_SHIP' || s === 'PROCESSED' || s === 'RETRY_SHIP';
               })
               .map((o: any) => ({
-              orderId: o.order_sn,
-              status: mapShopeeStatus(o.order_status),
-              shippingStatus: o.order_status,
-              logisticType: o.shipping_carrier || 'Standard',
-              dateCreated: new Date(o.create_time * 1000).toISOString(),
-              totalAmount: o.total_amount || 0,
-              buyer: o.buyer_username || 'N/A',
-              items: (o.item_list || []).map((item: any) => ({
-                title: item.item_name || '',
-                sku: item.model_sku || item.item_sku || '',
-                quantity: item.model_quantity_purchased || 1,
-                unitPrice: item.model_discounted_price || item.model_original_price || 0,
-              })),
-              conta: account.nome,
-              accountId: account.id,
-              plataforma: 'shopee'
-            }));
+                orderId: o.order_sn,
+                status: mapShopeeStatus(o.order_status),
+                shippingStatus: o.order_status,
+                logisticType: o.shipping_carrier || 'Standard',
+                dateCreated: new Date(o.create_time * 1000).toISOString(),
+                totalAmount: o.total_amount || 0,
+                buyer: o.buyer_username || 'N/A',
+                items: (o.item_list || []).map((item: any) => ({
+                  title: item.item_name || '',
+                  sku: item.model_sku || item.item_sku || '',
+                  quantity: item.model_quantity_purchased || 1,
+                  unitPrice: item.model_discounted_price || item.model_original_price || 0,
+                })),
+                conta: account.nome,
+                accountId: account.id,
+                plataforma: 'shopee'
+              }));
 
-            allShipments.push(...orders);
+            accountShipments.push(...orders);
             
             hasMore = listData.response?.more || false;
             cursor = listData.response?.next_cursor || '';
           }
         } catch (err) {
           console.error(`Error fetching Shopee pending shipments for ${account.nome}:`, err);
-          allShipments.push({ error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`, conta: account.nome });
+          accountShipments.push({ error: `${account.nome}: ${err instanceof Error ? err.message : 'Unknown error'}`, conta: account.nome });
         }
-      }
+        return accountShipments;
+      });
+
+      const results = await Promise.all(accountPromises);
+      const allShipments = results.flat();
 
       return new Response(JSON.stringify({ shipments: allShipments }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
