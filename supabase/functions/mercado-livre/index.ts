@@ -1685,7 +1685,7 @@ Deno.serve(async (req) => {
         try {
           const resDb = await supabaseFetch('/vendas_items?on_conflict=numero_pedido,sku', {
             method: 'POST',
-            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
             body: JSON.stringify(loteDbRows)
           });
           if (!resDb.ok) {
