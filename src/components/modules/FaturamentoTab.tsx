@@ -202,7 +202,7 @@ export function FaturamentoTab() {
     else { setSortField(field); setSortDir('desc'); }
   }
 
-  const hasPrev = prevVendas.length > 0;
+  const hasPrev = dbDailyPrev.length > 0;
 
   const CustomScatterTooltip = ({ active, payload }: any) => {
     if (active && payload?.length) {
@@ -278,7 +278,7 @@ export function FaturamentoTab() {
 
         <div className="flex items-center ml-auto gap-3">
           <span className="text-xs text-muted-foreground mr-2">
-            {vendas.length.toLocaleString('pt-BR')} linhas | {skuTable.length} SKUs {hasPrev && '| comparando com período anterior'}
+            {dbDaily.length} registros | {skuTable.length} SKUs {hasPrev && '| comparando com período anterior'}
           </span>
           <button 
             onClick={() => setIsTaxModalOpen(true)}
