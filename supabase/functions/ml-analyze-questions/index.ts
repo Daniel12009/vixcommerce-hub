@@ -25,23 +25,32 @@ serve(async (req) => {
     const { seller_id, include_own, competitor_item_ids }: AnalyzePayload = await req.json()
     const allQuestions: string[] = []
 
-    // 1. Perguntas próprias (últimos 90 dias)
-    if (include_own) {
-      const { data } = await supabase
-        .from('ml_questions_queue')
-        .select('question_text')
-        .eq('seller_id', seller_id)
-        .gte('date_created', new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString())
-        .limit(1000)
-      allQuestions.push(...(data ?? []).map((q: any) => q.question_text))
-    }
-
-    // 2. Perguntas públicas dos concorrentes
     const { data: seller } = await supabase
       .from('ml_accounts')
       .select('access_token')
       .eq('seller_id', seller_id)
       .maybeSingle()
+
+    // 1. Perguntas próprias (últimos 90 dias) - Busca direto da API do ML
+    if (include_own && seller?.access_token) {
+      let offset = 0
+      while (true) {
+        const res = await fetch(
+          `https://api.mercadolibre.com/questions/search?seller_id=${seller_id}&api_version=4&limit=50&offset=${offset}`,
+          { headers: { Authorization: `Bearer ${seller.access_token}` } }
+        )
+        const json = await res.json()
+        const questions = (json.questions ?? [])
+          .filter((q: any) => q.text)
+          .map((q: any) => q.text as string)
+        allQuestions.push(...questions)
+        if (questions.length < 50) break
+        offset += 50
+        if (offset >= 500) break // max 500
+      }
+    }
+
+    // 2. Perguntas públicas dos concorrentes
 
     if (seller?.access_token) {
       for (const itemId of competitor_item_ids ?? []) {
@@ -112,10 +121,11 @@ ${allQuestions.slice(0, 400).join('\n')}`
       throw new Error(aiData.error?.message || 'Erro na API do Claude')
     }
 
-    const raw = aiData.content?.[0]?.text ?? '{}'
+    let raw = aiData.content?.[0]?.text ?? '{}'
+    raw = raw.replace(/^```json/, '').replace(/```$/, '').trim() // remove markdown se houver
 
     let parsed: { suggestions: any[] } = { suggestions: [] }
-    try { parsed = JSON.parse(raw) } catch { /* fallback */ }
+    try { parsed = JSON.parse(raw) } catch (e) { console.error('Parse error:', e, raw) }
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
