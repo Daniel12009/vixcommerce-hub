@@ -51,7 +51,6 @@ serve(async (req) => {
     }
 
     // 2. Perguntas públicas dos concorrentes
-
     if (seller?.access_token) {
       for (const itemId of competitor_item_ids ?? []) {
         let offset = 0
@@ -78,9 +77,9 @@ serve(async (req) => {
       })
     }
 
-    const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
+    const apiKey = Deno.env.get('LOVABLE_API_KEY')
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
+      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -102,35 +101,33 @@ Formato: { "suggestions": [ { "theme": "...", "frequency": 0, "example_questions
 Perguntas:
 ${allQuestions.slice(0, 400).join('\n')}`
 
-    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 4000,
+        model: 'google/gemini-2.5-flash',
         messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
       }),
     })
 
     if (!aiRes.ok) {
       const errorBody = await aiRes.text();
-      console.error('Anthropic API Error:', errorBody);
+      console.error('AI Gateway Error:', errorBody);
       return new Response(JSON.stringify({ 
-        error: `Anthropic API Error (Status ${aiRes.status}): ${errorBody}` 
+        error: `AI Gateway Error (Status ${aiRes.status}): ${errorBody}` 
       }), {
-        status: 200, // Return 200 so the frontend can show the toast
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const aiData = await aiRes.json()
-
-    let raw = aiData.content?.[0]?.text ?? '{}'
-    raw = raw.replace(/^```json/, '').replace(/```$/, '').trim() // remove markdown se houver
+    let raw = aiData.choices?.[0]?.message?.content ?? '{}'
+    raw = raw.replace(/^```json\s*/, '').replace(/```$/, '').trim()
 
     let parsed: { suggestions: any[] } = { suggestions: [] }
     try { parsed = JSON.parse(raw) } catch (e) { console.error('Parse error:', e, raw) }
