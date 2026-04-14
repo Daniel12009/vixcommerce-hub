@@ -398,7 +398,8 @@ export function ExpedicaoTab() {
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Horário</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Nº do Pedido</th>
                     <th className="px-4 py-2 text-left font-medium text-muted-foreground w-32">Origem</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Conta (Comprador)</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground w-48">Conta (Comprador)</th>
+                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Produtos</th>
                     <th className="px-4 py-2 text-right font-medium text-muted-foreground w-32">Valor Total</th>
                   </tr>
                 </thead>
@@ -411,6 +412,11 @@ export function ExpedicaoTab() {
                       <td className="px-4 py-3">
                         <p className="font-medium text-foreground truncate max-w-[200px]" title={s.buyer}>{s.buyer}</p>
                         <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-0.5">{s.conta}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-muted-foreground line-clamp-2" title={s.items.map(i => `${i.quantity}x ${i.sku || i.title}`).join(', ')}>
+                          {s.items.map(i => i.sku || 'N/A').join(', ')} <span className="font-semibold text-foreground">({s.items.length} itens)</span>
+                        </p>
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-foreground">{formatBRL(s.totalAmount || 0)}</td>
                     </tr>

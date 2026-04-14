@@ -29,7 +29,7 @@ interface DashOrder {
   error?: string;
 }
 
-type CanalFilter = 'all' | 'marketplace' | 'loja' | 'atacado_vf' | 'atacado_alexia' | 'atacado_all' | 'showroom' | 'drop';
+type CanalFilter = 'all' | 'marketplace' | 'loja' | 'showroom' | 'drop';
 
 const PROPRIO_BUYERS = ['MONACO METAIS', 'GONTAREK'];
 
@@ -55,8 +55,8 @@ const classifyCanal = (order: DashOrder): string => {
   if (!isOwnBuyer && buyer.length > 0) return 'drop';
 
   // Own buyer or other Atacado channels: classify by conta
-  if (lower.includes('alexia')) return 'atacado_alexia';
-  if (lower.includes('atacado')) return 'atacado_vf';
+  if (lower.includes('alexia')) return 'drop';
+  if (lower.includes('atacado')) return 'drop';
   if (lower.includes('showroom')) return 'showroom';
   if (lower.includes('loja')) return 'loja';
   
@@ -318,10 +318,7 @@ export function DashboardPage() {
             <option value="all">Todos os Canais</option>
             <option value="marketplace">Marketplace</option>
             <option value="loja">Loja</option>
-            <option value="drop">🎯 Drop (Thiago)</option>
-            <option value="atacado_all">Atacado (Todos)</option>
-            <option value="atacado_vf">Atacado VF</option>
-            <option value="atacado_alexia">Atacado Alexia</option>
+            <option value="drop">🎯 Drop / Atacado</option>
           </select>
         </div>
 
