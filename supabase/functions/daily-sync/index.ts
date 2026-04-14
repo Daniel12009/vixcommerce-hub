@@ -59,6 +59,11 @@ function getTodayBR(): string {
   return `${y}-${m}-${d}`;
 }
 
+function colToIndex(col: string): number {
+  if (!col) return 0;
+  return col.trim().toUpperCase().charCodeAt(0) - 65;
+}
+
 async function restGet(path: string): Promise<any[]> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
@@ -258,48 +263,55 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
 async function runCMVSync(): Promise<string[]> {
   const log: string[] = [];
   try {
-    const mlAccounts = await restGet('ml_accounts?ativo=eq.true&select=id,nome,cmv_spreadsheet_id,cmv_sheet_tab');
+    const mlAccounts = await restGet('ml_accounts?ativo=eq.true&select=id,nome,cmv_spreadsheet_id,cmv_sheet_tab,cmv_header_row,cmv_col_sku,cmv_col_simples,cmv_col_lucro_real');
     log.push(`📋 Analisando ${mlAccounts.length} contas para sincronia de CMV`);
 
     for (const conta of mlAccounts) {
       const sheetId = conta.cmv_spreadsheet_id;
       const sheetName = conta.cmv_sheet_tab || 'CMV';
+      const headerRow = conta.cmv_header_row || 1;
+      const colSku = conta.cmv_col_sku || 'A';
+      const colSimples = conta.cmv_col_simples || 'B';
+      const colReal = conta.cmv_col_lucro_real || 'C';
+
       if (!sheetId) {
         log.push(`⚠️ ${conta.nome}: spreadsheet_id não configurado. Pulo.`);
         continue;
       }
 
       try {
+        // Range dinâmico: da coluna inicial na linha do cabeçalho até o fim da coluna final
+        const range = `${sheetName}!${colSku}${headerRow}:${colReal}`;
+        
         const data = await invokeFunction('google-sheets', {
           action: 'read',
           spreadsheetId: sheetId,
-          range: `${sheetName}!A:C`
+          range: range
         });
 
         const rows: any[][] = data.values || [];
-        if (rows.length < 2) {
-          log.push(`⚠️ ${conta.nome}: Planilha vazia ou sem cabeçalho.`);
+        if (rows.length < 1) {
+          log.push(`⚠️ ${conta.nome}: Planilha vazia ou sem dados no range ${range}.`);
           continue;
         }
 
-        const header = rows[0].map(h => String(h).trim().toLowerCase());
-        const iSku = header.indexOf('sku');
-        const iSimples = header.findIndex(h => h.includes('simples'));
-        const iReal = header.findIndex(h => h.includes('real'));
+        // Índices relativos ao início do range (se o range começa em A, A=0. Se começa em D, D=0?)
+        // Na Sheets API, se o range é D1:F, a primeira coluna do array (índice 0) é D.
+        // Precisamos calcular o índice relativo.
+        const baseIdx = colToIndex(colSku);
+        const idxSku = colToIndex(colSku) - baseIdx;
+        const idxSimples = colToIndex(colSimples) - baseIdx;
+        const idxReal = colToIndex(colReal) - baseIdx;
 
-        if (iSku === -1 || iSimples === -1 || iReal === -1) {
-          log.push(`❌ ${conta.nome}: Colunas "SKU", "CMV Simples" ou "CMV Lucro Real" não encontradas.`);
-          continue;
-        }
-
-        const dbRows = rows.slice(1).map(row => {
-          const sku = String(row[iSku] || '').trim();
-          if (!sku) return null;
+        const dbRows = rows.slice(1).map((row, index) => {
+          const sku = String(row[idxSku] || '').trim();
+          if (!sku || sku.toLowerCase() === 'sku') return null; // Pula cabeçalho se ainda vier ou linha vazia
+          
           return {
             sku: sku,
             conta: conta.nome,
-            cmv_simples: parseFloat(String(row[iSimples]).replace(',', '.')) || 0,
-            cmv_lucro_real: parseFloat(String(row[iReal]).replace(',', '.')) || 0,
+            cmv_simples: parseFloat(String(row[idxSimples] || '0').replace(',', '.')) || 0,
+            cmv_lucro_real: parseFloat(String(row[idxReal] || '0').replace(',', '.')) || 0,
             spreadsheet_id: sheetId,
             synced_at: new Date().toISOString()
           };

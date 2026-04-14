@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 // Tipos para as contas
 interface MLAccount {
   id: string; nome: string; seller_id: string; client_id: string; client_secret: string; access_token?: string; refresh_token?: string; ativo: boolean; cmv_spreadsheet_id?: string; cmv_sheet_tab?: string;
+  cmv_header_row?: number; cmv_col_sku?: string; cmv_col_simples?: string; cmv_col_lucro_real?: string;
 }
 interface ShopeeAccount {
   id: string; nome: string; shop_id: string; partner_id: string; partner_key: string; access_token?: string; refresh_token?: string; ativo: boolean;
@@ -245,14 +246,32 @@ export function ApiConfigSection() {
                       <input type="text" value={formData.refresh_token || ''} onChange={e => setFormData({ ...formData, refresh_token: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono opacity-80" placeholder="TG-..." />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 mt-2 pt-2 border-t border-border">
+                  <div className="grid grid-cols-3 gap-3 mt-2 pt-2 border-t border-border">
                     <div className="space-y-1">
-                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1" title="Copie o ID longo que fica na URL da URL da Planilha Google (depois de /d/)">ID da Planilha CMV <AlertCircle className="w-3 h-3" /></label>
+                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1" title="Copie o ID longo que fica na URL da Planilha Google (depois de /d/)">ID da Planilha CMV <AlertCircle className="w-3 h-3" /></label>
                       <input type="text" value={formData.cmv_spreadsheet_id || ''} onChange={e => setFormData({ ...formData, cmv_spreadsheet_id: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" placeholder="Ex: 1aB2c..." />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Aba do CMV</label>
-                      <input type="text" value={formData.cmv_sheet_tab || ''} onChange={e => setFormData({ ...formData, cmv_sheet_tab: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" placeholder="Ex: CMV (Padrão)" />
+                      <input type="text" value={formData.cmv_sheet_tab || ''} onChange={e => setFormData({ ...formData, cmv_sheet_tab: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" placeholder="Ex: CMV" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground" title="Linha que contém os títulos das colunas (ex: 1)">Linha Cabeçalho (?)</label>
+                      <input type="number" value={formData.cmv_header_row || 1} onChange={e => setFormData({ ...formData, cmv_header_row: parseInt(e.target.value) })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 mt-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground" title="Letra da coluna onde está o SKU (ex: A)">Coluna SKU (?)</label>
+                      <input type="text" value={formData.cmv_col_sku || 'A'} onChange={e => setFormData({ ...formData, cmv_col_sku: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground" title="Letra da coluna com o CMV Simples (ex: B)">Col. CMV Simples (?)</label>
+                      <input type="text" value={formData.cmv_col_simples || 'B'} onChange={e => setFormData({ ...formData, cmv_col_simples: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground" title="Letra da coluna com o CMV Lucro Real (ex: C)">Col. CMV Real (?)</label>
+                      <input type="text" value={formData.cmv_col_lucro_real || 'C'} onChange={e => setFormData({ ...formData, cmv_col_lucro_real: e.target.value })} className="w-full text-xs px-2 py-1.5 rounded-lg border border-border bg-background font-mono" />
                     </div>
                   </div>
                 </>
