@@ -338,7 +338,9 @@ async function runSyncCmvDB(): Promise<string[]> {
 
       try {
         // Range dinâmico: da coluna inicial na linha do cabeçalho até o fim da coluna final
-        const range = `${sheetName}!${colSku}${headerRow}:${colReal}`;
+        // Determinar a coluna mais à direita entre colReal e colSimples
+        const maxCol = colToIndex(colSimples) > colToIndex(colReal) ? colSimples : colReal;
+        const range = `${sheetName}!${colSku}${headerRow}:${maxCol}`;
         
         const data = await invokeFunction('google-sheets', {
           action: 'read',
