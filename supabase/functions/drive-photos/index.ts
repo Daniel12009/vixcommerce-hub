@@ -111,7 +111,7 @@ async function listImages(token: string, folderId: string, sku: string): Promise
   const BUCKET = 'listing-photos';
 
   // Use Supabase JS client for storage uploads — fixes Invalid Compact JWS error
-  const { createClient } = await import('jsr:@supabase/supabase-js@2');
+  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
   const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
   const results: string[] = [];
