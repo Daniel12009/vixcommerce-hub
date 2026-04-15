@@ -1,3 +1,4 @@
+// sync_ads_db e sync_cmv_db habilitados - build 2026-04-15T11:20:13-03:00
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
@@ -29,6 +30,8 @@ const MODULE_LABELS: Record<string, string> = {
   tiny_tiktok: 'ðŸŽµ TikTok (Tiny)',
   tiny_temu: 'ðŸ›ï¸ Temu (Tiny)',
   tiny_estoque: 'ðŸ“‹ Estoque Tiny',
+  sync_ads_db: 'ðŸ“¢ Sync ADS â†’ DB',
+  sync_cmv_db: 'ðŸ“¦ Sync CMV â†’ DB',
   verify: 'ðŸ” VerificaÃ§Ã£o Final',
 };
 
@@ -260,7 +263,12 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
   return log;
 }
 
-async function runCMVSync(): Promise<string[]> {
+async function runSyncAdsDB(): Promise<string[]> {
+  const dIni = getYesterdayBR();
+  return runMLModule('ml_ads', 'get_ads_full_report', {}, dIni);
+}
+
+async function runSyncCmvDB(): Promise<string[]> {
   const log: string[] = [];
   try {
     const mlAccounts = await restGet('ml_accounts?ativo=eq.true&select=id,nome,cmv_spreadsheet_id,cmv_sheet_tab,cmv_header_row,cmv_col_sku,cmv_col_simples,cmv_col_lucro_real');
@@ -496,7 +504,13 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
         moduleLog = await runTinyEstoque(resumeData.resume_page, resumeData.resume_offset, resumeData.resume_total);
         break;
       case 'ml_cmv':
-        moduleLog = await runCMVSync();
+        moduleLog = await runSyncCmvDB();
+        break;
+      case 'sync_ads_db':
+        moduleLog = await runSyncAdsDB();
+        break;
+      case 'sync_cmv_db':
+        moduleLog = await runSyncCmvDB();
         break;
       default:
         moduleLog = [`âš ï¸ MÃ³dulo desconhecido: ${moduleKey}`];
