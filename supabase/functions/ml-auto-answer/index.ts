@@ -164,6 +164,7 @@ serve(async (req) => {
           }).eq('id', question.id)
           manualCount++
         }
+      } else {
         // Sem match: gerar sugestão com IA
         console.log(`[BOT] Question ${question.id}: No match (Score: ${bestScore}). Generating AI suggestion.`);
         const suggestion = await generateAISuggestion(question.question_text)
