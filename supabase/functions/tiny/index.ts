@@ -828,7 +828,9 @@ Deno.serve(async (req) => {
               }
             }
 
-            const saldoStr = sData?.retorno?.produto?.saldo || sData?.retorno?.produto?.estoque_atual || '0';
+            const saldoStr = sData?.retorno?.produto?.saldo || 
+                             sData?.retorno?.produto?.estoque_atual || 
+                             sData?.retorno?.produto?.estoque?.saldo || '0';
             const saldo = parseFloat(String(saldoStr));
             
             console.log(`[TINY-STOCK] SKU: ${codigo}, ID: ${p.id}, Saldo: ${saldoStr} -> Parsed: ${saldo}`);
