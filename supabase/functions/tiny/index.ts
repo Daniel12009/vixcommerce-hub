@@ -828,7 +828,7 @@ Deno.serve(async (req) => {
               }
             }
 
-            const saldo = parseFloat(saldoStr || '0');
+            const saldo = parseFloat(sData?.retorno?.produto?.saldo || '0');
             // Only include products with stock >= 1
             if (Math.round(saldo) >= 1) {
               allProducts.push([codigo, Math.round(saldo), getTodayBR()]);
