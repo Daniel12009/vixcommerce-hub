@@ -23,7 +23,7 @@ export function useMLQuestions(sellerId: string) {
       .from('ml_questions_queue' as any)
       .select('*') as any)
       .eq('seller_id', sellerId)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'suggested'])
       .order('date_created', { ascending: true })
       .then(({ data }: any) => { setPending((data as QueueItem[]) ?? []); setLoading(false); });
   };
@@ -49,7 +49,7 @@ export function useMLQuestions(sellerId: string) {
         filter: `seller_id=eq.${sellerId}`,
       }, payload => {
         const updated = payload.new as QueueItem;
-        if (updated.status !== 'pending') {
+        if (!['pending', 'suggested'].includes(updated.status)) {
           setPending(prev => prev.filter(q => q.id !== updated.id));
         } else {
           setPending(prev => prev.map(q => q.id === updated.id ? updated : q));
