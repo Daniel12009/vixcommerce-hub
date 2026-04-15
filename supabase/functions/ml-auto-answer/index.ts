@@ -168,13 +168,21 @@ serve(async (req) => {
         // Sem match: gerar sugestão com IA
         console.log(`[BOT] Question ${question.id}: No match (Score: ${bestScore}). Generating AI suggestion.`);
         const suggestion = await generateAISuggestion(question.question_text)
-        await supabase.from('ml_questions_queue').update({
+        console.log(`[BOT] AI Suggestion for ${question.id}: ${suggestion ? 'GENERATED' : 'EMPTY'}`);
+        
+        const { error: upErr } = await supabase.from('ml_questions_queue').update({
           status: 'suggested', // Transition from pending to suggested
           match_template_id: bestTemplate?.id ?? null,
           match_score: bestScore > 0 ? bestScore : null,
           suggested_answer: suggestion || null,
         }).eq('id', question.id)
-        manualCount++
+
+        if (upErr) {
+          console.error(`[BOT] Error updating question ${question.id}:`, upErr);
+        } else {
+          console.log(`[BOT] Question ${question.id} updated to 'suggested'.`);
+          manualCount++
+        }
       }
     }
 
