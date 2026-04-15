@@ -620,7 +620,7 @@ function ManualTestSection() {
           }
           
           totalInserted += batch.length;
-          addLog(`✅ Lote ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(rows.length/BATCH_SIZE)}: ${batch.length} registros`, 'ok');
+          addLog(`✅ Lote ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(dedupedRows.length/BATCH_SIZE)}: ${batch.length} registros`, 'ok');
         }
 
         addLog(`🎉 Importação concluída! Total de ${totalInserted} registros processados.`, 'ok');
