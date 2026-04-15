@@ -27,12 +27,12 @@ function getInt(val: any): number {
 }
 
 async function callGoogleSheets(action: string, body: object) {
-  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheets`;
+  const url = `${(Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))}/functions/v1/google-sheets`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      'Authorization': `Bearer ${(Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))}`,
     },
     body: JSON.stringify({ action, ...body }),
   });

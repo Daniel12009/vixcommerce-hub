@@ -8,8 +8,8 @@ const corsHeaders = {
 const TINY_API = 'https://api.tiny.com.br/api2';
 
 async function getSupabaseClient() {
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
   return { url, key };
 }
 
@@ -117,8 +117,8 @@ function mapTinyStatus(situacao: string): string {
 
 // Helper: chamar google-sheets edge function para append
 async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' | 'clear' = 'append') {
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
   const gsUrl = `${url}/functions/v1/google-sheets`;
   const gsHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` };
 
