@@ -749,7 +749,7 @@ Deno.serve(async (req) => {
       const startPage = reqBody.page || 1;
       const startOffset = reqBody.offset || 0;
       const sheetMode = reqBody.sheetMode || 'write';
-      const MAX_PRODUCTS_PER_CALL = 20; // Process max 20 products per invocation to stay under timeout
+      const MAX_PRODUCTS_PER_CALL = 10; // Process max 10 products per invocation to stay under timeout
 
       const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
       const SHEET_TAB = 'ESTOQUE-TINY';
@@ -802,11 +802,12 @@ Deno.serve(async (req) => {
       const allProducts: any[][] = [];
 
       for (const pw of slice) {
-            console.log(`[TINY-DEBUG] Processando pw de slice: ${JSON.stringify(pw)}`);
+            console.log(`[TINY-DEBUG] Usando token: ${TINY_TOKEN.substring(0, 5)}...`);
+            console.log(`[TINY-DEBUG] Produto raw: ${JSON.stringify(pw)}`);
             const p = pw.produto || pw;
             const codigo = (p.codigo || '').trim();
             if (!codigo) {
-              console.log(`[TINY-SKIP] Produto sem código: ${JSON.stringify(p)}`);
+              console.log(`[TINY-SKIP] SKU vazio no ID ${p.id}`);
               continue;
             }
 
@@ -814,14 +815,20 @@ Deno.serve(async (req) => {
             let success = false;
             while (attempts < 3 && !success) {
               try {
-                const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
+                // Try with both id and idProduto for maximum compatibility
+                const stockParams = new URLSearchParams({ 
+                  token: TINY_TOKEN, 
+                  id: String(p.id),
+                  idProduto: String(p.id),
+                  formato: 'json' 
+                });
                 const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                   body: stockParams.toString(),
                 });
                 const sData = await sRes.json();
-                console.log(`[TINY-DEBUG] sData para ID ${p.id}: ${JSON.stringify(sData)}`);
+                console.log(`[TINY-DEBUG] sData Resposta (ID ${p.id}): ${JSON.stringify(sData)}`);
 
                 if (sData?.retorno?.status === 'Erro') {
               const code = sData.retorno?.codigo_erro;
@@ -848,8 +855,8 @@ Deno.serve(async (req) => {
             }
             success = true;
 
-            // Delay for rate limits (Potencializar plan = 120 req/min = 500ms limit, using 600ms for safety)
-            await new Promise(r => setTimeout(r, 600));
+            // Increased delay to 1500ms (40 req/min) to stay well under Tiny limits
+            await new Promise(r => setTimeout(r, 1500));
           } catch (err) {
             console.error(`Erro buscando estoque ID ${p.id}:`, err);
             break;
