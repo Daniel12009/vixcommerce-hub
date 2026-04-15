@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
 // sync: 2026-04-09
 import { Play, Loader2, CheckCircle, XCircle, Clock, Zap, RefreshCw, Settings2, Power, Pencil, Save, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -189,6 +190,13 @@ const SYNC_ACTIONS = [
     fn: 'daily-sync',
     body: { module: 'sync_ads_db' },
     color: 'bg-[hsl(45,100%,50%,0.15)]',
+  },
+  {
+    id: 'import-history-sheets',
+    label: '📥 Importar Histórico Planilha → Banco',
+    description: 'Lê vendasItems em memória e faz upsert em vendas_items no Supabase',
+    color: 'bg-gradient-to-r from-blue-600 to-indigo-600',
+    localFn: true,
   },
 ];
 
@@ -501,6 +509,7 @@ function AutomationConfig() {
 
 // ─── Manual Test Section ─────────────────────────────────────────────
 function ManualTestSection() {
+  const { vendasItems } = useSheetsData();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [mlAccounts, setMlAccounts] = useState<any[]>([]);
@@ -530,6 +539,84 @@ function ManualTestSection() {
     addLog(`Iniciando: ${action.label}...`, 'running');
 
     try {
+      if (action.id === 'import-history-sheets') {
+        if (!vendasItems || vendasItems.length === 0) {
+          throw new Error('Nenhum dado de vendas carregado em memória. Certifique-se de que as abas de Vendas foram importadas do Google Sheets.');
+        }
+
+        addLog(`Preparando ${vendasItems.length} registros para importação...`, 'running');
+
+        const parseDateLocal = (d: string) => {
+          if (!d) return new Date().toISOString().split('T')[0];
+          if (d.includes('/')) {
+            const [day, mon, yr] = d.split('/');
+            return `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          }
+          return d;
+        };
+
+        const parseDev = (d: any) => {
+          if (typeof d === 'number') return d;
+          const s = String(d || '').toLowerCase();
+          if (s.includes('sim') || s === 'true' || s === '1') return 1;
+          return 0;
+        };
+
+        const rows = vendasItems.map(v => {
+          const cleanNum = String(v.numeroPedido || '').replace(/^[='"`]+/g, '').trim();
+          return {
+            id: `${cleanNum}-${v.sku}`,
+            numero_pedido: cleanNum,
+            data: parseDateLocal(v.data),
+            conta: v.conta || '',
+            conta_mae: v.contaMae || v.conta || '',
+            comprador: v.comprador || '',
+            sku: v.sku || '',
+            sku_produto: v.skuProduto || v.sku || '',
+            produto: v.produto || v.sku || '',
+            quantidade: Number(v.quantidade) || 0,
+            valor_total: Number(v.valorTotal) || 0,
+            status_pedido: v.statusPedido || '',
+            frete: Number(v.frete) || 0,
+            origem: v.origem || 'Google Sheets',
+            pedido_origem: v.pedidoOrigem || '',
+            preco_unitario: Number(v.precoUnitario) || 0,
+            impostos: Number(v.impostos) || 0,
+            comissao: Number(v.comissao) || 0,
+            custo_envio: Number(v.custoEnvio) || 0,
+            ads: Number(v.ads) || 0,
+            cmv: Number(v.cmv) || 0,
+            margem: String(v.margem || ''),
+            liquido: Number(v.liquido) || 0,
+            devolucao: parseDev(v.devolucao)
+          };
+        });
+
+        // Fazer em lotes de 500 para não travar o browser
+        const BATCH_SIZE = 500;
+        let totalInserted = 0;
+        
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+          const batch = rows.slice(i, i + BATCH_SIZE);
+          const { error } = await supabase.from('vendas_items').upsert(batch, {
+            onConflict: 'numero_pedido,sku',
+            ignoreDuplicates: false,
+          });
+          
+          if (error) {
+            addLog(`❌ Erro no lote ${Math.floor(i/BATCH_SIZE) + 1}: ${error.message}`, 'error');
+            throw error;
+          }
+          
+          totalInserted += batch.length;
+          addLog(`✅ Lote ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(rows.length/BATCH_SIZE)}: ${batch.length} registros`, 'ok');
+        }
+
+        addLog(`🎉 Importação concluída! Total de ${totalInserted} registros processados.`, 'ok');
+        toast.success(`Importação concluída: ${totalInserted} registros`);
+        return;
+      }
+
       const body = action.body || (action.bodyFn ? action.bodyFn(selectedMl) : {});
       let result;
 
