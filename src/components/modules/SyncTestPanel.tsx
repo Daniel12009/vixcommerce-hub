@@ -562,7 +562,7 @@ function ManualTestSection() {
           return 0;
         };
 
-        const rows = vendasItems.map(v => {
+        const mappedRows = vendasItems.map(v => {
           const cleanNum = String(v.numeroPedido || '').replace(/^[='"`]+/g, '').trim();
           const parseDateLocal = (d: string) => {
             if (!d) return null;
@@ -592,12 +592,23 @@ function ManualTestSection() {
           };
         });
 
+        // Deduplicar por numero_pedido + sku antes de fazer upsert
+        const seen = new Set<string>();
+        const dedupedRows = mappedRows.filter(row => {
+          const key = `${row.numero_pedido}__${row.sku}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        addLog(`📋 ${mappedRows.length} registros → ${dedupedRows.length} após deduplicação`, 'ok');
+
         // Fazer em lotes de 500 para não travar o browser
         const BATCH_SIZE = 500;
         let totalInserted = 0;
         
-        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-          const batch = rows.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
+          const batch = dedupedRows.slice(i, i + BATCH_SIZE);
           const { error } = await supabase.from('vendas_items').upsert(batch, {
             onConflict: 'numero_pedido,sku',
             ignoreDuplicates: false,
