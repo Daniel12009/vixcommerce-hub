@@ -106,8 +106,8 @@ async function listImages(token: string, folderId: string, sku: string): Promise
   const data = await res.json();
   const files = data.files || [];
 
-  const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
-  const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const SUPABASE_URL = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL')) || '';
+  const SUPABASE_SERVICE_KEY = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) || '';
   const BUCKET = 'listing-photos';
 
   // Use Supabase JS client for storage uploads — fixes Invalid Compact JWS error

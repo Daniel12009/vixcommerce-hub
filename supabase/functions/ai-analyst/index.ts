@@ -32,8 +32,8 @@ async function callClaude(system: string, messages: any[]): Promise<string> {
 }
 
 async function supabaseFetch(path: string) {
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
   const res = await fetch(`${url}/rest/v1${path}`, {
     headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
   });
@@ -41,8 +41,8 @@ async function supabaseFetch(path: string) {
 }
 
 async function callMLFunction(body: any) {
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
   const res = await fetch(`${url}/functions/v1/mercado-livre`, {
     method: 'POST',
     headers: {

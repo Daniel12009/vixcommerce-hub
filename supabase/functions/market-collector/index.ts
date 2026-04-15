@@ -8,8 +8,8 @@ const corsHeaders = {
 const ML_API = 'https://api.mercadolibre.com';
 
 async function sb(path: string, options: RequestInit = {}) {
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
   const res = await fetch(`${url}/rest/v1${path}`, {
     ...options,
     headers: {
@@ -91,12 +91,12 @@ async function collectSegment(segment: any, token: string | null) {
   // Delete old snapshots (keep last 30 days) to avoid bloat
   const cutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
   await fetch(
-    `${Deno.env.get('SUPABASE_URL')}/rest/v1/market_snapshots?segment_id=eq.${segment.id}&coletado_em=lt.${cutoff}`,
+    `${(Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))}/rest/v1/market_snapshots?segment_id=eq.${segment.id}&coletado_em=lt.${cutoff}`,
     {
       method: 'DELETE',
       headers: {
-        apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}`,
+        apikey: (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!,
+        Authorization: `Bearer ${(Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!}`,
       },
     }
   );

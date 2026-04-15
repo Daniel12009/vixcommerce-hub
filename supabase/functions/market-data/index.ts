@@ -8,8 +8,8 @@ const corsHeaders = {
 
 function sb() {
   return createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!,
+    (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!
   );
 }
 
@@ -151,12 +151,12 @@ Deno.serve(async (req: Request) => {
     // ── run_collector ─────────────────────────────────────────────────────────
     if (action === 'run_collector') {
       const res = await fetch(
-        `${Deno.env.get('SUPABASE_URL')}/functions/v1/market-collector`,
+        `${(Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))}/functions/v1/market-collector`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}`,
+            Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY') || (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!}`,
           },
           body: '{}',
         }

@@ -8,8 +8,8 @@ const corsHeaders = {
 const SHOPEE_API = 'https://partner.shopeemobile.com';
 
 async function getSupabaseClient() {
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
   return { url, key };
 }
 
