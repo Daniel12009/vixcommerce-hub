@@ -14,9 +14,12 @@ function matchScore(questionText: string, keywords: string[]): number {
   return hits / keywords.length
 }
 
-async function generateAISuggestion(questionText: string): Promise<string> {
+async function generateAISuggestion(questionText: string, logFunc: (msg: string) => void): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-  if (!apiKey) return ''
+  if (!apiKey) {
+    logFunc("[BOT] ANTHROPIC_API_KEY not found in env.");
+    return '';
+  }
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -26,7 +29,7 @@ async function generateAISuggestion(questionText: string): Promise<string> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-3-5-sonnet-20240620',
         max_tokens: 300,
         messages: [{
           role: 'user',
@@ -34,9 +37,17 @@ async function generateAISuggestion(questionText: string): Promise<string> {
         }],
       }),
     })
+    
+    if (!res.ok) {
+      const errText = await res.text();
+      logFunc(`[BOT] Anthropic API Error: ${res.status} - ${errText}`);
+      return '';
+    }
+
     const data = await res.json()
     return data.content?.[0]?.text ?? ''
-  } catch {
+  } catch (e: any) {
+    logFunc(`[BOT] Anthropic Fetch Error: ${e.message}`);
     return ''
   }
 }
@@ -70,18 +81,27 @@ serve(async (req) => {
       .from('ml_questions_queue')
       .select('*')
       .eq('status', 'pending')
-      .order('date_created', { ascending: true })
-      .limit(100)
+    const debugLog: string[] = [];
+    const log = (msg: string) => {
+      console.log(msg);
+      debugLog.push(msg);
+    };
 
+    log(`[BOT] Found ${pending?.length || 0} pending questions.`);
     let autoCount = 0
     let manualCount = 0
 
     for (const question of pending ?? []) {
-      const { data: templates } = await supabase
+      log(`[BOT] Processing question ${question.id} for seller ${question.seller_id}...`);
+      
+      const { data: templates, error: tErr } = await supabase
         .from('ml_answer_templates')
         .select('*')
         .eq('seller_id', question.seller_id)
         .eq('active', true)
+
+      if (tErr) log(`[BOT] Error fetching templates: ${JSON.stringify(tErr)}`);
+      log(`[BOT] Found ${templates?.length || 0} active templates.`);
 
       let bestTemplate: any = null
       let bestScore = 0
@@ -89,19 +109,25 @@ serve(async (req) => {
         const score = matchScore(question.question_text, tpl.keywords)
         if (score > bestScore) { bestScore = score; bestTemplate = tpl }
       }
+      log(`[BOT] Best template match score: ${bestScore}`);
 
       // Buscar config do bot
-      const { data: config } = await supabase
+      const { data: config, error: cErr } = await supabase
         .from('ml_bot_config')
         .select('mode, min_score')
         .eq('seller_id', question.seller_id)
         .maybeSingle()
 
+      if (cErr) log(`[BOT] Error fetching config: ${JSON.stringify(cErr)}`);
+      
       const botMode = config?.mode ?? 'learning'
       const minScore = config?.min_score ?? 0.70
+      log(`[BOT] Bot Mode: ${botMode}, Min Score: ${minScore}`);
 
       if (bestTemplate && bestScore >= minScore) {
+        log(`[BOT] Match found! Template ID: ${bestTemplate.id}`);
         if (botMode === 'active') {
+          log(`[BOT] Bot is active. Attempting to send answer...`);
           // Buscar token do seller
           const { data: seller } = await supabase
             .from('ml_accounts')
@@ -110,7 +136,10 @@ serve(async (req) => {
             .maybeSingle()
 
           const token = seller?.access_token
-          if (!token) continue
+          if (!token) {
+            log(`[BOT] No access token found for seller ${question.seller_id}`);
+            continue
+          }
 
           const mlRes = await sendAnswer(token, question.question_id, bestTemplate.answer_text)
           const responseTimeMin = Math.round(
@@ -118,6 +147,7 @@ serve(async (req) => {
           )
 
           if (mlRes.ok) {
+            log(`[BOT] Answer sent successfully.`);
             await supabase.from('ml_questions_queue').update({
               status: 'auto_answered',
               match_template_id: bestTemplate.id,
@@ -149,12 +179,14 @@ serve(async (req) => {
             autoCount++
           } else {
             const err = await mlRes.json()
+            log(`[BOT] ML API Error: ${JSON.stringify(err)}`);
             await supabase.from('ml_questions_queue').update({
               status: 'error',
               error_message: JSON.stringify(err),
             }).eq('id', question.id)
           }
         } else {
+          log(`[BOT] Bot is in learning mode. Suggesting matching template.`);
           // Modo learning: preenche sugestão mas não envia
           await supabase.from('ml_questions_queue').update({
             status: 'suggested',
@@ -166,27 +198,33 @@ serve(async (req) => {
         }
       } else {
         // Sem match: gerar sugestão com IA
-        console.log(`[BOT] Question ${question.id}: No match (Score: ${bestScore}). Generating AI suggestion.`);
-        const suggestion = await generateAISuggestion(question.question_text)
-        console.log(`[BOT] AI Suggestion for ${question.id}: ${suggestion ? 'GENERATED' : 'EMPTY'}`);
+        log(`[BOT] No match (Score: ${bestScore}). Starting AI generation...`);
+        const suggestion = await generateAISuggestion(question.question_text, log)
+        log(`[BOT] AI suggestion generated (length: ${suggestion?.length || 0})`);
         
         const { error: upErr } = await supabase.from('ml_questions_queue').update({
-          status: 'suggested', // Transition from pending to suggested
+          status: 'suggested',
           match_template_id: bestTemplate?.id ?? null,
           match_score: bestScore > 0 ? bestScore : null,
           suggested_answer: suggestion || null,
         }).eq('id', question.id)
 
         if (upErr) {
-          console.error(`[BOT] Error updating question ${question.id}:`, upErr);
+          log(`[BOT] DB Update error: ${JSON.stringify(upErr)}`);
         } else {
-          console.log(`[BOT] Question ${question.id} updated to 'suggested'.`);
+          log(`[BOT] Question ${question.id} successfully updated to 'suggested'.`);
           manualCount++
         }
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, auto: autoCount, queued_manual: manualCount }), {
+    return new Response(JSON.stringify({ 
+      ok: true, 
+      auto: autoCount, 
+      queued_manual: manualCount,
+      found_pending: pending?.length || 0,
+      debug_log: debugLog 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
