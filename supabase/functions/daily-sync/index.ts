@@ -264,8 +264,55 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
 }
 
 async function runSyncAdsDB(): Promise<string[]> {
-  const dIni = getYesterdayBR();
-  return runMLModule('ml_ads', 'get_ads_full_report', {}, dIni);
+  const log: string[] = [];
+  try {
+    const data = await invokeFunction('google-sheets', {
+      action: 'read',
+      spreadsheetId: PLANILHA_MESTRA,
+      range: 'ADS-TOTAL-ML!A:C',
+    });
+
+    const rows: any[][] = data.values || [];
+    if (rows.length < 2) {
+      log.push('âš ï¸  ADS-TOTAL-ML vazia ou sem dados');
+      return log;
+    }
+
+    // Formato: [data_ref, conta, valor_investido]
+    const dbRows = rows.slice(1).map(row => ({
+      data_ref: row[0] ? (() => {
+        const p = String(row[0]).replace(/^'/, '').split('/');
+        return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : row[0];
+      })() : null,
+      conta: String(row[1] || '').replace(/^'/, '').trim(),
+      investimento: parseFloat(String(row[2] || '0').replace('R$', '').replace('.', '').replace(',', '.').trim()) || 0,
+    })).filter(r => r.data_ref && r.conta);
+
+    if (dbRows.length === 0) {
+      log.push('âš ï¸  Nenhuma linha vÃ¡lida em ADS-TOTAL-ML');
+      return log;
+    }
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ads_db?on_conflict=data_ref,conta`, {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(dbRows),
+    });
+
+    if (!res.ok) {
+      log.push(`â Œ Erro upsert ads_db: ${await res.text()}`);
+    } else {
+      log.push(`âœ… ads_db: ${dbRows.length} registros sincronizados`);
+    }
+  } catch (e: any) {
+    log.push(`â Œ Erro Sync ADS DB: ${e.message}`);
+  }
+  return log;
 }
 
 async function runSyncCmvDB(): Promise<string[]> {
