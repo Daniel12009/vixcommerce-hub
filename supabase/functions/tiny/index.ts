@@ -828,10 +828,16 @@ Deno.serve(async (req) => {
               }
             }
 
-            const saldo = parseFloat(sData?.retorno?.produto?.saldo || '0');
+            const saldoStr = sData?.retorno?.produto?.saldo || sData?.retorno?.produto?.estoque_atual || '0';
+            const saldo = parseFloat(String(saldoStr));
+            
+            console.log(`[TINY-STOCK] SKU: ${codigo}, ID: ${p.id}, Saldo: ${saldoStr} -> Parsed: ${saldo}`);
+
             // Only include products with stock >= 1
             if (Math.round(saldo) >= 1) {
               allProducts.push([codigo, Math.round(saldo), getTodayBR()]);
+            } else {
+              console.log(`[TINY-STOCK] SKU: ${codigo} ignorado (saldo < 1)`);
             }
             success = true;
 
