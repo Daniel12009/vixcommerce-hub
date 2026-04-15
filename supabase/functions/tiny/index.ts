@@ -802,23 +802,28 @@ Deno.serve(async (req) => {
       const allProducts: any[][] = [];
 
       for (const pw of slice) {
-        const p = pw.produto || pw;
-        const codigo = (p.codigo || '').trim();
-        if (!codigo) continue;
+            console.log(`[TINY-DEBUG] Processando pw de slice: ${JSON.stringify(pw)}`);
+            const p = pw.produto || pw;
+            const codigo = (p.codigo || '').trim();
+            if (!codigo) {
+              console.log(`[TINY-SKIP] Produto sem código: ${JSON.stringify(p)}`);
+              continue;
+            }
 
-        let attempts = 0;
-        let success = false;
-        while (attempts < 3 && !success) {
-          try {
-            const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
-            const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: stockParams.toString(),
-            });
-            const sData = await sRes.json();
+            let attempts = 0;
+            let success = false;
+            while (attempts < 3 && !success) {
+              try {
+                const stockParams = new URLSearchParams({ token: TINY_TOKEN, id: String(p.id), formato: 'json' });
+                const sRes = await fetch('https://api.tiny.com.br/api2/produto.obter.estoque.php', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: stockParams.toString(),
+                });
+                const sData = await sRes.json();
+                console.log(`[TINY-DEBUG] sData para ID ${p.id}: ${JSON.stringify(sData)}`);
 
-            if (sData?.retorno?.status === 'Erro') {
+                if (sData?.retorno?.status === 'Erro') {
               const code = sData.retorno?.codigo_erro;
               if (code === '6' || code === '31' || String(sData.retorno.erros?.[0]?.erro).includes('Bloqueada')) {
                 attempts++;
