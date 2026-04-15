@@ -30,10 +30,12 @@ export function useVendasFromDB(dateIni: string, dateFim: string, contas?: strin
           p_contas: contas && contas.length > 0 ? contas : null
         });
 
+        console.log('[useVendasFromDB] rpcData:', rpcData, 'rpcError:', rpcError, 'params:', { dateIni, dateFim, contas });
         if (rpcError) throw rpcError;
 
         if (active) {
           const items = (rpcData as any[]) || [];
+          console.log('[useVendasFromDB] parsed items count:', items.length);
           setData(items.map((item: any) => ({
             ...item,
             faturamento_bruto: Number(item.faturamento_bruto || 0),
