@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      ads_db: {
+        Row: {
+          cliques: number | null
+          conta: string
+          conta_id: string | null
+          data_ref: string
+          id: string
+          investimento: number | null
+          receita: number | null
+          roas: number | null
+          synced_at: string | null
+        }
+        Insert: {
+          cliques?: number | null
+          conta: string
+          conta_id?: string | null
+          data_ref: string
+          id?: string
+          investimento?: number | null
+          receita?: number | null
+          roas?: number | null
+          synced_at?: string | null
+        }
+        Update: {
+          cliques?: number | null
+          conta?: string
+          conta_id?: string | null
+          data_ref?: string
+          id?: string
+          investimento?: number | null
+          receita?: number | null
+          roas?: number | null
+          synced_at?: string | null
+        }
+        Relationships: []
+      }
       app_data: {
         Row: {
           created_at: string | null
@@ -32,6 +68,36 @@ export type Database = {
           data_key?: string
           data_value?: Json | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      cmv_db: {
+        Row: {
+          cmv_lucro_real: number
+          cmv_simples: number
+          conta: string
+          id: string
+          sku: string
+          spreadsheet_id: string | null
+          synced_at: string | null
+        }
+        Insert: {
+          cmv_lucro_real?: number
+          cmv_simples?: number
+          conta: string
+          id?: string
+          sku: string
+          spreadsheet_id?: string | null
+          synced_at?: string | null
+        }
+        Update: {
+          cmv_lucro_real?: number
+          cmv_simples?: number
+          conta?: string
+          id?: string
+          sku?: string
+          spreadsheet_id?: string | null
+          synced_at?: string | null
         }
         Relationships: []
       }
@@ -208,12 +274,56 @@ export type Database = {
         }
         Relationships: []
       }
+      ml_account_tax_config: {
+        Row: {
+          conta_id: string | null
+          icms_pct: number | null
+          id: string
+          pis_cofins_pct: number | null
+          regime: string
+          simples_pct: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          conta_id?: string | null
+          icms_pct?: number | null
+          id?: string
+          pis_cofins_pct?: number | null
+          regime?: string
+          simples_pct?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          conta_id?: string | null
+          icms_pct?: number | null
+          id?: string
+          pis_cofins_pct?: number | null
+          regime?: string
+          simples_pct?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ml_account_tax_config_conta_id_fkey"
+            columns: ["conta_id"]
+            isOneToOne: true
+            referencedRelation: "ml_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ml_accounts: {
         Row: {
           access_token: string
           ativo: boolean
           client_id: string
           client_secret: string
+          cmv_col_lucro_real: string | null
+          cmv_col_simples: string | null
+          cmv_col_sku: string | null
+          cmv_header_row: number | null
+          cmv_sheet_tab: string | null
+          cmv_spreadsheet_id: string | null
           created_at: string
           id: string
           nome: string
@@ -226,6 +336,12 @@ export type Database = {
           ativo?: boolean
           client_id?: string
           client_secret?: string
+          cmv_col_lucro_real?: string | null
+          cmv_col_simples?: string | null
+          cmv_col_sku?: string | null
+          cmv_header_row?: number | null
+          cmv_sheet_tab?: string | null
+          cmv_spreadsheet_id?: string | null
           created_at?: string
           id?: string
           nome?: string
@@ -238,6 +354,12 @@ export type Database = {
           ativo?: boolean
           client_id?: string
           client_secret?: string
+          cmv_col_lucro_real?: string | null
+          cmv_col_simples?: string | null
+          cmv_col_sku?: string | null
+          cmv_header_row?: number | null
+          cmv_sheet_tab?: string | null
+          cmv_spreadsheet_id?: string | null
           created_at?: string
           id?: string
           nome?: string
@@ -561,6 +683,21 @@ export type Database = {
           schedule: string
         }[]
       }
+      get_marketplace_dia: {
+        Args: { p_contas?: string[]; p_data_fim: string; p_data_ini: string }
+        Returns: {
+          ads: number
+          cmv: number
+          comissao: number
+          data: string
+          faturamento_bruto: number
+          impostos: number
+          lucro_liquido: number
+          origem: string
+          pedidos: number
+        }[]
+      }
+      parse_data_venda: { Args: { d: string }; Returns: string }
       schedule_cron_job: {
         Args: {
           cron_expression: string
