@@ -14,7 +14,25 @@ function matchScore(questionText: string, keywords: string[]): number {
   return hits / keywords.length
 }
 
-async function generateAISuggestion(questionText: string, logFunc: (msg: string) => void): Promise<string> {
+async function getRecentAnswers(seller: any, itemId: string, logFunc: (msg: string) => void): Promise<string> {
+  try {
+    const res = await fetch(`https://api.mercadolibre.com/questions/search?item=${itemId}&status=ANSWERED&limit=15&api_version=4`, {
+      headers: { Authorization: `Bearer ${seller.access_token}` }
+    })
+    if (!res.ok) return ''
+    const data = await res.json()
+    const questions = (data.questions ?? [])
+      .filter((q: any) => q.text && q.answer?.text)
+      .map((q: any) => `P: ${q.text}\nR: ${q.answer.text}`)
+      .join('\n\n')
+    return questions
+  } catch (e) {
+    logFunc(`[BOT] Erro ao buscar histórico: ${e.message}`)
+    return ''
+  }
+}
+
+async function generateAISuggestion(questionText: string, historicalContext: string, logFunc: (msg: string) => void): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) {
     logFunc("[BOT] ANTHROPIC_API_KEY not found in env.");
@@ -37,7 +55,15 @@ async function generateAISuggestion(questionText: string, logFunc: (msg: string)
         max_tokens: 300,
         messages: [{
           role: 'user',
-          content: `Você é um assistente de vendas de produtos de casa e construção (torneiras, pias, suportes, chuveiros a gás, iluminação). Responda a pergunta abaixo de forma direta, profissional e em português. Máximo 300 caracteres.\n\nPergunta: ${questionText}`,
+          content: `Você é um assistente de vendas no Mercado Livre Brasil, especializado em produtos de casa e construção (torneiras, pias, suportes, chuveiros, iluminação). 
+
+Instruções:
+1. Responda de forma direta, profissional e gentil.
+2. Máximo 300 caracteres.
+3. Se o cliente pedir outros produtos, links ou variações que você não tem certeza, sugira que ele acesse 'Ver mais dados deste vendedor' para conferir nosso catálogo completo no Mercado Livre.
+
+${historicalContext ? `Baseie-se nestas respostas anteriores para manter o tom:\n\n${historicalContext}\n\n` : ''}
+Pergunta do Cliente: ${questionText}`,
         }],
       }),
     })
@@ -206,7 +232,21 @@ serve(async (req) => {
       } else {
         // Sem match: gerar sugestão com IA
         log(`[BOT] No match (Score: ${bestScore}). Starting AI generation...`);
-        const suggestion = await generateAISuggestion(question.question_text, log)
+        
+        // Buscar token do seller para o histórico
+        const { data: seller } = await supabase
+          .from('ml_accounts')
+          .select('access_token, refresh_token, id')
+          .eq('seller_id', question.seller_id)
+          .maybeSingle()
+
+        let context = ''
+        if (seller?.access_token) {
+          log(`[BOT] Buscando contexto histórico para o item ${question.item_id}...`);
+          context = await getRecentAnswers(seller, question.item_id, log)
+        }
+
+        const suggestion = await generateAISuggestion(question.question_text, context, log)
         log(`[BOT] AI suggestion generated (length: ${suggestion?.length || 0})`);
         
         const { error: upErr } = await supabase.from('ml_questions_queue').update({
