@@ -28,8 +28,18 @@ export function useMLBotMode(sellerId: string) {
       .select('*') as any)
       .eq('seller_id', sellerId)
       .maybeSingle()
-      .then(({ data }) => {
-        setConfig(data ? (data as unknown as BotConfig) : defaultConfig);
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('[BotConfig] Error fetching:', error);
+          setConfig(defaultConfig);
+        } else {
+          setConfig(data ? (data as unknown as BotConfig) : defaultConfig);
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('[BotConfig] Promise error:', err);
+        setConfig(defaultConfig);
         setLoading(false);
       });
   }, [sellerId]);
