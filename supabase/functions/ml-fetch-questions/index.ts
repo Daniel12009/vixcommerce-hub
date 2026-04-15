@@ -44,13 +44,22 @@ serve(async (req) => {
           .eq('data_key', 'ml_credentials')
           .maybeSingle()
         const mlCreds = creds?.data_value as any
+        
+        const clientId = seller.client_id || mlCreds?.client_id || Deno.env.get('ML_CLIENT_ID');
+        const clientSecret = seller.client_secret || mlCreds?.client_secret || Deno.env.get('ML_CLIENT_SECRET');
+
+        if (!clientId || !clientSecret) {
+          console.error(`[FETCH] Credenciais ML ausentes para conta ${seller.nome}`);
+          continue;
+        }
+
         const refreshRes = await fetch('https://api.mercadolibre.com/oauth/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             grant_type: 'refresh_token',
-            client_id: mlCreds?.client_id || Deno.env.get('ML_CLIENT_ID')!,
-            client_secret: mlCreds?.client_secret || Deno.env.get('ML_CLIENT_SECRET')!,
+            client_id: clientId,
+            client_secret: clientSecret,
             refresh_token: seller.refresh_token,
           }),
         })

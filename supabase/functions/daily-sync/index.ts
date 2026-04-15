@@ -337,62 +337,71 @@ async function runSyncCmvDB(): Promise<string[]> {
       }
 
       try {
-        // Range dinâmico: da coluna inicial na linha do cabeçalho até o fim da coluna final
-        // Determinar a coluna mais à direita entre colReal e colSimples
-        const maxCol = colToIndex(colSimples) > colToIndex(colReal) ? colSimples : colReal;
-        const range = `${sheetName}!${colSku}${headerRow}:${maxCol}`;
-        
-        const data = await invokeFunction('google-sheets', {
+        // Leitura 1: SKU + CMV Lucro Real (colunas A e C)
+        const dataReal = await invokeFunction('google-sheets', {
           action: 'read',
           spreadsheetId: sheetId,
-          range: range
+          range: `${sheetName}!A${headerRow}:${colReal}`,
         });
 
-        const rows: any[][] = data.values || [];
-        if (rows.length < 1) {
-          log.push(`⚠️ ${conta.nome}: Planilha vazia ou sem dados no range ${range}.`);
+        // Leitura 2: SKU + CMV Simples (colunas A e N)
+        const dataSimples = await invokeFunction('google-sheets', {
+          action: 'read',
+          spreadsheetId: sheetId,
+          range: `${sheetName}!A${headerRow}:${colSimples}`,
+        });
+
+        const rowsReal: any[][] = dataReal.values || [];
+        const rowsSimples: any[][] = dataSimples.values || [];
+
+        // Montar mapa de SKU → cmv_lucro_real
+        const mapaReal: Record<string, number> = {};
+        const idxReal = colToIndex(colReal); // índice relativo ao A
+        rowsReal.slice(1).forEach(row => {
+          const sku = String(row[0] || '').trim();
+          if (sku) mapaReal[sku] = parseFloat(String(row[idxReal] || '0').replace(',', '.')) || 0;
+        });
+
+        // Montar mapa de SKU → cmv_simples
+        const mapaSimples: Record<string, number> = {};
+        const idxSimples = colToIndex(colSimples); // índice relativo ao A
+        rowsSimples.slice(1).forEach(row => {
+          const sku = String(row[0] || '').trim();
+          if (sku) mapaSimples[sku] = parseFloat(String(row[idxSimples] || '0').replace(',', '.')) || 0;
+        });
+
+        // Combinar os dois mapas
+        const allSkus = new Set([...Object.keys(mapaReal), ...Object.keys(mapaSimples)]);
+        const dbRows = Array.from(allSkus).map(sku => ({
+          sku,
+          conta: conta.nome,
+          cmv_lucro_real: mapaReal[sku] || 0,
+          cmv_simples: mapaSimples[sku] || 0,
+          spreadsheet_id: sheetId,
+          synced_at: new Date().toISOString(),
+        })).filter(r => r.sku && r.sku.toLowerCase() !== 'sku');
+
+        if (dbRows.length === 0) {
+          log.push(`⚠️ ${conta.nome}: Nenhum dado de CMV encontrado.`);
           continue;
         }
 
-        // Índices relativos ao início do range (se o range começa em A, A=0. Se começa em D, D=0?)
-        // Na Sheets API, se o range é D1:F, a primeira coluna do array (índice 0) é D.
-        // Precisamos calcular o índice relativo.
-        const baseIdx = colToIndex(colSku);
-        const idxSku = colToIndex(colSku) - baseIdx;
-        const idxSimples = colToIndex(colSimples) - baseIdx;
-        const idxReal = colToIndex(colReal) - baseIdx;
+        // Upsert no banco
+        const resDb = await fetch(`${SUPABASE_URL}/rest/v1/cmv_db?on_conflict=sku,conta`, {
+          method: 'POST',
+          headers: {
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify(dbRows),
+        });
 
-        const dbRows = rows.slice(1).map((row, index) => {
-          const sku = String(row[idxSku] || '').trim();
-          if (!sku || sku.toLowerCase() === 'sku') return null; // Pula cabeçalho se ainda vier ou linha vazia
-          
-          return {
-            sku: sku,
-            conta: conta.nome,
-            cmv_simples: parseFloat(String(row[idxSimples] || '0').replace(',', '.')) || 0,
-            cmv_lucro_real: parseFloat(String(row[idxReal] || '0').replace(',', '.')) || 0,
-            spreadsheet_id: sheetId,
-            synced_at: new Date().toISOString()
-          };
-        }).filter(Boolean);
-
-        if (dbRows.length > 0) {
-          const resDb = await fetch(`${SUPABASE_URL}/rest/v1/cmv_db?on_conflict=sku,conta`, {
-            method: 'POST',
-            headers: {
-              apikey: SERVICE_KEY,
-              Authorization: `Bearer ${SERVICE_KEY}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify(dbRows)
-          });
-
-          if (!resDb.ok) {
-            log.push(`❌ ${conta.nome}: Erro upsert DB: ${await resDb.text()}`);
-          } else {
-            log.push(`✅ ${conta.nome}: ${dbRows.length} SKUs sincronizados.`);
-          }
+        if (!resDb.ok) {
+          log.push(`❌ ${conta.nome}: Erro upsert cmv_db: ${await resDb.text()}`);
+        } else {
+          log.push(`✅ ${conta.nome}: ${dbRows.length} SKUs sincronizados`);
         }
       } catch (e: any) {
         log.push(`❌ ${conta.nome}: ${e.message}`);
