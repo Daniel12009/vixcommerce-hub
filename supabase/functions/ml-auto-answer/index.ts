@@ -20,7 +20,11 @@ async function generateAISuggestion(questionText: string, logFunc: (msg: string)
     logFunc("[BOT] ANTHROPIC_API_KEY not found in env.");
     return '';
   }
+
+  const model = 'claude-sonnet-4-6';
+  
   try {
+    logFunc(`[BOT] Gerando sugestão com ${model}...`);
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -29,7 +33,7 @@ async function generateAISuggestion(questionText: string, logFunc: (msg: string)
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20240620',
+        model: model,
         max_tokens: 300,
         messages: [{
           role: 'user',
@@ -38,18 +42,21 @@ async function generateAISuggestion(questionText: string, logFunc: (msg: string)
       }),
     })
     
-    if (!res.ok) {
+    if (res.ok) {
+      const data = await res.json()
+      const text = data.content?.[0]?.text ?? ''
+      if (text) {
+        return text;
+      }
+    } else {
       const errText = await res.text();
-      logFunc(`[BOT] Anthropic API Error: ${res.status} - ${errText}`);
-      return '';
+      logFunc(`[BOT] Erro na IA (${model}): ${res.status} - ${errText}`);
     }
-
-    const data = await res.json()
-    return data.content?.[0]?.text ?? ''
   } catch (e: any) {
-    logFunc(`[BOT] Anthropic Fetch Error: ${e.message}`);
-    return ''
+    logFunc(`[BOT] Erro de conexão com a IA: ${e.message}`);
   }
+  
+  return '';
 }
 
 async function getToken(supabase: any, seller: any): Promise<string | null> {
