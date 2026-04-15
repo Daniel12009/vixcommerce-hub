@@ -28,11 +28,13 @@ const MODULE_LABELS: Record<string, string> = {
   tiny_shein: 'ðŸ‘— Shein (Tiny)',
   tiny_amazon: 'ðŸ“¦ Amazon (Tiny)',
   tiny_tiktok: 'ðŸŽµ TikTok (Tiny)',
-  tiny_temu: 'ðŸ›ï¸ Temu (Tiny)',
-  tiny_estoque: 'ðŸ“‹ Estoque Tiny',
+  tiny_temu: 'ðŸ› ï¸  Temu (Tiny)',
+  tiny_estoque: '📦 Estoque Tiny',
+  ml_auto_robot: '🤖 Robô de Atendimento ML',
+  ml_cmv: '📦 Sync CMV → Banco',
   sync_ads_db: 'ðŸ“¢ Sync ADS â†’ DB',
   sync_cmv_db: 'ðŸ“¦ Sync CMV â†’ DB',
-  verify: 'ðŸ” VerificaÃ§Ã£o Final',
+  verify: 'ðŸ”  VerificaÃ§Ã£o Final',
 };
 
 function getYesterdayBR(): string {
@@ -549,6 +551,16 @@ async function executeModule(moduleKey: string, dIni: string, dIniBR: string, ru
         break;
       case 'tiny_estoque':
         moduleLog = await runTinyEstoque(resumeData.resume_page, resumeData.resume_offset, resumeData.resume_total);
+        break;
+      case 'ml_auto_robot':
+        // 1. Fetch questions
+        moduleLog.push('Iniciando busca de novas perguntas ML...');
+        const fetchRes = await invokeFunction('ml-fetch-questions', {});
+        moduleLog.push(`Fetch: ${fetchRes.queued || 0} novas perguntas na fila.`);
+        // 2. Auto answer
+        moduleLog.push('Iniciando processamento de respostas automáticas...');
+        const answerRes = await invokeFunction('ml-auto-answer', {});
+        moduleLog.push(`Respostas: ${answerRes.auto || 0} enviadas, ${answerRes.queued_manual || 0} sugeridas.`);
         break;
       case 'ml_cmv':
         moduleLog = await runSyncCmvDB();

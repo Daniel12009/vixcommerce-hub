@@ -157,16 +157,18 @@ serve(async (req) => {
         } else {
           // Modo learning: preenche sugestão mas não envia
           await supabase.from('ml_questions_queue').update({
+            status: 'suggested',
             match_template_id: bestTemplate.id,
             match_score: bestScore,
             suggested_answer: bestTemplate.answer_text,
           }).eq('id', question.id)
           manualCount++
         }
-      } else {
         // Sem match: gerar sugestão com IA
+        console.log(`[BOT] Question ${question.id}: No match (Score: ${bestScore}). Generating AI suggestion.`);
         const suggestion = await generateAISuggestion(question.question_text)
         await supabase.from('ml_questions_queue').update({
+          status: 'suggested', // Transition from pending to suggested
           match_template_id: bestTemplate?.id ?? null,
           match_score: bestScore > 0 ? bestScore : null,
           suggested_answer: suggestion || null,
