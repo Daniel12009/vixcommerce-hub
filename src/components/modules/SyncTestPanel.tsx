@@ -564,31 +564,31 @@ function ManualTestSection() {
 
         const rows = vendasItems.map(v => {
           const cleanNum = String(v.numeroPedido || '').replace(/^[='"`]+/g, '').trim();
+          const parseDateLocal = (d: string) => {
+            if (!d) return null;
+            if (d.includes('/')) {
+              const [day, mon, yr] = d.split('/');
+              return `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+            return d;
+          };
+
           return {
-            id: `${cleanNum}-${v.sku}`,
             numero_pedido: cleanNum,
-            data: parseDateLocal(v.data),
-            conta: v.conta || '',
-            conta_mae: v.contaMae || v.conta || '',
-            comprador: v.comprador || '',
-            sku: v.sku || '',
-            sku_produto: v.skuProduto || v.sku || '',
-            produto: v.produto || v.sku || '',
-            quantidade: Number(v.quantidade) || 0,
-            valor_total: Number(v.valorTotal) || 0,
-            status_pedido: v.statusPedido || '',
-            frete: Number(v.frete) || 0,
-            origem: v.origem || 'Google Sheets',
-            pedido_origem: v.pedidoOrigem || '',
+            sku:           v.sku || v.skuProduto || '',
+            sku_produto:   v.skuProduto || v.sku || '',
+            produto:       v.produto || '',
+            data:          parseDateLocal(v.data),
+            conta:         v.conta || v.contaMae || '',
+            conta_mae:     v.contaMae || v.conta || '',
+            origem:        v.origem || '',
+            marketplace:   v.origem?.split('|')[0]?.trim() || '',
+            quantidade:    Number(v.quantidade) || 1,
+            valor_total:   Number(v.valorTotal) || 0,
             preco_unitario: Number(v.precoUnitario) || 0,
-            impostos: Number(v.impostos) || 0,
-            comissao: Number(v.comissao) || 0,
-            custo_envio: Number(v.custoEnvio) || 0,
-            ads: Number(v.ads) || 0,
-            cmv: Number(v.cmv) || 0,
-            margem: String(v.margem || ''),
-            liquido: Number(v.liquido) || 0,
-            devolucao: parseDev(v.devolucao)
+            comissao:      Math.abs(Number(v.comissao) || 0),
+            custo_envio:   Math.abs(Number(v.custoEnvio) || 0),
+            status_pedido: v.statusPedido || 'pago',
           };
         });
 
