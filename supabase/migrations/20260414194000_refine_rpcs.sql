@@ -32,6 +32,8 @@ RETURNS TABLE (
       v.comissao,
       v.frete,
       v.payload,
+      COALESCE(v.embalagem, 0) as embalagem,
+      COALESCE(v.ads_valor, 0) as ads_valor,
       c.cmv_simples,
       c.cmv_lucro_real,
       t.regime,
@@ -57,6 +59,8 @@ RETURNS TABLE (
         - CASE WHEN b.regime = 'lucro_real' THEN (COALESCE(b.cmv_lucro_real, 0) * b.quantidade)
                ELSE (COALESCE(b.cmv_simples, 0) * b.quantidade) END
         - (COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0)))
+        - b.ads_valor
+        - b.embalagem
         - CASE WHEN b.regime = 'lucro_real' THEN (COALESCE(b.icms_pct, 0) + COALESCE(b.pis_cofins_pct, 0))/100.0 * b.valor_total
                WHEN b.regime = 'simples' THEN COALESCE(b.simples_pct, 0)/100.0 * b.valor_total
                ELSE 0 END
@@ -64,7 +68,7 @@ RETURNS TABLE (
     ) AS liquido,
     SUM(CASE WHEN (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' THEN b.quantidade ELSE 0 END)::bigint AS quantidade,
     SUM(CASE WHEN (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' THEN
-        COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0))
+        (COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0))) + b.ads_valor
       ELSE 0 END) AS ads,
     SUM(CASE WHEN (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' THEN
         CASE WHEN b.regime = 'lucro_real' THEN (COALESCE(b.cmv_lucro_real, 0) * b.quantidade)
@@ -111,6 +115,8 @@ CREATE OR REPLACE FUNCTION get_marketplace_dia(
         v.comissao,
         v.frete,
         v.payload,
+        COALESCE(v.embalagem, 0) as embalagem,
+        COALESCE(v.ads_valor, 0) as ads_valor,
         c.cmv_simples,
         c.cmv_lucro_real,
         t.regime,
@@ -137,6 +143,8 @@ CREATE OR REPLACE FUNCTION get_marketplace_dia(
           - case when b.regime = 'lucro_real' then (COALESCE(b.cmv_lucro_real, 0) * b.quantidade)
                  else (COALESCE(b.cmv_simples, 0) * b.quantidade) end
           - (COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0)))
+          - b.ads_valor
+          - b.embalagem
           - case when b.regime = 'lucro_real' then (COALESCE(b.icms_pct, 0) + COALESCE(b.pis_cofins_pct, 0))/100.0 * b.valor_total
                  when b.regime = 'simples' then COALESCE(b.simples_pct, 0)/100.0 * b.valor_total
                  else 0 end
@@ -150,7 +158,7 @@ CREATE OR REPLACE FUNCTION get_marketplace_dia(
         else 0 end
       ) as impostos,
       SUM(case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then
-          COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0))
+          (COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0))) + b.ads_valor
         else 0 end ) as ads,
       SUM(case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then
           case when b.regime = 'lucro_real' then (COALESCE(b.cmv_lucro_real, 0) * b.quantidade)

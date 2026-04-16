@@ -521,7 +521,116 @@ function ManualTestSection() {
     addLog(`Iniciando: ${action.label}...`, 'running');
 
     try {
-      if (action.id === 'import-history-sheets') {
+      if (action.id === 'import-vendas-bi') {
+        addLog('Iniciando importação de Vendas BI (Spreadsheet ID)...', 'running');
+        const sheetData = await callEdgeFunction('google-sheets', {
+          action: 'get_values',
+          spreadsheet_id: '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w',
+          range: 'VENDAS!A:AL'
+        });
+
+        if (sheetData.error) throw new Error(sheetData.error);
+        const rows = sheetData.values;
+        if (!rows || rows.length < 2) throw new Error('Nenhum dado encontrado na aba VENDAS.');
+
+        addLog(`Mapeando ${rows.length - 1} registros de vendas...`, 'running');
+        const mapped = rows.slice(1).map((r: any[]) => {
+          const parseDateLocal = (d: string) => {
+            if (!d) return null;
+            if (String(d).includes('/')) {
+              const [day, mon, yr] = String(d).split('/');
+              return `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+            return d;
+          };
+          const cleanNum = String(r[19] || '').replace(/^[='"`]+/g, '').trim();
+          
+          return {
+            numero_pedido: cleanNum,
+            sku:           String(r[15] || '').trim(),
+            data:          parseDateLocal(r[17]),
+            origem:        String(r[13] || ''),
+            conta:         String(r[34] || ''),
+            valor_total:   Number(String(r[27]||'0').replace(',','.')) || 0,
+            preco_unitario: Number(String(r[25]||'0').replace(',','.')) || 0,
+            quantidade:    Number(r[26]) || 1,
+            comissao:      Math.abs(Number(String(r[30]||'0').replace(',','.')) || 0),
+            custo_envio:   Math.abs(Number(String(r[28]||'0').replace(',','.')) || 0),
+            embalagem:     Number(String(r[11]||'0').replace(',','.')) || 0,
+            ads_valor:     Number(String(r[31]||'0').replace(',','.')) || 0,
+            pedido_devolvido: String(r[37] || ''),
+            estado:        String(r[33] || ''),
+            marketplace:   String(r[13] || '').split('|')[0]?.trim() || '',
+            status_pedido: 'pago'
+          };
+        }).filter((x: any) => x.numero_pedido && x.sku);
+
+        addLog(`Deduplicando ${mapped.length} registros...`, 'running');
+        const seen = new Set<string>();
+        const deduped = mapped.filter((x: any) => {
+          const key = `${x.numero_pedido}__${x.sku}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        addLog(`Upserting ${deduped.length} registros em lotes de 500...`, 'running');
+        for (let i = 0; i < deduped.length; i += 500) {
+          const batch = deduped.slice(i, i + 500);
+          const { error } = await supabase.from('vendas_items').upsert(batch, { onConflict: 'numero_pedido,sku' });
+          if (error) throw error;
+          addLog(`Lote ${Math.floor(i/500)+1} concluído.`, 'ok');
+        }
+        addLog('✅ Importação de Vendas BI concluída!', 'ok');
+      }
+      else if (action.id === 'import-devolucoes') {
+        addLog('Iniciando importação de Devoluções...', 'running');
+        const sheetData = await callEdgeFunction('google-sheets', {
+          action: 'get_values',
+          spreadsheet_id: '10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ',
+          range: 'TODOS!A:AC'
+        });
+
+        if (sheetData.error) throw new Error(sheetData.error);
+        const rows = sheetData.values;
+        if (!rows || rows.length < 2) throw new Error('Nenhum dado encontrado na aba TODOS.');
+
+        addLog(`Mapeando ${rows.length - 1} registros de devoluções...`, 'running');
+        const mapped = rows.slice(1).map((r: any[]) => {
+          const parseDateLocal = (d: string) => {
+            if (!d) return null;
+            if (String(d).includes('/')) {
+              const [day, mon, yr] = String(d).split('/');
+              return `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+            return d;
+          };
+          return {
+            data_planilha:     parseDateLocal(r[0]),
+            plataforma:        String(r[1] || ''),
+            data_aprovacao:    parseDateLocal(r[2]),
+            valor_reembolso:   Number(String(r[3]||'0').replace(',','.')) || 0,
+            pedido:            String(r[4] || '').replace(/^[='"`]+/g, '').trim(),
+            sku:               String(r[6] || '').trim(),
+            status_devolucao:  String(r[7] || ''),
+            custo_devolucao:   Number(String(r[15]||'0').replace(',','.')) || 0,
+            comissao_nao_devolvida: Number(String(r[16]||'0').replace(',','.')) || 0,
+            custo:             Number(String(r[17]||'0').replace(',','.')) || 0,
+            quantidade:        Number(r[18]) || 1,
+            conta_mae:         String(r[27] || ''),
+            canal:             String(r[28] || '')
+          };
+        }).filter((x: any) => x.pedido && x.sku);
+
+        addLog(`Upserting ${mapped.length} devoluções em lotes de 500...`, 'running');
+        for (let i = 0; i < mapped.length; i += 500) {
+          const batch = mapped.slice(i, i + 500);
+          const { error } = await supabase.from('devolucoes_db').upsert(batch, { onConflict: 'pedido,sku' });
+          if (error) throw error;
+        }
+        addLog('✅ Importação de Devoluções concluída!', 'ok');
+      }
+      else if (action.id === 'import-history-sheets') {
         if (!vendasItems || vendasItems.length === 0) {
           throw new Error('Nenhum dado de vendas carregado em memória. Certifique-se de que as abas de Vendas foram importadas do Google Sheets.');
         }

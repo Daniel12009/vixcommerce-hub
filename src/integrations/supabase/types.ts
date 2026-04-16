@@ -585,12 +585,15 @@ export type Database = {
       vendas_items: {
         Row: {
           ads: number
+          ads_valor: number
           cmv: number
           comissao: number
           comprador: string
           conta: string
           conta_mae: string
           created_at: string
+          embalagem: number
+          estado: string
           custo_envio: number
           data: string
           devolucao: number
@@ -602,6 +605,7 @@ export type Database = {
           margem: string
           numero_pedido: string
           origem: string
+          pedido_devolvido: string
           pedido_origem: string
           preco_unitario: number
           produto: string
@@ -613,12 +617,47 @@ export type Database = {
         }
         Insert: {
           ads?: number
+          ads_valor?: number
           cmv?: number
           comissao?: number
           comprador?: string
           conta?: string
           conta_mae?: string
           created_at?: string
+          embalagem?: number
+          estado?: string
+          custo_envio?: number
+          data?: string
+          devolucao?: number
+          extra_fields?: Json | null
+          frete?: number
+          id?: string
+          impostos?: number
+          liquido?: number
+          margem?: string
+          numero_pedido?: string
+          origem?: string
+          pedido_devolvido?: string
+          pedido_origem?: string
+          preco_unitario?: number
+          produto?: string
+          quantidade?: number
+          sku?: string
+          sku_produto?: string
+          status_pedido?: string
+          valor_total?: number
+        }
+        Update: {
+          ads?: number
+          ads_valor?: number
+          cmv?: number
+          comissao?: number
+          comprador?: string
+          conta?: string
+          conta_mae?: string
+          created_at?: string
+          embalagem?: number
+          estado?: string
           custo_envio?: number
           data?: string
           devolucao?: number
@@ -639,33 +678,59 @@ export type Database = {
           status_pedido?: string
           valor_total?: number
         }
-        Update: {
-          ads?: number
-          cmv?: number
-          comissao?: number
-          comprador?: string
-          conta?: string
-          conta_mae?: string
-          created_at?: string
-          custo_envio?: number
-          data?: string
-          devolucao?: number
-          extra_fields?: Json | null
-          frete?: number
+        Relationships: []
+      }
+      devolucoes_db: {
+        Row: {
+          id: string
+          data_planilha: string | null
+          plataforma: string | null
+          data_aprovacao: string | null
+          valor_reembolso: number | null
+          pedido: string
+          sku: string
+          status_devolucao: string | null
+          custo_devolucao: number | null
+          comissao_nao_devolvida: number | null
+          custo: number | null
+          quantidade: number | null
+          conta_mae: string | null
+          canal: string | null
+          synced_at: string
+        }
+        Insert: {
           id?: string
-          impostos?: number
-          liquido?: number
-          margem?: string
-          numero_pedido?: string
-          origem?: string
-          pedido_origem?: string
-          preco_unitario?: number
-          produto?: string
-          quantidade?: number
+          data_planilha?: string | null
+          plataforma?: string | null
+          data_aprovacao?: string | null
+          valor_reembolso?: number | null
+          pedido: string
+          sku: string
+          status_devolucao?: string | null
+          custo_devolucao?: number | null
+          comissao_nao_devolvida?: number | null
+          custo?: number | null
+          quantidade?: number | null
+          conta_mae?: string | null
+          canal?: string | null
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          data_planilha?: string | null
+          plataforma?: string | null
+          data_aprovacao?: string | null
+          valor_reembolso?: number | null
+          pedido?: string
           sku?: string
-          sku_produto?: string
-          status_pedido?: string
-          valor_total?: number
+          status_devolucao?: string | null
+          custo_devolucao?: number | null
+          comissao_nao_devolvida?: number | null
+          custo?: number | null
+          quantidade?: number | null
+          conta_mae?: string | null
+          canal?: string | null
+          synced_at?: string
         }
         Relationships: []
       }
