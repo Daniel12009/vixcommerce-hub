@@ -1,3 +1,11 @@
+/** Get local date string YYYY-MM-DD regardless of timezone */
+export function getLocalDateStr(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /** Parse Brazilian currency string "R$ 1.200,50" to float */
 export function parseBRL(value: string): number {
   if (!value || typeof value !== 'string') return 0;

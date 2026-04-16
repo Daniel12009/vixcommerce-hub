@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { subDays, format } from 'date-fns';
-import { formatBRL } from '@/lib/utils-vix';
+import { formatBRL, getLocalDateStr } from '@/lib/utils-vix';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ScatterChart, Scatter, ZAxis, LabelList,
@@ -81,23 +81,36 @@ export function FaturamentoTab() {
 
   const dateFim = useMemo(() => {
     if (filterDias === -1 && customTo) return customTo;
-    return format(new Date(), 'yyyy-MM-dd');
+    return getLocalDateStr(new Date());
   }, [filterDias, customTo]);
 
   const dateIni = useMemo(() => {
     if (filterDias === -1 && customFrom) return customFrom;
-    // Se filterDias é 30, queremos hoje + 29 dias passados (total 30)
-    return format(subDays(new Date(), filterDias - 1), 'yyyy-MM-dd');
+    const d = new Date();
+    d.setDate(d.getDate() - (filterDias - 1));
+    return getLocalDateStr(d);
   }, [filterDias, customFrom]);
 
   const dateIniPrev = useMemo(() => {
-    if (filterDias === -1) return format(subDays(new Date(), 60), 'yyyy-MM-dd');
-    return format(subDays(new Date(), (filterDias * 2) - 1), 'yyyy-MM-dd');
+    if (filterDias === -1) {
+      const d = new Date();
+      d.setDate(d.getDate() - 60);
+      return getLocalDateStr(d);
+    }
+    const d = new Date();
+    d.setDate(d.getDate() - ((filterDias * 2) - 1));
+    return getLocalDateStr(d);
   }, [filterDias]);
 
   const dateFimPrev = useMemo(() => {
-    if (filterDias === -1) return format(subDays(new Date(), 31), 'yyyy-MM-dd');
-    return format(subDays(new Date(), filterDias), 'yyyy-MM-dd');
+    if (filterDias === -1) {
+      const d = new Date();
+      d.setDate(d.getDate() - 31);
+      return getLocalDateStr(d);
+    }
+    const d = new Date();
+    d.setDate(d.getDate() - filterDias);
+    return getLocalDateStr(d);
   }, [filterDias]);
 
   const { data: dbDaily, loading: loadingDaily } = useVendasFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
