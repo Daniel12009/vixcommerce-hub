@@ -538,17 +538,17 @@ function ManualTestSection() {
       if (action.id === 'import-vendas-bi') {
         addLog('Iniciando importação de Vendas BI (Spreadsheet ID)...', 'running');
         const sheetData = await callEdgeFunction('google-sheets', {
-          action: 'get_values',
-          spreadsheet_id: '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w',
-          range: 'VENDAS!A:AL'
+          action: 'read',
+          spreadsheetId: '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w',
+          range: 'VENDAS!A2:AL'
         });
 
         if (sheetData.error) throw new Error(sheetData.error);
         const rows = sheetData.values;
-        if (!rows || rows.length < 2) throw new Error('Nenhum dado encontrado na aba VENDAS.');
+        if (!rows || rows.length === 0) throw new Error('Nenhum dado encontrado na aba VENDAS.');
 
-        addLog(`Mapeando ${rows.length - 1} registros de vendas...`, 'running');
-        const mapped = rows.slice(1).map((r: any[]) => {
+        addLog(`Mapeando ${rows.length} registros de vendas...`, 'running');
+        const mapped = rows.map((r: any[]) => {
           const parseDateLocal = (d: string) => {
             if (!d) return null;
             if (String(d).includes('/')) {
@@ -600,17 +600,17 @@ function ManualTestSection() {
       else if (action.id === 'import-devolucoes') {
         addLog('Iniciando importação de Devoluções...', 'running');
         const sheetData = await callEdgeFunction('google-sheets', {
-          action: 'get_values',
-          spreadsheet_id: '10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ',
-          range: 'TODOS!A:AC'
+          action: 'read',
+          spreadsheetId: '10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ',
+          range: 'TODOS!A2:AC'
         });
 
         if (sheetData.error) throw new Error(sheetData.error);
         const rows = sheetData.values;
-        if (!rows || rows.length < 2) throw new Error('Nenhum dado encontrado na aba TODOS.');
+        if (!rows || rows.length === 0) throw new Error('Nenhum dado encontrado na aba TODOS.');
 
-        addLog(`Mapeando ${rows.length - 1} registros de devoluções...`, 'running');
-        const mapped = rows.slice(1).map((r: any[]) => {
+        addLog(`Mapeando ${rows.length} registros de devoluções...`, 'running');
+        const mapped = rows.map((r: any[]) => {
           const parseDateLocal = (d: string) => {
             if (!d) return null;
             if (String(d).includes('/')) {
