@@ -596,6 +596,7 @@ function ManualTestSection() {
           addLog(`Lote ${Math.floor(i/500)+1} concluído.`, 'ok');
         }
         addLog('✅ Importação de Vendas BI concluída!', 'ok');
+        return;
       }
       else if (action.id === 'import-devolucoes') {
         addLog('Iniciando importação de Devoluções...', 'running');
@@ -642,7 +643,7 @@ function ManualTestSection() {
             }
           };
           return {
-            data_planilha:     parseDateLocal(r[0]),
+            data_planilha:     parseDateLocal(r[0]) || parseDateLocal(r[2]),
             plataforma:        String(r[1] || ''),
             data_aprovacao:    parseDateLocal(r[2]),
             valor_reembolso:   Number(String(r[3]||'0').replace(',','.')) || 0,
@@ -676,6 +677,7 @@ function ManualTestSection() {
           if (error) throw error;
         }
         addLog('✅ Importação de Devoluções concluída!', 'ok');
+        return;
       }
       else if (action.id === 'import-history-sheets') {
         if (!vendasItems || vendasItems.length === 0) {
