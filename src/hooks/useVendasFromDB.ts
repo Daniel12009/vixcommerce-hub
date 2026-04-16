@@ -3,7 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface MarketplaceDiaItem {
   data: string;
-  origem: string;
+  conta: string;
+  marketplace: string;
   faturamento_bruto: number;
   lucro_liquido: number;
   impostos: number;
@@ -78,6 +79,7 @@ export function useVendasFromDB(dateIni: string, dateFim: string, contas?: strin
 
 export interface MarketplaceSkuItem {
   sku: string;
+  marketplace: string;
   faturamento_bruto: number;
   liquido: number;
   quantidade: number;

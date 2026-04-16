@@ -59,6 +59,7 @@ export function FaturamentoTab() {
   const [isTaxModalOpen, setIsTaxModalOpen] = useState(false);
   const [filterDias, setFilterDias] = useState(30);
   const [filterConta, setFilterConta] = useState('all');
+  const [filterMarketplace, setFilterMarketplace] = useState('all');
   const [customFrom, setCustomFrom] = useState(''); // YYYY-MM-DD
   const [customTo, setCustomTo] = useState('');     // YYYY-MM-DD
 
@@ -91,40 +92,73 @@ export function FaturamentoTab() {
   const [sortField, setSortField] = useState('faturamento');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  // All unique contas
-  const contas = useMemo(() => {
+  // Dynamic filter lists from DB data
+  const dynamicContas = useMemo(() => {
     const set = new Set<string>();
-    (sheetsData.vendasItems || []).forEach(v => {
-      const c = v.conta || v.origem;
-      if (c) set.add(c.trim());
+    dbDaily.forEach(v => {
+      if (v.conta) set.add(v.conta.trim());
     });
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [sheetsData.vendasItems]);
+  }, [dbDaily]);
+
+  const dynamicMarketplaces = useMemo(() => {
+    const set = new Set<string>();
+    dbDaily.forEach(v => {
+      if (v.marketplace) set.add(v.marketplace.trim());
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [dbDaily]);
+
+  // Combined local filtering for Marketplace
+  const filteredDaily = useMemo(() => {
+    return dbDaily.filter(v => 
+      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+    );
+  }, [dbDaily, filterMarketplace]);
+
+  const filteredDailyPrev = useMemo(() => {
+    return dbDailyPrev.filter(v => 
+      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+    );
+  }, [dbDailyPrev, filterMarketplace]);
+
+  const filteredSku = useMemo(() => {
+    return dbSku.filter(v => 
+      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+    );
+  }, [dbSku, filterMarketplace]);
+
+  const filteredSkuPrev = useMemo(() => {
+    if (!dbSkuPrev) return [];
+    return dbSkuPrev.filter(v => 
+      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+    );
+  }, [dbSkuPrev, filterMarketplace]);
 
   // Final cleanup: removed legacy Sheets-based filtering
 
   // ── KPIs ──
-  const totalFat = useMemo(() => dbDaily.reduce((s, v) => s + v.faturamento_bruto, 0), [dbDaily]);
-  const totalLiq = useMemo(() => dbDaily.reduce((s, v) => s + v.lucro_liquido, 0), [dbDaily]);
-  const totalQtd = useMemo(() => dbDaily.reduce((s, v) => s + v.quantidade, 0), [dbDaily]);
-  const totalAds = useMemo(() => dbDaily.reduce((s, v) => s + v.ads, 0), [dbDaily]);
+  const totalFat = useMemo(() => filteredDaily.reduce((s, v) => s + v.faturamento_bruto, 0), [filteredDaily]);
+  const totalLiq = useMemo(() => filteredDaily.reduce((s, v) => s + v.lucro_liquido, 0), [filteredDaily]);
+  const totalQtd = useMemo(() => filteredDaily.reduce((s, v) => s + v.quantidade, 0), [filteredDaily]);
+  const totalAds = useMemo(() => filteredDaily.reduce((s, v) => s + v.ads, 0), [filteredDaily]);
   const margem = totalFat > 0 ? (totalLiq / totalFat) * 100 : 0;
-  const totalPedidos = useMemo(() => dbDaily.reduce((s, v) => s + v.pedidos, 0), [dbDaily]);
+  const totalPedidos = useMemo(() => filteredDaily.reduce((s, v) => s + v.pedidos, 0), [filteredDaily]);
   const ticket = totalPedidos > 0 ? totalFat / totalPedidos : 0;
 
-  const prevFat = dbDailyPrev.reduce((s, v) => s + v.faturamento_bruto, 0);
-  const prevLiq = dbDailyPrev.reduce((s, v) => s + v.lucro_liquido, 0);
+  const prevFat = filteredDailyPrev.reduce((s, v) => s + v.faturamento_bruto, 0);
+  const prevLiq = filteredDailyPrev.reduce((s, v) => s + v.lucro_liquido, 0);
   const prevMargem = prevFat > 0 ? (prevLiq / prevFat) * 100 : 0;
 
   // ── Chart 1: Faturamento diário por conta (Stacked Area) ──
   const stackedAreaData = useMemo(() => {
     const dateMap = new Map<string, Record<string, number>>();
-    dbDaily.forEach(v => {
+    filteredDaily.forEach(v => {
       const dateKey = formatDateShort(v.data);
       if (!dateKey) return;
-      const conta = v.origem || 'Outros';
+      const label = v.marketplace || v.conta || 'Outros';
       const row = dateMap.get(dateKey) || {};
-      row[conta] = (row[conta] || 0) + v.faturamento_bruto;
+      row[label] = (row[label] || 0) + v.faturamento_bruto;
       dateMap.set(dateKey, row);
     });
     const sortedDates = [...dateMap.keys()].sort((a, b) => {
@@ -133,17 +167,17 @@ export function FaturamentoTab() {
       return (ma * 100 + da) - (mb * 100 + db);
     });
     return sortedDates.map(date => ({ date, ...dateMap.get(date)! }));
-  }, [dbDaily]);
+  }, [filteredDaily]);
 
   const contasNoChart = useMemo(() =>
-    [...new Set(dbDaily.map(v => v.origem || 'Outros').filter(Boolean))].sort(),
-    [dbDaily]
+    [...new Set(filteredDaily.map(v => v.marketplace || v.conta || 'Outros').filter(Boolean))].sort(),
+    [filteredDaily]
   );
 
   // ── Chart 2: Faturamento + Margem por dia (Bar + Line) ──
   const fatMargemDia = useMemo(() => {
     const dateMap = new Map<string, { fat: number; liq: number }>();
-    dbDaily.forEach(v => {
+    filteredDaily.forEach(v => {
       const dateKey = formatDateShort(v.data);
       if (!dateKey) return;
       const row = dateMap.get(dateKey) || { fat: 0, liq: 0 };
@@ -160,15 +194,15 @@ export function FaturamentoTab() {
       const row = dateMap.get(date)!;
       return {
         date,
-        faturamento: Math.round(row.fat),
-        pctMargem: row.fat > 0 ? parseFloat(((row.liq / row.fat) * 100).toFixed(1)) : 0,
+        fat: row.fat,
+        margem: row.fat > 0 ? (row.liq / row.fat) * 100 : 0
       };
     });
-  }, [dbDaily]);
+  }, [filteredDaily]);
 
   // ── Chart 3: Scatter — QTDE vs Ticket Médio (bubble = Margem%) ──
   const scatterData = useMemo(() => {
-    return dbSku
+    return filteredSku
       .filter(d => d.faturamento_bruto > 500)
       .map(d => ({
         sku: d.sku,
@@ -301,7 +335,15 @@ export function FaturamentoTab() {
           <label className="text-xs text-muted-foreground font-medium">Conta:</label>
           <select value={filterConta} onChange={e => setFilterConta(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
             <option value="all">Todas as Contas</option>
-            {contas.map(c => <option key={c} value={c}>{c.length > 35 ? c.slice(0, 32) + '...' : c}</option>)}
+            {dynamicContas.map(c => <option key={c} value={c}>{c.length > 35 ? c.slice(0, 32) + '...' : c}</option>)}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground font-medium">Marketplace:</label>
+          <select value={filterMarketplace} onChange={e => setFilterMarketplace(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+            <option value="all">Todos os Marketplaces</option>
+            {dynamicMarketplaces.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
 

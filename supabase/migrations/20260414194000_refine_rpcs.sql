@@ -8,6 +8,7 @@ CREATE OR REPLACE FUNCTION get_marketplace_sku(
 )
 RETURNS TABLE (
   sku text,
+  marketplace text,
   faturamento_bruto numeric,
   liquido numeric,
   quantidade bigint,
@@ -24,6 +25,7 @@ RETURNS TABLE (
       v.conta,
       v.conta_id,
       v.sku,
+      v.marketplace,
       v.numero_pedido,
       v.quantidade,
       v.valor_total,
@@ -45,6 +47,7 @@ RETURNS TABLE (
   )
   SELECT
     b.sku,
+    MAX(b.marketplace) as marketplace,
     SUM(CASE WHEN (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' THEN b.valor_total ELSE 0 END) AS faturamento_bruto,
     SUM(
       CASE WHEN (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' THEN
@@ -84,7 +87,8 @@ CREATE OR REPLACE FUNCTION get_marketplace_dia(
 )
   returns table (
     data date, 
-    origem text, 
+    conta text,
+    marketplace text,
     faturamento_bruto numeric,
     lucro_liquido numeric, 
     impostos numeric, 
@@ -98,6 +102,7 @@ CREATE OR REPLACE FUNCTION get_marketplace_dia(
       select 
         v.data,
         v.conta,
+        v.marketplace,
         v.conta_id,
         v.sku,
         v.numero_pedido,
@@ -112,7 +117,7 @@ CREATE OR REPLACE FUNCTION get_marketplace_dia(
         t.icms_pct,
         t.pis_cofins_pct,
         t.simples_pct,
-        sum(case when (v.payload->>'status') not ilike '%cancel%' and (v.payload->>'status') not ilike '%devol%' then v.valor_total else 0 end) over (partition by v.data, v.conta) as faturamento_total_dia
+        SUM(case when (v.payload->>'status') NOT ILIKE '%cancel%' AND (v.payload->>'status') NOT ILIKE '%devol%' then v.valor_total else 0 end) over (partition by v.data, v.conta) as faturamento_total_dia
       from vendas_db v
       left join cmv_db c on c.sku = v.sku and c.conta = v.conta
       left join ml_account_tax_config t on t.conta_id = v.conta_id
@@ -121,39 +126,40 @@ CREATE OR REPLACE FUNCTION get_marketplace_dia(
     )
     select
       b.data,
-      b.conta as origem,
-      sum(case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then b.valor_total else 0 end) as faturamento_bruto,
-      sum(
-        case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then
+      b.conta,
+      b.marketplace,
+      SUM(case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then b.valor_total else 0 end) as faturamento_bruto,
+      SUM(
+        case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then
           b.valor_total 
-          - coalesce(b.comissao, 0)
-          - coalesce(b.frete, 0)
-          - case when b.regime = 'lucro_real' then (coalesce(b.cmv_lucro_real, 0) * b.quantidade)
-                 else (coalesce(b.cmv_simples, 0) * b.quantidade) end
-          - (coalesce(a.investimento, 0) * (b.valor_total / nullif(b.faturamento_total_dia, 0)))
-          - case when b.regime = 'lucro_real' then (coalesce(b.icms_pct, 0) + coalesce(b.pis_cofins_pct, 0))/100.0 * b.valor_total
-                 when b.regime = 'simples' then coalesce(b.simples_pct, 0)/100.0 * b.valor_total
+          - COALESCE(b.comissao, 0)
+          - COALESCE(b.frete, 0)
+          - case when b.regime = 'lucro_real' then (COALESCE(b.cmv_lucro_real, 0) * b.quantidade)
+                 else (COALESCE(b.cmv_simples, 0) * b.quantidade) end
+          - (COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0)))
+          - case when b.regime = 'lucro_real' then (COALESCE(b.icms_pct, 0) + COALESCE(b.pis_cofins_pct, 0))/100.0 * b.valor_total
+                 when b.regime = 'simples' then COALESCE(b.simples_pct, 0)/100.0 * b.valor_total
                  else 0 end
         else 0 end
       ) as lucro_liquido,
-      sum(
-        case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then
-          case when b.regime = 'lucro_real' then (coalesce(b.icms_pct, 0) + coalesce(b.pis_cofins_pct, 0))/100.0 * b.valor_total
-               when b.regime = 'simples' then coalesce(b.simples_pct, 0)/100.0 * b.valor_total
+      SUM(
+        case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then
+          case when b.regime = 'lucro_real' then (COALESCE(b.icms_pct, 0) + COALESCE(b.pis_cofins_pct, 0))/100.0 * b.valor_total
+               when b.regime = 'simples' then COALESCE(b.simples_pct, 0)/100.0 * b.valor_total
                else 0 end
         else 0 end
       ) as impostos,
-      sum(case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then
-          coalesce(a.investimento, 0) * (b.valor_total / nullif(b.faturamento_total_dia, 0))
-        else 0 end) as ads,
-      sum(case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then
-          case when b.regime = 'lucro_real' then (coalesce(b.cmv_lucro_real, 0) * b.quantidade)
-               else (coalesce(b.cmv_simples, 0) * b.quantidade) end
+      SUM(case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then
+          COALESCE(a.investimento, 0) * (b.valor_total / NULLIF(b.faturamento_total_dia, 0))
+        else 0 end ) as ads,
+      SUM(case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then
+          case when b.regime = 'lucro_real' then (COALESCE(b.cmv_lucro_real, 0) * b.quantidade)
+               else (COALESCE(b.cmv_simples, 0) * b.quantidade) end
         else 0 end) as cmv,
-      sum(case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then coalesce(b.comissao, 0) else 0 end) as comissao,
-      count(distinct case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then b.numero_pedido else null end)::int as pedidos,
-      sum(case when (b.payload->>'status') not ilike '%cancel%' and (b.payload->>'status') not ilike '%devol%' then b.quantidade else 0 end)::bigint as quantidade
+      SUM(case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then COALESCE(b.comissao, 0) else 0 end) as comissao,
+      COUNT(DISTINCT case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then b.numero_pedido else NULL end)::int as pedidos,
+      SUM(case when (b.payload->>'status') NOT ILIKE '%cancel%' AND (b.payload->>'status') NOT ILIKE '%devol%' then b.quantidade else 0 end)::bigint as quantidade
     from base_vendas b
     left join ads_db a on a.data_ref = b.data and a.conta = b.conta
-    group by b.data, b.conta;
+    group by b.data, b.conta, b.marketplace;
   $$ language sql stable;

@@ -86,15 +86,13 @@ export function GraficosTab() {
     return [...new Set([...contasVendas, ...contasPerf])].sort();
   }, [sheetsData.vendasItems, allPerf]);
 
-  // Get unique marketplaces for sub-filter
+  // Get unique marketplaces for sub-filter from DB data
   const uniqueMarketplaces = useMemo(() => {
-    const origins = new Set<string>();
+    const set = new Set<string>();
     dbDaily.forEach(v => {
-      if (v.origem && classifyCanal(v.origem) === 'marketplace') {
-        origins.add(v.origem);
-      }
+      if (v.marketplace) set.add(v.marketplace.trim());
     });
-    return [...origins].sort();
+    return [...set].sort();
   }, [dbDaily]);
 
   // Final cleanup: removed legacy info
@@ -105,10 +103,18 @@ export function GraficosTab() {
     return allPerf.filter(p => normalizeConta(p.conta) === filterConta);
   }, [allPerf, filterConta]);
 
-  // ---- Vendas aggregations (using DB) ----
+  // Combined local filtering
+  const filteredDaily = useMemo(() => {
+    return dbDaily.filter(v => {
+      if (filterCanal !== 'all' && classifyCanal(v.marketplace || v.conta) !== filterCanal) return false;
+      if (filterMarketplace !== 'all' && v.marketplace !== filterMarketplace) return false;
+      return true;
+    });
+  }, [dbDaily, filterCanal, filterMarketplace]);
+
   const vendasPorDia = useMemo(() => {
     const dateMap = new Map<string, { dia: string; pedidos: number; faturamento: number; liquido: number }>();
-    dbDaily.forEach(v => {
+    filteredDaily.forEach(v => {
       if (!v.data) return;
       const dt = new Date(v.data);
       if (isNaN(dt.getTime())) return;
@@ -125,12 +131,12 @@ export function GraficosTab() {
         const [db, mb] = b.dia.split('/').map(Number);
         return (ma * 100 + da) - (mb * 100 + db);
       });
-  }, [dbDaily]);
+  }, [filteredDaily]);
 
   const vendasPorConta = useMemo(() => {
     const map = new Map<string, { conta: string; faturamento: number; pedidos: number; liquido: number }>();
-    dbDaily.forEach(v => {
-      const c = v.origem || 'Outros';
+    filteredDaily.forEach(v => {
+      const c = v.conta || 'Outros';
       const cur = map.get(c) || { conta: c, faturamento: 0, pedidos: 0, liquido: 0 };
       cur.faturamento += v.faturamento_bruto;
       cur.pedidos += v.pedidos;
@@ -138,19 +144,19 @@ export function GraficosTab() {
       map.set(c, cur);
     });
     return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
-  }, [dbDaily]);
+  }, [filteredDaily]);
 
   const vendasPorOrigem = useMemo(() => {
     const map = new Map<string, { origem: string; value: number }>();
-    dbDaily.forEach(v => {
-      const o = v.origem || 'Outros';
+    filteredDaily.forEach(v => {
+      const o = v.marketplace || v.conta || 'Outros';
       const cur = map.get(o) || { origem: o, value: 0 };
       cur.value += v.faturamento_bruto;
       map.set(o, cur);
     });
     return [...map.values()]
       .sort((a, b) => b.value - a.value).slice(0, 8);
-  }, [dbDaily]);
+  }, [filteredDaily]);
 
   const topSkus = useMemo(() => {
     return dbSku
