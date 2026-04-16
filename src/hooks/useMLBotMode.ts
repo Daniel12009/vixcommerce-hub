@@ -29,11 +29,15 @@ export function useMLBotMode(sellerId: string) {
       .eq('seller_id', sellerId)
       .maybeSingle()
       .then(({ data, error }) => {
+        console.log('[BotConfig] Query result for', sellerId, { data, error });
         if (error) {
           console.error('[BotConfig] Error fetching:', error);
           setConfig(defaultConfig);
+        } else if (!data) {
+          console.warn('[BotConfig] No config found for seller', sellerId, 'using default');
+          setConfig(defaultConfig);
         } else {
-          setConfig(data ? (data as unknown as BotConfig) : defaultConfig);
+          setConfig(data as unknown as BotConfig);
         }
         setLoading(false);
       })

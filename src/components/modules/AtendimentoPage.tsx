@@ -139,6 +139,10 @@ function FilaTab({ sellerId, accountId, sellerName }: { sellerId: string; accoun
   };
 
   const { config, loading: botLoading, setMode, incrementManual } = useMLBotMode(sellerId);
+  
+  useEffect(() => {
+    console.log('[Atendimento] FilaTab render:', { sellerId, accountId, sellerName, botLoading, configMode: config.mode });
+  }, [sellerId, botLoading, config.mode]);
   const [templates, setTemplates] = useState<Template[]>([]);
 
   useEffect(() => {
@@ -198,14 +202,18 @@ function FilaTab({ sellerId, accountId, sellerName }: { sellerId: string; accoun
   return (
     <div>
       {/* Bot Banner */}
-      {!botLoading && sellerId && (
+      {!botLoading && sellerId ? (
         <BotModeBanner
           config={config}
           templatesCount={templates.length}
           onActivate={(score) => setMode('active', score)}
           onPause={() => setMode('learning')}
         />
-      )}
+      ) : botLoading ? (
+        <div className="bg-muted/30 animate-pulse rounded-xl h-24 mb-4 flex items-center justify-center text-xs text-muted-foreground">
+          Carregando configurações do robô...
+        </div>
+      ) : null}
 
       {/* Bot Queue (manual pending) */}
       {sellerId && !queueLoading && pending.length > 0 && (
