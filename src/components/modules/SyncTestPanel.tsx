@@ -189,6 +189,20 @@ const SYNC_ACTIONS = [
     color: 'bg-gradient-to-r from-blue-600 to-indigo-600',
     localFn: true,
   },
+  {
+    id: 'import-vendas-bi',
+    label: '📊 Importar Vendas BI (BI_VENDAS)',
+    description: 'Importa planilha BI Vendas → vendas_items (onConflict: numero_pedido, sku)',
+    color: 'bg-indigo-500/10',
+    localFn: true,
+  },
+  {
+    id: 'import-devolucoes',
+    label: '🔄 Importar Devoluções',
+    description: 'Importa planilha Devoluções → devolucoes_db (onConflict: pedido, sku)',
+    color: 'bg-emerald-500/10',
+    localFn: true,
+  },
 ];
 
 // ─── Automation Config Section ───────────────────────────────────────
