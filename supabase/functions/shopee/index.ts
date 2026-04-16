@@ -334,7 +334,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'list_items') {
-      const { account_id, offset = 0, limit = 50, item_status = 'NORMAL' } = await req.clone().then(r => r.json());
+      const { account_id, offset = 0, limit = 50, item_status = 'NORMAL' } = await req.clone().json() as any;
       const accountsRes = await supabaseFetch(`/shopee_accounts?id=eq.${account_id}&ativo=eq.true`);
       const accounts = await accountsRes.json();
       if (!accounts || accounts.length === 0) throw new Error('Conta Shopee não encontrada');
@@ -380,7 +380,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'get_item_detail') {
-      const { account_id, item_id } = await req.clone().then(r => r.json());
+      const { account_id, item_id } = await req.clone().json() as any;
       const accountsRes = await supabaseFetch(`/shopee_accounts?id=eq.${account_id}&ativo=eq.true`);
       const accounts = await accountsRes.json();
       if (!accounts || accounts.length === 0) throw new Error('Conta Shopee não encontrada');
@@ -458,7 +458,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'update_item') {
-      const { account_id, item_id, fields } = await req.clone().then(r => r.json());
+      const { account_id, item_id, fields } = await req.clone().json() as any;
       const accountsRes = await supabaseFetch(`/shopee_accounts?id=eq.${account_id}&ativo=eq.true`);
       const accounts = await accountsRes.json();
       if (!accounts || accounts.length === 0) throw new Error('Conta Shopee não encontrada');

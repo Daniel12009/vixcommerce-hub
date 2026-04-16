@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Loader2, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 const CONTAS = [
   { value: 'viaflix', label: 'Via Flix (VIAFLIX)' },
@@ -9,8 +10,6 @@ const CONTAS = [
 ];
 
 const ML_EXPORT_URL = 'https://www.mercadolivre.com.br/inventory/full/manage';
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export function EstoqueFullUpload() {
   const [conta, setConta] = useState('viaflix');
@@ -34,13 +33,10 @@ export function EstoqueFullUpload() {
       formData.append('conta', conta);
       formData.append('file', file);
 
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/estoque-full-upload`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${SUPABASE_KEY}` },
+      const { data, error } = await supabase.functions.invoke('estoque-full-upload', {
         body: formData,
       });
-
-      const data = await res.json();
+      if (error) throw error;
       setResultado(data);
 
       if (data.sucesso) {

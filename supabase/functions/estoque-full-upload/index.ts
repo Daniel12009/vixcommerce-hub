@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
     const buffer = await file.arrayBuffer();
     const wb = read(buffer, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: any[][] = utils.sheet_to_json(ws, { header: 1, defval: null });
+    const rows = utils.sheet_to_json(ws, { header: 1, defval: null }) as any[][];
 
     // ML Full export - xlsx parser strips merged header rows, data starts at row 0
     // Verified from logs: Row 0 = ["NVIW23131","789...","FC-35","3460362799 | 4466816737",...]
