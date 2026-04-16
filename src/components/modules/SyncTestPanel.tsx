@@ -613,11 +613,24 @@ function ManualTestSection() {
         const mapped = rows.map((r: any[]) => {
           const parseDateLocal = (d: string) => {
             if (!d) return null;
-            if (String(d).includes('/')) {
-              const [day, mon, yr] = String(d).split('/');
-              return `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            try {
+              let iso: string;
+              if (String(d).includes('/')) {
+                const [day, mon, yr] = String(d).split('/');
+                iso = `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
+              } else {
+                iso = String(d);
+              }
+              // Validar se é uma data real
+              const dt = new Date(iso);
+              if (isNaN(dt.getTime())) return null;
+              // Verificar se o dia/mês não foram distorcidos (ex: 37 dias)
+              const [y, m, day2] = iso.split('-').map(Number);
+              if (day2 > 31 || m > 12 || m < 1) return null;
+              return iso;
+            } catch {
+              return null;
             }
-            return d;
           };
           return {
             data_planilha:     parseDateLocal(r[0]),
@@ -634,7 +647,7 @@ function ManualTestSection() {
             conta_mae:         String(r[27] || ''),
             canal:             String(r[28] || '')
           };
-        }).filter((x: any) => x.pedido && x.sku);
+        }).filter((x: any) => x.pedido && x.sku && x.data_planilha !== null);
 
         addLog(`Deduplicando: ${mapped.length} registros...`, 'running');
         const seen = new Set<string>();
