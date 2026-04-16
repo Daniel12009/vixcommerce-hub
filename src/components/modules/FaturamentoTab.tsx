@@ -86,16 +86,17 @@ export function FaturamentoTab() {
 
   const dateIni = useMemo(() => {
     if (filterDias === -1 && customFrom) return customFrom;
-    return format(subDays(new Date(), filterDias), 'yyyy-MM-dd');
+    // Se filterDias é 30, queremos hoje + 29 dias passados (total 30)
+    return format(subDays(new Date(), filterDias - 1), 'yyyy-MM-dd');
   }, [filterDias, customFrom]);
 
   const dateIniPrev = useMemo(() => {
-    if (filterDias === -1) return format(subDays(new Date(), 30), 'yyyy-MM-dd'); // Default to 30d for prev comparison in custom
-    return format(subDays(new Date(), filterDias * 2), 'yyyy-MM-dd');
+    if (filterDias === -1) return format(subDays(new Date(), 60), 'yyyy-MM-dd');
+    return format(subDays(new Date(), (filterDias * 2) - 1), 'yyyy-MM-dd');
   }, [filterDias]);
 
   const dateFimPrev = useMemo(() => {
-    if (filterDias === -1) return format(new Date(), 'yyyy-MM-dd');
+    if (filterDias === -1) return format(subDays(new Date(), 31), 'yyyy-MM-dd');
     return format(subDays(new Date(), filterDias), 'yyyy-MM-dd');
   }, [filterDias]);
 

@@ -78,8 +78,7 @@ export function TaxConfigModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
   };
 
   const handleSave = async (contaId: string) => {
-    const conf = configs[contaId];
-    if (!conf) return;
+    const conf = configs[contaId] || { conta_id: contaId, regime: 'simples', icms_pct: 0, pis_cofins_pct: 0, simples_pct: 0 };
     setSaving(true);
     try {
       const payload: TaxConfigRow = {
