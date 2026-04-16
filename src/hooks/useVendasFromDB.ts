@@ -89,6 +89,7 @@ export interface MarketplaceSkuItem {
   frete: number;
   pedidos: number;
   dev_qtd: number;
+  conta: string;
 }
 
 export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: string[]) {
@@ -130,7 +131,8 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
             comissao: Number(item.comissao || 0),
             frete: Number(item.frete || 0),
             pedidos: Number(item.pedidos || 0),
-            dev_qtd: Number(item.dev_qtd || 0)
+            dev_qtd: Number(item.dev_qtd || 0),
+            conta: String(item.conta || '')
           })));
           setError(null);
         }

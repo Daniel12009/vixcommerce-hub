@@ -112,28 +112,32 @@ export function FaturamentoTab() {
   // Combined local filtering for Marketplace
   const filteredDaily = useMemo(() => {
     return dbDaily.filter(v => 
-      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+      (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
     );
-  }, [dbDaily, filterMarketplace]);
+  }, [dbDaily, filterMarketplace, filterCanal]);
 
   const filteredDailyPrev = useMemo(() => {
     return dbDailyPrev.filter(v => 
-      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+      (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
     );
-  }, [dbDailyPrev, filterMarketplace]);
+  }, [dbDailyPrev, filterMarketplace, filterCanal]);
 
   const filteredSku = useMemo(() => {
     return dbSku.filter(v => 
-      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+      (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
     );
-  }, [dbSku, filterMarketplace]);
+  }, [dbSku, filterMarketplace, filterCanal]);
 
   const filteredSkuPrev = useMemo(() => {
     if (!dbSkuPrev) return [];
     return dbSkuPrev.filter(v => 
-      filterMarketplace === 'all' || v.marketplace === filterMarketplace
+      (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
     );
-  }, [dbSkuPrev, filterMarketplace]);
+  }, [dbSkuPrev, filterMarketplace, filterCanal]);
 
   // Final cleanup: removed legacy Sheets-based filtering
 
@@ -194,8 +198,8 @@ export function FaturamentoTab() {
       const row = dateMap.get(date)!;
       return {
         date,
-        fat: row.fat,
-        margem: row.fat > 0 ? (row.liq / row.fat) * 100 : 0
+        faturamento: row.fat,
+        pctMargem: row.fat > 0 ? Number(((row.liq / row.fat) * 100).toFixed(1)) : 0
       };
     });
   }, [filteredDaily]);
