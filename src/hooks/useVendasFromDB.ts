@@ -11,6 +11,7 @@ export interface MarketplaceDiaItem {
   cmv: number;
   comissao: number;
   pedidos: number;
+  quantidade: number;
 }
 
 export function useVendasFromDB(dateIni: string, dateFim: string, contas?: string[]) {
@@ -44,7 +45,8 @@ export function useVendasFromDB(dateIni: string, dateFim: string, contas?: strin
             ads: Number(item.ads || 0),
             cmv: Number(item.cmv || 0),
             comissao: Number(item.comissao || 0),
-            pedidos: Number(item.pedidos || 0)
+            pedidos: Number(item.pedidos || 0),
+            quantidade: Number(item.quantidade || 0)
           })));
           setError(null);
         }
@@ -103,7 +105,7 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
           setData(items.map((item: any) => ({
             ...item,
             faturamento_bruto: Number(item.faturamento_bruto || 0),
-            liquido: Number(item.liquido || 0),
+            liquido: Number(item.liquido || item.lucro_liquido || 0),
             quantidade: Number(item.quantidade || 0),
             ads: Number(item.ads || 0),
             cmv: Number(item.cmv || 0),

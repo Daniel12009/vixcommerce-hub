@@ -5,8 +5,6 @@ import type { Database } from './types';
 const SUPABASE_URL = "https://mbxpkqhjapmhehdngfaj.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieHBrcWhqYXBtaGVoZG5nZmFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MzI4OTYsImV4cCI6MjA4OTUwODg5Nn0.aVfVoRaDAQGRRNWPec1tHjQgnP9HxmWIizB7sGIPrTQ";
 
-console.log('[Supabase] Initializing with key:', SUPABASE_PUBLISHABLE_KEY.substring(0, 5) + '...' + SUPABASE_PUBLISHABLE_KEY.substring(SUPABASE_PUBLISHABLE_KEY.length - 5));
-
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 

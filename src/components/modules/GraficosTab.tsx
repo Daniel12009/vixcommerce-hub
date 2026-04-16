@@ -81,8 +81,8 @@ export function GraficosTab() {
   const [filterMarketplace, setFilterMarketplace] = useState('all');
 
   const todasContas = useMemo(() => {
-    const contasVendas = [...new Set((sheetsData.vendasItems || []).map(v => normalizeConta(v.conta)).filter(Boolean))];
-    const contasPerf = [...new Set(allPerf.map(p => normalizeConta(p.conta)).filter(Boolean))];
+    const contasVendas = [...new Set((sheetsData.vendasItems || []).map(v => v.conta || v.origem).filter(Boolean))];
+    const contasPerf = [...new Set(allPerf.map(p => p.conta).filter(Boolean))];
     return [...new Set([...contasVendas, ...contasPerf])].sort();
   }, [sheetsData.vendasItems, allPerf]);
 
@@ -109,7 +109,10 @@ export function GraficosTab() {
   const vendasPorDia = useMemo(() => {
     const dateMap = new Map<string, { dia: string; pedidos: number; faturamento: number; liquido: number }>();
     dbDaily.forEach(v => {
-      const d = format(new Date(v.data), 'dd/MM');
+      if (!v.data) return;
+      const dt = new Date(v.data);
+      if (isNaN(dt.getTime())) return;
+      const d = format(dt, 'dd/MM');
       const cur = dateMap.get(d) || { dia: d, pedidos: 0, faturamento: 0, liquido: 0 };
       cur.pedidos += v.pedidos;
       cur.faturamento += v.faturamento_bruto;
@@ -203,9 +206,10 @@ export function GraficosTab() {
   }, [perf]);
 
   const hasData = dbDaily.length > 0 || dbSku.length > 0 || allPerf.length > 0;
+  const isLoading = loadingDaily || loadingSku;
   const isMarketplaceView = filterCanal === 'all' || filterCanal === 'marketplace';
 
-  if (!hasData) {
+  if (!hasData && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <p className="text-muted-foreground text-sm mb-2">Nenhum dado importado ainda.</p>

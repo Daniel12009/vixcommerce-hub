@@ -59,11 +59,28 @@ export function FaturamentoTab() {
   const [isTaxModalOpen, setIsTaxModalOpen] = useState(false);
   const [filterDias, setFilterDias] = useState(30);
   const [filterConta, setFilterConta] = useState('all');
+  const [customFrom, setCustomFrom] = useState(''); // YYYY-MM-DD
+  const [customTo, setCustomTo] = useState('');     // YYYY-MM-DD
 
-  const dateFim = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
-  const dateIni = useMemo(() => format(subDays(new Date(), filterDias), 'yyyy-MM-dd'), [filterDias]);
-  const dateIniPrev = useMemo(() => format(subDays(new Date(), filterDias * 2), 'yyyy-MM-dd'), [filterDias]);
-  const dateFimPrev = useMemo(() => format(subDays(new Date(), filterDias), 'yyyy-MM-dd'), [filterDias]);
+  const dateFim = useMemo(() => {
+    if (filterDias === -1 && customTo) return customTo;
+    return format(new Date(), 'yyyy-MM-dd');
+  }, [filterDias, customTo]);
+
+  const dateIni = useMemo(() => {
+    if (filterDias === -1 && customFrom) return customFrom;
+    return format(subDays(new Date(), filterDias), 'yyyy-MM-dd');
+  }, [filterDias, customFrom]);
+
+  const dateIniPrev = useMemo(() => {
+    if (filterDias === -1) return format(subDays(new Date(), 30), 'yyyy-MM-dd'); // Default to 30d for prev comparison in custom
+    return format(subDays(new Date(), filterDias * 2), 'yyyy-MM-dd');
+  }, [filterDias]);
+
+  const dateFimPrev = useMemo(() => {
+    if (filterDias === -1) return format(new Date(), 'yyyy-MM-dd');
+    return format(subDays(new Date(), filterDias), 'yyyy-MM-dd');
+  }, [filterDias]);
 
   const { data: dbDaily, loading: loadingDaily } = useVendasFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
   const { data: dbDailyPrev, loading: loadingDailyPrev } = useVendasFromDB(dateIniPrev, dateFimPrev, filterConta !== 'all' ? [filterConta] : undefined);
@@ -85,7 +102,7 @@ export function FaturamentoTab() {
   // ── KPIs ──
   const totalFat = useMemo(() => dbDaily.reduce((s, v) => s + v.faturamento_bruto, 0), [dbDaily]);
   const totalLiq = useMemo(() => dbDaily.reduce((s, v) => s + v.lucro_liquido, 0), [dbDaily]);
-  const totalQtd = useMemo(() => dbSku.reduce((s, v) => s + v.quantidade, 0), [dbSku]);
+  const totalQtd = useMemo(() => dbDaily.reduce((s, v) => s + v.quantidade, 0), [dbDaily]);
   const totalAds = useMemo(() => dbDaily.reduce((s, v) => s + v.ads, 0), [dbDaily]);
   const margem = totalFat > 0 ? (totalLiq / totalFat) * 100 : 0;
   const totalPedidos = useMemo(() => dbDaily.reduce((s, v) => s + v.pedidos, 0), [dbDaily]);
@@ -254,7 +271,17 @@ export function FaturamentoTab() {
             <option value={60}>Últimos 60 dias</option>
             <option value={90}>Últimos 90 dias</option>
             <option value={0}>Todo o período</option>
+            <option value={-1}>Data personalizada</option>
           </select>
+          {filterDias === -1 && (
+            <div className="flex items-center gap-1.5 ml-1">
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                className="px-2 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs" />
+              <span className="text-xs text-muted-foreground">até</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                className="px-2 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs" />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
