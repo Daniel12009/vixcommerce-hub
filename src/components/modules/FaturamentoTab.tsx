@@ -32,17 +32,33 @@ function formatDateShort(d: string): string {
 }
 
 function DeltaArrow({ current, previous, invert }: { current: number; previous: number; invert?: boolean }) {
-  if (previous === 0 && current === 0) return <Minus className="w-3 h-3 text-muted-foreground inline" />;
-  if (previous === 0) return <TrendingUp className="w-3 h-3 text-emerald-500 inline" />;
+  if (!previous || previous === 0) {
+    if (current === 0) return <Minus className="w-3 h-3 text-muted-foreground inline" />;
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-500">
+        <TrendingUp className="w-3 h-3" /> —
+      </span>
+    );
+  }
+  
   const pct = ((current - previous) / Math.abs(previous)) * 100;
-  const isUp = pct > 0;
   if (Math.abs(pct) < 0.5) return <Minus className="w-3 h-3 text-muted-foreground inline" />;
+  
+  const isUp = pct > 0;
   const goodUp = invert ? !isUp : isUp;
   const Icon = isUp ? TrendingUp : TrendingDown;
   const color = goodUp ? 'text-emerald-500' : 'text-red-500';
+  
+  let label = '';
+  if (Math.abs(pct) > 999) {
+    label = pct > 0 ? '+999%' : '-999%';
+  } else {
+    label = `${pct > 0 ? '+' : ''}${pct.toFixed(0)}%`;
+  }
+
   return (
     <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${color}`}>
-      <Icon className="w-3 h-3" /> {Math.abs(pct).toFixed(0)}%
+      <Icon className="w-3 h-3" /> {label}
     </span>
   );
 }
