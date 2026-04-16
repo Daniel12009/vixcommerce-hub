@@ -173,6 +173,18 @@ export function DashboardPage() {
   // Filters
   const filteredOrders = useMemo(() => {
     let items = orders.filter(o => o.status !== 'cancelled');
+
+    // Exclude internal company orders (orders to ourselves vindo do Tiny)
+    const COMPRADORES_EXCLUIDOS = [
+      'MONACO METAIS COMERCIAL LTDA',
+      'GONTAREK COMERCIAL IMPORTACAO E EXPORTACAO LTDA',
+    ];
+
+    items = items.filter(v => {
+      const comprador = (v.buyer || '').toUpperCase();
+      return !COMPRADORES_EXCLUIDOS.some(excluido => comprador.includes(excluido));
+    });
+
     // Drop orders are excluded from the default view — only visible when 'drop' filter is selected
     if (filterCanal === 'drop') {
       return items.filter(o => classifyCanal(o) === 'drop');
