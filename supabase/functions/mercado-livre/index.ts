@@ -316,7 +316,7 @@ async function processarVendaMLSingle(
     const dtVendaStr = venda.date_created;
     if (dtVendaStr) {
       const dtVenda = new Date(dtVendaStr.replace('Z', '+00:00'));
-      if (dtVenda < dtIni || dtVenda > dtFim) return [];
+      if (dtVenda < dtIni || dtVenda > dtFim) return { linhasSheets: [], dbRows: [] };
     }
 
     const vid = venda.id;

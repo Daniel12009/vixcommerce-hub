@@ -57,15 +57,10 @@ export function MarketplaceSourceConfig() {
   const testConnection = async (accountId: string) => {
     setTesting(accountId);
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1/shopee`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
-        },
-        body: JSON.stringify({ action: 'list_items', account_id: accountId, limit: 1 }),
+      const { data, error } = await supabase.functions.invoke('shopee', {
+        body: { action: 'list_items', account_id: accountId, limit: 1 },
       });
-      const data = await res.json();
+      if (error) throw error;
 
       if (data.error) {
         toast.error(`Falha na conexão: ${data.error}`);

@@ -13,19 +13,10 @@ interface LogEntry {
   status: 'ok' | 'error' | 'running';
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
 async function callEdgeFunction(name: string, body: object): Promise<any> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  return res.json();
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) return { error: error.message };
+  return data;
 }
 
 // Modules that can be toggled for automation
@@ -201,19 +192,10 @@ const SYNC_ACTIONS = [
 ];
 
 // ─── Automation Config Section ───────────────────────────────────────
-const SUPABASE_FN_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_FN_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
-
 async function callManageCron(body: object): Promise<any> {
-  const res = await fetch(`${SUPABASE_FN_URL}/functions/v1/manage-cron`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_FN_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  return res.json();
+  const { data, error } = await supabase.functions.invoke('manage-cron', { body });
+  if (error) return { error: error.message };
+  return data;
 }
 
 function AutomationConfig() {

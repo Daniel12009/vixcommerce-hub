@@ -584,7 +584,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'sync_vendas_marketplace') {
-      const body = await req.clone().then(r => r.json()).catch(() => ({}));
+      const body = await req.clone().json().catch(() => ({} as any));
       const { date_from, date_to, plataforma, spreadsheet_id, sheet_name } = body;
 
       if (!date_from || !date_to || !plataforma) {
