@@ -765,7 +765,7 @@ function ManualTestSection() {
 
         for (let i = 0; i < deduped.length; i += 500) {
           const batch = deduped.slice(i, i + 500);
-          const { error } = await supabase.from('ads_sku_db').upsert(batch, {
+          const { error } = await supabase.from('ads_sku_db' as any).upsert(batch, {
             onConflict: 'data_ref,conta,sku'
           });
           if (error) throw error;

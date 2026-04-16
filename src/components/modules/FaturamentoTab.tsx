@@ -207,7 +207,7 @@ export function FaturamentoTab() {
   // ── Chart 3: Scatter — QTDE vs Ticket Médio (bubble = Margem%) ──
   const scatterData = useMemo(() => {
     return filteredSku
-      .filter(d => d.faturamento_bruto > 500)
+      .filter(d => d.faturamento_bruto > 0)
       .map(d => ({
         sku: d.sku,
         x: d.quantidade,
@@ -218,7 +218,7 @@ export function FaturamentoTab() {
       }))
       .sort((a, b) => b.faturamento - a.faturamento)
       .slice(0, 40);
-  }, [dbSku]);
+  }, [filteredSku]);
 
   // ── Table: SKU-level ──
   const skuTable = useMemo(() => {
