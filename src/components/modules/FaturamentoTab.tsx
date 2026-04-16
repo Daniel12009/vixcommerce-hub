@@ -8,7 +8,7 @@ import {
   ResponsiveContainer, ScatterChart, Scatter, ZAxis, LabelList,
   AreaChart, Area
 } from 'recharts';
-import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, Percent, Target, ArrowUpDown, Users, Settings, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, Percent, Target, ArrowUpDown, Users, Settings, RefreshCw, Loader2 } from 'lucide-react';
 import { TaxConfigModal } from './TaxConfigModal';
 
 const COLORS = [
@@ -242,7 +242,16 @@ export function FaturamentoTab() {
     return null;
   };
 
-  if (dbDaily.length === 0 && dbSku.length === 0 && !loadingDaily && !loadingSku) {
+  if (loadingDaily || loadingSku) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 animate-pulse">
+        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground text-sm font-medium">Carregando dados das APIs...</p>
+      </div>
+    );
+  }
+
+  if (dbDaily.length === 0 && dbSku.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 mb-4">
