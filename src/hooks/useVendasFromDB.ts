@@ -23,12 +23,20 @@ export function useVendasFromDB(dateIni: string, dateFim: string, contas?: strin
     let active = true;
 
     async function fetchData() {
+      let finalIni = dateIni;
+      let finalFim = dateFim;
+
+      if (finalIni > finalFim) {
+        console.warn('[useVendasFromDB] dateIni > dateFim, corrigindo...');
+        [finalIni, finalFim] = [finalFim, finalIni];
+      }
+
       setLoading(true);
       try {
         const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_marketplace_dia', {
-          p_data_ini: dateIni,
-          p_data_fim: dateFim,
-          p_contas: contas && contas.length > 0 ? contas : null
+          p_data_ini: finalIni,
+          p_data_fim: finalFim,
+          p_contas: (contas && contas.length > 0 && contas[0] && contas[0] !== 'all') ? contas : null
         });
 
         console.log('[useVendasFromDB] rpcData:', rpcData, 'rpcError:', rpcError, 'params:', { dateIni, dateFim, contas });
@@ -90,12 +98,20 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
     let active = true;
 
     async function fetchData() {
+      let finalIni = dateIni;
+      let finalFim = dateFim;
+
+      if (finalIni > finalFim) {
+        console.warn('[useVendasSKUFromDB] dateIni > dateFim, corrigindo...');
+        [finalIni, finalFim] = [finalFim, finalIni];
+      }
+
       setLoading(true);
       try {
         const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_marketplace_sku', {
-          p_data_ini: dateIni,
-          p_data_fim: dateFim,
-          p_contas: contas && contas.length > 0 ? contas : null
+          p_data_ini: finalIni,
+          p_data_fim: finalFim,
+          p_contas: (contas && contas.length > 0 && contas[0] && contas[0] !== 'all') ? contas : null
         });
 
         if (rpcError) throw rpcError;

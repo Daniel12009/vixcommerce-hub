@@ -92,10 +92,14 @@ export function FaturamentoTab() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // All unique contas
-  const contas = useMemo(() =>
-    [...new Set((sheetsData.vendasItems || []).map(v => v.conta || v.origem || '').filter(Boolean))].sort(),
-    [sheetsData.vendasItems]
-  );
+  const contas = useMemo(() => {
+    const set = new Set<string>();
+    (sheetsData.vendasItems || []).forEach(v => {
+      const c = v.conta || v.origem;
+      if (c) set.add(c.trim());
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [sheetsData.vendasItems]);
 
   // Final cleanup: removed legacy Sheets-based filtering
 
