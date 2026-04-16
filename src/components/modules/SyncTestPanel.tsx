@@ -613,6 +613,7 @@ function ManualTestSection() {
         addLog(`Amostra linha 1: ${JSON.stringify(rows[0]?.slice(0,5))}`, 'running');
         addLog(`Amostra linha 2: ${JSON.stringify(rows[1]?.slice(0,5))}`, 'running');
         addLog(`Amostra linha 3: ${JSON.stringify(rows[2]?.slice(0,5))}`, 'running');
+        addLog(`Amostra completa linha 1: ${JSON.stringify(rows[0])}`, 'running');
 
         addLog(`Mapeando ${rows.length} registros de devoluções...`, 'running');
         const mapped = rows.map((r: any[]) => {
