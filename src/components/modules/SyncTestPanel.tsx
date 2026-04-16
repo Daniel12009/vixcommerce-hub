@@ -644,7 +644,7 @@ function ManualTestSection() {
             }
           };
           return {
-            data_planilha:     parseDateLocal(r[0]) || parseDateLocal(r[2]),
+            data_planilha:     parseDateLocal(r[2]),
             plataforma:        String(r[1] || ''),
             data_aprovacao:    parseDateLocal(r[2]),
             valor_reembolso:   Number(String(r[3]||'0').replace(',','.')) || 0,
@@ -655,8 +655,8 @@ function ManualTestSection() {
             comissao_nao_devolvida: Number(String(r[16]||'0').replace(',','.')) || 0,
             custo:             Number(String(r[17]||'0').replace(',','.')) || 0,
             quantidade:        Number(r[18]) || 1,
-            conta_mae:         String(r[27] || ''),
-            canal:             String(r[28] || '')
+            conta_mae:         String(r[28] || ''),
+            canal:             String(r[29] || '')
           };
         }).filter((x: any) => x.pedido && x.sku && x.data_planilha !== null);
 
