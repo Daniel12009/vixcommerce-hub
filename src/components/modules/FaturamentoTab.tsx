@@ -232,7 +232,7 @@ export function FaturamentoTab() {
       const prevMargem = prev && prev.faturamento_bruto > 0 ? (prev.liquido / prev.faturamento_bruto) * 100 : 0;
       const ticket = d.pedidos > 0 ? d.faturamento_bruto / d.pedidos : 0;
       const pctAds = d.faturamento_bruto > 0 ? (d.ads / d.faturamento_bruto) * 100 : 0;
-      const pctDev = d.quantidade > 0 ? (d.dev_qtd / d.quantidade) * 100 : 0;
+      const pctDev = Number(d.pct_devolucao || 0);
       return {
         sku: d.sku,
         faturamento: d.faturamento_bruto,
