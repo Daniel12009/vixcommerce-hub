@@ -295,6 +295,15 @@ async function runSyncAdsDB(): Promise<string[]> {
       return log;
     }
 
+    // Deduplicar por data_ref + conta (pegar o último valor de cada par)
+    const dedupedRows = Object.values(
+      dbRows.reduce((acc: any, row: any) => {
+        const key = `${row.data_ref}__${row.conta}`;
+        acc[key] = row; // último sobrescreve
+        return acc;
+      }, {})
+    );
+
     const res = await fetch(`${SUPABASE_URL}/rest/v1/ads_db?on_conflict=data_ref,conta`, {
       method: 'POST',
       headers: {
@@ -303,7 +312,7 @@ async function runSyncAdsDB(): Promise<string[]> {
         'Content-Type': 'application/json',
         'Prefer': 'resolution=merge-duplicates',
       },
-      body: JSON.stringify(dbRows),
+      body: JSON.stringify(dedupedRows),
     });
 
     if (!res.ok) {
