@@ -616,21 +616,26 @@ function ManualTestSection() {
         addLog(`Mapeando ${rows.length} registros de devoluções...`, 'running');
         const mapped = rows.map((r: any[]) => {
           const parseDateLocal = (d: string) => {
-            if (!d) return null;
+            if (!d || d === '-') return null;
             try {
               let iso: string;
               if (String(d).includes('/')) {
-                const [day, mon, yr] = String(d).split('/');
+                const parts = String(d).split('/');
+                if (parts.length !== 3) return null;
+                const [day, mon, yr] = parts;
                 iso = `${yr}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`;
               } else {
-                iso = String(d);
+                iso = String(d).substring(0, 10);
               }
-              // Validar se é uma data real
-              const dt = new Date(iso);
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+              
+              const dt = new Date(iso + 'T12:00:00'); 
               if (isNaN(dt.getTime())) return null;
-              // Verificar se o dia/mês não foram distorcidos (ex: 37 dias)
-              const [y, m, day2] = iso.split('-').map(Number);
-              if (day2 > 31 || m > 12 || m < 1) return null;
+              
+              // Importante: verificar se a data não "rolou" (ex: 31/02 vira 03/03)
+              const check = dt.toISOString().split('T')[0];
+              if (check !== iso) return null;
+              
               return iso;
             } catch {
               return null;
