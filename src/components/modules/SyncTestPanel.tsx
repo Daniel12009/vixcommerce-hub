@@ -602,12 +602,16 @@ function ManualTestSection() {
         const sheetData = await callEdgeFunction('google-sheets', {
           action: 'read',
           spreadsheetId: '10hZH2Nmc926zUHsJa5MHFYy3NJb40DgjNXyGEFByHoQ',
-          range: 'TODOS!A2:AC'
+          range: 'TODOS!A2:AE'
         });
 
         if (sheetData.error) throw new Error(sheetData.error);
         const rows = sheetData.values;
         if (!rows || rows.length === 0) throw new Error('Nenhum dado encontrado na aba TODOS.');
+
+        addLog(`Amostra linha 1: ${JSON.stringify(rows[0]?.slice(0,5))}`, 'running');
+        addLog(`Amostra linha 2: ${JSON.stringify(rows[1]?.slice(0,5))}`, 'running');
+        addLog(`Amostra linha 3: ${JSON.stringify(rows[2]?.slice(0,5))}`, 'running');
 
         addLog(`Mapeando ${rows.length} registros de devoluções...`, 'running');
         const mapped = rows.map((r: any[]) => {
