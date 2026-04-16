@@ -19,9 +19,16 @@ const COLORS = [
 
 function parseDate(d: string): Date | null {
   if (!d) return null;
-  const parts = d.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  const dStr = String(d).trim();
+  const parts = dStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   if (parts) return new Date(parseInt(parts[3]), parseInt(parts[2]) - 1, parseInt(parts[1]));
-  const iso = new Date(d);
+  
+  if (dStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const iso = new Date(dStr + 'T12:00:00');
+    return !isNaN(iso.getTime()) ? iso : null;
+  }
+  
+  const iso = new Date(dStr);
   return !isNaN(iso.getTime()) ? iso : null;
 }
 
@@ -200,7 +207,9 @@ export function FaturamentoTab() {
       const [db, mb] = b.split('/').map(Number);
       return (ma * 100 + da) - (mb * 100 + db);
     });
-    return sortedDates.map(date => ({ date, ...dateMap.get(date)! }));
+    const result = sortedDates.map(date => ({ date, ...dateMap.get(date)! }));
+    console.log('grafico data:', result.slice(-3));
+    return result;
   }, [filteredDaily]);
 
   const contasNoChart = useMemo(() =>
