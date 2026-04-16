@@ -636,9 +636,20 @@ function ManualTestSection() {
           };
         }).filter((x: any) => x.pedido && x.sku);
 
-        addLog(`Upserting ${mapped.length} devoluções em lotes de 500...`, 'running');
-        for (let i = 0; i < mapped.length; i += 500) {
-          const batch = mapped.slice(i, i + 500);
+        addLog(`Deduplicando: ${mapped.length} registros...`, 'running');
+        const seen = new Set<string>();
+        const deduped = mapped.filter((x: any) => {
+          const key = `${x.pedido}__${x.sku}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        addLog(`Deduplicando: ${mapped.length} → ${deduped.length} registros únicos`, 'running');
+
+        addLog(`Upserting ${deduped.length} devoluções em lotes de 500...`, 'running');
+        for (let i = 0; i < deduped.length; i += 500) {
+          const batch = deduped.slice(i, i + 500);
           const { error } = await supabase.from('devolucoes_db').upsert(batch, { onConflict: 'pedido,sku' });
           if (error) throw error;
         }
