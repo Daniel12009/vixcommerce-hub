@@ -203,6 +203,13 @@ const SYNC_ACTIONS = [
     color: 'bg-emerald-500/10',
     localFn: true,
   },
+  {
+    id: 'import-ads-sku',
+    label: '📊 Importar ADS por SKU → Banco',
+    description: 'Importa aba ADS da Planilha Mestra → ads_sku_db por SKU/dia/conta',
+    color: 'bg-yellow-500/10',
+    localFn: true,
+  },
 ];
 
 // ─── Automation Config Section ───────────────────────────────────────
@@ -678,6 +685,93 @@ function ManualTestSection() {
           if (error) throw error;
         }
         addLog('✅ Importação de Devoluções concluída!', 'ok');
+        return;
+      }
+      else if (action.id === 'import-ads-sku') {
+        addLog('Lendo aba ADS da Planilha Mestra...', 'running');
+        const sheetData = await callEdgeFunction('google-sheets', {
+          action: 'read',
+          spreadsheetId: '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms',
+          range: 'ADS!A2:O'
+        });
+
+        if (sheetData.error) throw new Error(sheetData.error);
+        const rows = sheetData.values || [];
+        if (rows.length === 0) throw new Error('Nenhum dado na aba ADS.');
+
+        addLog(`Mapeando ${rows.length} registros...`, 'running');
+
+        const parseDateLocal = (d: string) => {
+          if (!d) return null;
+          const s = String(d).trim();
+          if (s.includes('/')) {
+            const parts = s.split('/');
+            if (parts.length !== 3) return null;
+            const [day, mon, yr] = parts;
+            const iso = `${yr}-${mon.padStart(2,'0')}-${day.padStart(2,'0')}`;
+            const dt = new Date(iso + 'T12:00:00');
+            if (isNaN(dt.getTime())) return null;
+            if (dt.toISOString().slice(0,10) !== iso) return null;
+            return iso;
+          }
+          return s;
+        };
+
+        const parseNum = (v: any) =>
+          parseFloat(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0;
+
+        const normalizaConta = (raw: string): string => {
+          const c = raw.trim().toUpperCase();
+          if (c.includes('VIA FLIX') || c.includes('VIA FIX')) return 'Via Flix';
+          if (c.includes('GS TORNEIRAS') || c.includes('GSTORNEIRAS')) return 'GS Torneiras';
+          if (c.includes('DECARION') || c.includes('MONACO')) return 'Decarion Torneiras';
+          return raw.trim();
+        };
+
+        const mapped = rows.map((r: any[]) => {
+          const contaRaw = String(r[2] || '');
+          const parts = contaRaw.split('|');
+          const marketplace = parts[0]?.trim() || '';
+          const contaNome = normalizaConta(parts[1] || '');
+          const dataRef = parseDateLocal(String(r[1] || ''));
+          const sku = String(r[3] || '').trim();
+          if (!dataRef || !sku || !contaNome) return null;
+          return {
+            data_ref:    dataRef,
+            conta:       contaNome,
+            marketplace: marketplace,
+            sku:         sku,
+            campanha:    sku,
+            investimento: parseNum(r[7]),
+            receita:     parseNum(r[8]),
+            vendas_qtd:  parseInt(String(r[9] || '0')) || 0,
+            acos:        parseNum(r[10]),
+            roas:        parseNum(r[11]),
+            cliques:     parseInt(String(r[12] || '0')) || 0,
+            impressoes:  parseInt(String(r[13] || '0').replace(/\./g, '')) || 0,
+          };
+        }).filter(Boolean);
+
+        const seen = new Set<string>();
+        const deduped = mapped.filter((x: any) => {
+          const key = `${x.data_ref}__${x.conta}__${x.sku}`;
+          if (seen.has(key)) return false;
+          seen.has(key);
+          seen.add(key);
+          return true;
+        });
+
+        addLog(`${mapped.length} registros → ${deduped.length} únicos após deduplicação`, 'running');
+
+        for (let i = 0; i < deduped.length; i += 500) {
+          const batch = deduped.slice(i, i + 500);
+          const { error } = await supabase.from('ads_sku_db').upsert(batch, {
+            onConflict: 'data_ref,conta,sku'
+          });
+          if (error) throw error;
+          addLog(`Lote ${Math.floor(i/500)+1} concluído`, 'ok');
+        }
+        addLog(`✅ ADS por SKU importado: ${deduped.length} registros`, 'ok');
         return;
       }
       else if (action.id === 'import-history-sheets') {
