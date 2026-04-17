@@ -2457,7 +2457,7 @@ Deno.serve(async (req) => {
     // ─── get_listing_types: batch-fetch catalog_listing for performance items ───
     if (action === 'get_listing_types') {
       try {
-        const { item_ids, account_id, force_refresh } = body;
+        const { item_ids, account_id, account_name, force_refresh } = body;
         if (!Array.isArray(item_ids) || item_ids.length === 0) {
           return new Response(JSON.stringify({ types: {} }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -2470,7 +2470,13 @@ Deno.serve(async (req) => {
           const accountRes = await supabaseFetch(`/ml_accounts?id=eq.${account_id}&limit=1`);
           const accts = await accountRes.json();
           if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
+        } else if (account_name) {
+          // Busca pelo nome da conta (ex: "GS", "DECARION")
+          const accountRes = await supabaseFetch(`/ml_accounts?nome=eq.${encodeURIComponent(account_name)}&limit=1`);
+          const accts = await accountRes.json();
+          if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
         }
+
         if (!tokenToUse) {
           const accountRes = await supabaseFetch(`/ml_accounts?ativo=eq.true&limit=1`);
           const accts = await accountRes.json();
@@ -2493,7 +2499,7 @@ Deno.serve(async (req) => {
           const batch = missing.slice(i, i + BATCH);
           try {
             const res = await fetch(
-              `${ML_API}/items?ids=${batch.join(',')}&attributes=id,catalog_listing,listing_type_id`,
+              `${ML_API}/items?ids=${batch.join(',')}&attributes=id,catalog_listing,catalog_product_id,listing_type_id,sub_status`,
               { headers: { Authorization: `Bearer ${tokenToUse}` } }
             );
             if (res.ok) {
@@ -2505,12 +2511,22 @@ Deno.serve(async (req) => {
                   
                   if (code === 200 && b?.id) {
                     const isCatalog = b.catalog_listing === true;
-                    // Força a atualização no objeto que será retornado e salvo
+                    // Se o usuário diz que deveria ser catálogo mas veio false, logamos o objeto completo para entender
+                    if (!isCatalog) {
+                      console.log(`[listing_types] DIAGNOSTICO MLB ${b.id}:`, JSON.stringify({
+                        catalog_listing: b.catalog_listing,
+                        catalog_product_id: b.catalog_product_id,
+                        listing_type_id: b.listing_type_id,
+                        sub_status: b.sub_status
+                      }));
+                    } else {
+                      console.log(`[listing_types] CONFIRMADO CATALOGO: ${b.id}`);
+                    }
+
                     cachedTypes[b.id] = {
                       catalog: isCatalog,
                       listingType: isCatalog ? 'Catálogo' : 'Tradicional',
                     };
-                    if (isCatalog) console.log(`[listing_types] FOUND CATALOG: ${b.id}`);
                   } else if (b?.id) {
                     console.warn(`[listing_types] MLB ${b.id} returned code ${code}`);
                   }

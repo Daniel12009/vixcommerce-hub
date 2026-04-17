@@ -147,7 +147,12 @@ export function AtualizarDadosPage() {
     setListingTypesLoading(true);
     try {
       const { data } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'get_listing_types', item_ids: [...new Set(itemIds)], force_refresh: true },
+        body: { 
+          action: 'get_listing_types', 
+          item_ids: [...new Set(itemIds)], 
+          force_refresh: true,
+          account_name: performanceFilterAccount === 'all' ? undefined : performanceFilterAccount
+        },
       });
       if (data?.types) {
         setListingTypeMap(data.types);
