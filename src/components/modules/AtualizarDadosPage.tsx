@@ -151,7 +151,7 @@ export function AtualizarDadosPage() {
           action: 'get_listing_types', 
           item_ids: [...new Set(itemIds)], 
           force_refresh: true,
-          account_name: performanceFilterAccount === 'all' ? undefined : performanceFilterAccount
+          account_name: perfFilterConta === 'all' ? undefined : perfFilterConta
         },
       });
       if (data?.types) {
