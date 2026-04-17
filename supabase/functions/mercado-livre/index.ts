@@ -1785,7 +1785,8 @@ Deno.serve(async (req) => {
             }
             if (!sku) sku = 'SEM_SKU';
             
-            const listingType = (b.catalog_listing === true) ? 'Catálogo' : 'Tradicional';
+            const isCatalog = b.catalog_listing === true || !!b.catalog_product_id;
+            const listingType = isCatalog ? 'Catálogo' : 'Tradicional';
             detalhes[b.id] = { sku, titulo: b.title || '', link: b.permalink || '', preco: 0, listingType };
           }
         } catch { /* continua */ }
@@ -2510,23 +2511,21 @@ Deno.serve(async (req) => {
                   const code = item.code || res.status;
                   
                   if (code === 200 && b?.id) {
-                    const isCatalog = b.catalog_listing === true;
-                    // Se o usuário diz que deveria ser catálogo mas veio false, logamos o objeto completo para entender
-                    if (!isCatalog) {
-                      console.log(`[listing_types] DIAGNOSTICO MLB ${b.id}:`, JSON.stringify({
-                        catalog_listing: b.catalog_listing,
-                        catalog_product_id: b.catalog_product_id,
-                        listing_type_id: b.listing_type_id,
-                        sub_status: b.sub_status
-                      }));
-                    } else {
-                      console.log(`[listing_types] CONFIRMADO CATALOGO: ${b.id}`);
-                    }
+                    const isCatalog = b.catalog_listing === true || !!b.catalog_product_id;
+                    
+                    // Log detalhado para diagnóstico
+                    console.log(`[listing_types] MLB ${b.id}:`, JSON.stringify({
+                      catalog_listing: b.catalog_listing,
+                      catalog_id: b.catalog_id,
+                      catalog_product_id: b.catalog_product_id,
+                      is_catalog: isCatalog
+                    }));
 
                     cachedTypes[b.id] = {
                       catalog: isCatalog,
                       listingType: isCatalog ? 'Catálogo' : 'Tradicional',
                     };
+                    if (isCatalog) console.log(`[listing_types] IDENTIFICADO COMO CATALOGO: ${b.id} (listing: ${b.catalog_listing}, prod: ${b.catalog_product_id})`);
                   } else if (b?.id) {
                     console.warn(`[listing_types] MLB ${b.id} returned code ${code}`);
                   }
