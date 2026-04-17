@@ -1,10 +1,11 @@
-import { useMemo, useState, useEffect } from 'react';
-import { Package, TrendingUp, TrendingDown, Target, Shield, Info, Pencil, Check, X } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { Package, TrendingUp, TrendingDown, Target, Shield, Info, Pencil, Check, Upload, Download } from 'lucide-react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasSKUEstoqueFromDB } from '@/hooks/useVendasFromDB';
 import { formatNumber } from '@/lib/utils-vix';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 interface CoberturaRow {
   sku: string;
@@ -18,15 +19,31 @@ interface CoberturaRow {
   compraSugerida: number;
 }
 
+// Normaliza nomes de conta para casar entre vendas (DB) e estoque Full
+// Ex: "Via Flix" -> "VIAFLIX", "GS Torneiras" -> "GS", "Decarion Torneiras" -> "MONACO"/"DECARION"
+function normalizeConta(c: string): string {
+  if (!c) return '';
+  const u = c.trim().toUpperCase().replace(/\s+/g, '');
+  // mapeamento de sinônimos
+  const map: Record<string, string> = {
+    'VIAFLIX': 'VIAFLIX',
+    'GSTORNEIRAS': 'GS',
+    'GS': 'GS',
+    'DECARIONTORNEIRAS': 'DECARION',
+    'DECARION': 'DECARION',
+    'MONACO': 'MONACO',
+  };
+  return map[u] || u;
+}
+
 export function CoberturaFullTab() {
   const { estoqueFullItems } = useSheetsData();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Fetch real VMD from SQL for the last 30 days
   const dateFim = new Date().toISOString().split('T')[0];
   const dateIni = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const { data: vmdSalesData, loading: loadingSales } = useVendasSKUEstoqueFromDB(dateIni, dateFim);
+  const { data: vmdSalesData } = useVendasSKUEstoqueFromDB(dateIni, dateFim);
 
-  // States for local overrides (persisted in localStorage)
   const [metasVMD, setMetasVMD] = useState<Record<string, number>>(() => {
     try { return JSON.parse(localStorage.getItem('vix_vmd_metas') || '{}'); } catch { return {}; }
   });
@@ -40,14 +57,19 @@ export function CoberturaFullTab() {
   const mergedData = useMemo<CoberturaRow[]>(() => {
     if (!estoqueFullItems) return [];
 
-    // Group sales from SQL by SKU and Account
-    const sqlVmdMap = new Map<string, number>();
+    // VMD por SKU agregado de TODAS as contas (já que conta no estoque ≠ conta nas vendas)
+    // Estratégia: somar VMD por SKU global, depois distribuir/exibir por linha de estoque
+    const sqlVmdBySku = new Map<string, number>();
+    const sqlVmdByKey = new Map<string, number>(); // sku||contaNorm
     vmdSalesData.forEach(s => {
-      const k = `${s.sku.trim().toUpperCase()}||${s.conta.trim()}`;
-      sqlVmdMap.set(k, (s.quantidade || 0) / 30);
+      const sku = s.sku.trim().toUpperCase();
+      const contaNorm = normalizeConta(s.conta);
+      const vmd = (Number(s.quantidade) || 0) / 30;
+      sqlVmdBySku.set(sku, (sqlVmdBySku.get(sku) || 0) + vmd);
+      const k = `${sku}||${contaNorm}`;
+      sqlVmdByKey.set(k, (sqlVmdByKey.get(k) || 0) + vmd);
     });
 
-    // Group actual stock
     const stockMap = new Map<string, { full: number; conta: string; sku: string }>();
     estoqueFullItems.forEach(i => {
       const sku = i.sku.trim().toUpperCase();
@@ -59,11 +81,15 @@ export function CoberturaFullTab() {
     });
 
     return Array.from(stockMap.values()).map(item => {
-      const vmdAtual = sqlVmdMap.get(`${item.sku}||${item.conta}`) || 0;
+      const contaNorm = normalizeConta(item.conta);
+      // tenta match por (sku+conta) primeiro; se não houver, usa total do SKU
+      const vmdAtual = sqlVmdByKey.get(`${item.sku}||${contaNorm}`)
+        ?? sqlVmdBySku.get(item.sku)
+        ?? 0;
       const vmdMeta = metasVMD[`${item.sku}||${item.conta}`] || metasVMD[item.sku] || 0;
       
-      const coberturaAlvo = 30; // Default
-      const estoqueSeguranca = Math.ceil(vmdAtual * 7); // 7 days security
+      const coberturaAlvo = 30;
+      const estoqueSeguranca = Math.ceil(vmdAtual * 7);
       
       let performance: 'oversales' | 'undersales' | 'ok' = 'ok';
       if (vmdMeta > 0) {
@@ -74,15 +100,9 @@ export function CoberturaFullTab() {
       const compraSugerida = Math.max(0, Math.ceil((vmdAtual * 60) - item.full));
 
       return {
-        sku: item.sku,
-        conta: item.conta,
-        vmdAtual,
-        vmdMeta,
-        estoqueFull: item.full,
-        estoqueSeguranca,
-        coberturaAlvo,
-        performance,
-        compraSugerida
+        sku: item.sku, conta: item.conta, vmdAtual, vmdMeta,
+        estoqueFull: item.full, estoqueSeguranca, coberturaAlvo,
+        performance, compraSugerida
       };
     }).sort((a, b) => b.vmdAtual - a.vmdAtual);
   }, [estoqueFullItems, vmdSalesData, metasVMD]);
@@ -92,7 +112,6 @@ export function CoberturaFullTab() {
     const oversales = mergedData.filter(m => m.performance === 'oversales').length;
     const undersales = mergedData.filter(m => m.performance === 'undersales').length;
     const totalSugerido = mergedData.reduce((acc, curr) => acc + curr.compraSugerida, 0);
-
     return { totalVmd, oversales, undersales, totalSugerido };
   }, [mergedData]);
 
@@ -102,6 +121,56 @@ export function CoberturaFullTab() {
     setMetasVMD(prev => ({ ...prev, [`${sku}||${conta}`]: val }));
     setEditingSku(null);
     toast.success('Meta atualizada');
+  };
+
+  const handleUploadMetas = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any>(ws, { header: 1, defval: '' });
+      
+      const novasMetas: Record<string, number> = { ...metasVMD };
+      let importados = 0;
+      let ignorados = 0;
+      
+      // Detecta header (linha com "SKU" ou "VMD")
+      const startRow = rows.findIndex((r: any[]) => 
+        r.some(c => String(c).toUpperCase().includes('SKU'))
+      );
+      const dataRows = startRow >= 0 ? rows.slice(startRow + 1) : rows;
+      
+      dataRows.forEach((row: any[]) => {
+        const sku = String(row[0] || '').trim().toUpperCase();
+        const vmdRaw = String(row[1] || '').trim().replace(',', '.');
+        const vmd = parseFloat(vmdRaw);
+        if (!sku || isNaN(vmd) || vmd < 0) { ignorados++; return; }
+        novasMetas[sku] = vmd;
+        importados++;
+      });
+      
+      setMetasVMD(novasMetas);
+      toast.success(`${importados} metas importadas${ignorados > 0 ? ` (${ignorados} ignoradas)` : ''}`);
+    } catch (err: any) {
+      toast.error('Erro ao ler planilha: ' + err.message);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    const skusUnicos = Array.from(new Set(mergedData.map(r => r.sku)));
+    const data = [
+      ['SKU', 'VMD'],
+      ...skusUnicos.map(sku => [sku, metasVMD[sku] || ''])
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Metas VMD');
+    XLSX.writeFile(wb, 'template_metas_vmd.xlsx');
+    toast.success('Template baixado');
   };
 
   return (
@@ -114,15 +183,37 @@ export function CoberturaFullTab() {
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+        <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" />
             <h3 className="font-semibold text-foreground">Planejamento de Cobertura & Metas</h3>
           </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[hsl(var(--vix-danger))]" /> Oversales (+20% meta)</span>
-            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[hsl(var(--vix-warning))]" /> Undersales (-20% meta)</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".xlsx,.xls,.csv"
+              onChange={handleUploadMetas}
+              className="hidden"
+            />
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" /> Baixar Template
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5" /> Importar Metas VMD (.xlsx)
+            </button>
           </div>
+        </div>
+        <div className="px-4 py-2 border-b border-border bg-muted/10 flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[hsl(var(--vix-danger))]" /> Oversales (+20% meta)</span>
+          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[hsl(var(--vix-warning))]" /> Undersales (-20% meta)</span>
+          <span className="ml-auto italic">Planilha: 2 colunas — A=SKU, B=VMD (decimal com . ou ,)</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -132,7 +223,7 @@ export function CoberturaFullTab() {
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Conta</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">SKU</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">VMD Atual (SQL)</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground group">
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">
                   Meta VMD <Info className="inline w-3 h-3 ml-1 opacity-50 cursor-help" />
                 </th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
