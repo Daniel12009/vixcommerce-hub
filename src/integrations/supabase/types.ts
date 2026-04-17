@@ -697,6 +697,14 @@ export type Database = {
           pedidos: number
         }[]
       }
+      get_marketplace_sku_estoque: {
+        Args: { p_contas?: string[]; p_data_fim: string; p_data_ini: string }
+        Returns: {
+          conta: string
+          quantidade: number
+          sku: string
+        }[]
+      }
       parse_data_venda: { Args: { d: string }; Returns: string }
       schedule_cron_job: {
         Args: {
