@@ -681,7 +681,7 @@ function ManualTestSection() {
         addLog(`Upserting ${deduped.length} devoluções em lotes de 500...`, 'running');
         for (let i = 0; i < deduped.length; i += 500) {
           const batch = deduped.slice(i, i + 500);
-          const { error } = await supabase.from('devolucoes_db').upsert(batch, { onConflict: 'pedido,sku' });
+          const { error } = await (supabase as any).from('devolucoes_db').upsert(batch, { onConflict: 'pedido,sku' });
           if (error) throw error;
         }
         addLog('✅ Importação de Devoluções concluída!', 'ok');

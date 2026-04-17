@@ -14,7 +14,7 @@ export function RupturaBacklogTab() {
   useEffect(() => {
     async function fetchHistory() {
       // Get last 30 days of snapshots
-      const { data, error } = await (supabase.from('estoque_snapshots') as any)
+      const { data, error } = await (supabase as any).from('estoque_snapshots')
         .select('*')
         .order('data_ref', { ascending: true });
       
