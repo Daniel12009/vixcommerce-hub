@@ -11,6 +11,8 @@ import { ExpedicaoTab } from './ExpedicaoTab';
 import { EstoqueLocalTab } from './EstoqueLocalTab';
 import { EmTransitoTab } from './EmTransitoTab';
 import { EstoqueFullUpload } from './EstoqueFullUpload';
+import { CoberturaFullTab } from './CoberturaFullTab';
+import { RupturaBacklogTab } from './RupturaBacklogTab';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, PieChart, Pie, Legend } from 'recharts';
 
 interface MergedStockRow {
@@ -415,7 +417,8 @@ export function EstoquePage() {
           <TabsTrigger value="em-transito">✈️ Em Trânsito (API)</TabsTrigger>
           <TabsTrigger value="envios">🚚 Envios (Planilha ML)</TabsTrigger>
           <TabsTrigger value="importar-full">📤 Importar Full</TabsTrigger>
-          <TabsTrigger value="transferencias">🔄 Transferências</TabsTrigger>
+          <TabsTrigger value="cobertura">📊 Cobertura do Full</TabsTrigger>
+          <TabsTrigger value="rupturas">⚠️ Backlogs de Ruptura</TabsTrigger>
         </TabsList>
 
         <TabsContent value="expedicao-api" className="mt-0">
@@ -706,53 +709,12 @@ export function EstoquePage() {
           <EstoqueFullUpload />
         </TabsContent>
 
-        <TabsContent value="transferencias">
-          {!hasFullData ? (
-            <div className="bg-card border border-border rounded-xl p-12 text-center animate-fade-in">
-              <ArrowUpDown className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-40" />
-              <h3 className="text-lg font-semibold mb-2">Dados de transferência não disponíveis</h3>
-              <p className="text-muted-foreground text-sm">Importe a aba <strong>Full_Estoque</strong> para ver itens em transferência e entrada pendente.</p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-                <KpiCard title="SKUs em Transferência" value={String(transferItems.filter(i => i.emTransferencia > 0).length)} icon={ArrowUpDown} delay={0} />
-                <KpiCard title="SKUs com Entrada Pendente" value={String(transferItems.filter(i => i.entradaPendente > 0).length)} icon={Truck} delay={50} />
-                <KpiCard title="Total Itens em Movimento" value={formatNumber(transferItems.reduce((s, i) => s + i.emTransferencia + i.entradaPendente, 0))} icon={Package} delay={100} />
-              </div>
-              <div className="bg-card border border-border rounded-xl overflow-hidden animate-fade-in">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Conta</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">SKU</th>
-                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Aptas p/ Venda</th>
-                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Em Transferência</th>
-                        <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Entrada Pendente</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Status Anúncio</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transferItems.map((item, idx) => (
-                        <tr key={`${item.sku}-${item.conta}-${idx}`} className="border-b border-border hover:bg-muted/30 transition-colors">
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.conta}</td>
-                          <td className="px-3 py-2.5 font-mono text-xs font-semibold text-primary">{item.sku}</td>
-                          <td className="px-3 py-2.5 text-right text-foreground">{item.aptasParaVenda}</td>
-                          <td className={`px-3 py-2.5 text-right font-medium ${item.emTransferencia > 0 ? 'text-[hsl(var(--vix-warning))]' : 'text-muted-foreground'}`}>{item.emTransferencia || '—'}</td>
-                          <td className={`px-3 py-2.5 text-right font-medium ${item.entradaPendente > 0 ? 'text-[hsl(var(--vix-info))]' : 'text-muted-foreground'}`}>{item.entradaPendente || '—'}</td>
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.statusAnuncio || '—'}</td>
-                        </tr>
-                      ))}
-                      {transferItems.length === 0 && (
-                        <tr><td colSpan={6} className="py-8 text-center text-muted-foreground text-sm">Nenhum item em transferência ou com entrada pendente</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
+        <TabsContent value="cobertura" className="mt-0">
+          <CoberturaFullTab />
+        </TabsContent>
+
+        <TabsContent value="rupturas" className="mt-0">
+          <RupturaBacklogTab />
         </TabsContent>
       </Tabs>
 
