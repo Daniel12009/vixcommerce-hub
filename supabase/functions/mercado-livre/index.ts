@@ -2498,13 +2498,22 @@ Deno.serve(async (req) => {
             );
             if (res.ok) {
               const items = await res.json();
-              for (const item of (Array.isArray(items) ? items : [])) {
-                const b = item.body || item;
-                if (b?.id) {
-                  cachedTypes[b.id] = {
-                    catalog: b.catalog_listing === true,
-                    listingType: b.catalog_listing === true ? 'Catálogo' : 'Tradicional',
-                  };
+              if (Array.isArray(items)) {
+                for (const item of items) {
+                  const b = item.body || item;
+                  const code = item.code || res.status;
+                  
+                  if (code === 200 && b?.id) {
+                    const isCatalog = b.catalog_listing === true;
+                    // Força a atualização no objeto que será retornado e salvo
+                    cachedTypes[b.id] = {
+                      catalog: isCatalog,
+                      listingType: isCatalog ? 'Catálogo' : 'Tradicional',
+                    };
+                    if (isCatalog) console.log(`[listing_types] FOUND CATALOG: ${b.id}`);
+                  } else if (b?.id) {
+                    console.warn(`[listing_types] MLB ${b.id} returned code ${code}`);
+                  }
                 }
               }
             } else {

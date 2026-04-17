@@ -1388,11 +1388,13 @@ export function AtualizarDadosPage() {
                                 <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
                                 <td className="px-3 py-2 text-center">
                                   {(() => {
-                                    // Prioritize listingType from sheet data, fallback to local cache
-                                    const typeSource = (item.listingType === 'Catálogo' || item.listingType === 'Tradicional') 
-                                      ? { catalog: item.listingType === 'Catálogo' }
-                                      : listingTypeMap[item.idAnuncio];
-                                      
+                                    // Prioritize the refreshed cache (listingTypeMap) over the sheet data (item.listingType)
+                                    // This ensures that clicking "Atualizar Tipos API" shows immediate results
+                                    const typeSource = listingTypeMap[item.idAnuncio] || 
+                                      ((item.listingType === 'Catálogo' || item.listingType === 'Tradicional') 
+                                        ? { catalog: item.listingType === 'Catálogo' }
+                                        : null);
+                                        
                                     if (!typeSource) return <span className="text-[10px] text-muted-foreground">—</span>;
                                     
                                     return typeSource.catalog
