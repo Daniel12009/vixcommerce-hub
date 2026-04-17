@@ -1785,7 +1785,10 @@ Deno.serve(async (req) => {
             }
             if (!sku) sku = 'SEM_SKU';
             
-            const isCatalog = b.catalog_listing === true || !!b.catalog_product_id;
+            const isCatalog = b.catalog_listing === true || 
+                             !!b.catalog_product_id || 
+                             !!b.catalog_id || 
+                             (Array.isArray(b.tags) && b.tags.includes('catalog_listing'));
             const listingType = isCatalog ? 'Catálogo' : 'Tradicional';
             detalhes[b.id] = { sku, titulo: b.title || '', link: b.permalink || '', preco: 0, listingType };
           }
@@ -2500,7 +2503,7 @@ Deno.serve(async (req) => {
           const batch = missing.slice(i, i + BATCH);
           try {
             const res = await fetch(
-              `${ML_API}/items?ids=${batch.join(',')}&attributes=id,catalog_listing,catalog_product_id,listing_type_id,sub_status`,
+              `${ML_API}/items?ids=${batch.join(',')}&attributes=id,catalog_listing,catalog_product_id,catalog_id,tags,listing_type_id,sub_status`,
               { headers: { Authorization: `Bearer ${tokenToUse}` } }
             );
             if (res.ok) {
@@ -2511,13 +2514,17 @@ Deno.serve(async (req) => {
                   const code = item.code || res.status;
                   
                   if (code === 200 && b?.id) {
-                    const isCatalog = b.catalog_listing === true || !!b.catalog_product_id;
+                    const isCatalog = b.catalog_listing === true || 
+                                     !!b.catalog_product_id || 
+                                     !!b.catalog_id || 
+                                     (Array.isArray(b.tags) && b.tags.includes('catalog_listing'));
                     
                     // Log detalhado para diagnóstico
                     console.log(`[listing_types] MLB ${b.id}:`, JSON.stringify({
                       catalog_listing: b.catalog_listing,
                       catalog_id: b.catalog_id,
                       catalog_product_id: b.catalog_product_id,
+                      tags: b.tags,
                       is_catalog: isCatalog
                     }));
 
@@ -2525,7 +2532,7 @@ Deno.serve(async (req) => {
                       catalog: isCatalog,
                       listingType: isCatalog ? 'Catálogo' : 'Tradicional',
                     };
-                    if (isCatalog) console.log(`[listing_types] IDENTIFICADO COMO CATALOGO: ${b.id} (listing: ${b.catalog_listing}, prod: ${b.catalog_product_id})`);
+                    if (isCatalog) console.log(`[listing_types] IDENTIFICADO COMO CATALOGO: ${b.id} (listing: ${b.catalog_listing}, prod: ${b.catalog_product_id}, id: ${b.catalog_id}, tags: ${b.tags?.join(',')})`);
                   } else if (b?.id) {
                     console.warn(`[listing_types] MLB ${b.id} returned code ${code}`);
                   }
