@@ -90,6 +90,7 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
     { key: 'plataforma', label: 'Plataforma', obrigatorio: true },
     { key: 'idAnuncio', label: 'ID Anúncio', obrigatorio: true },
     { key: 'sku', label: 'SKU' },
+    { key: 'listingType', label: 'Tipo' },
     { key: 'titulo', label: 'Título' },
     { key: 'preco', label: 'Preço' },
     { key: 'visitas', label: 'Visitas (Ontem)' },

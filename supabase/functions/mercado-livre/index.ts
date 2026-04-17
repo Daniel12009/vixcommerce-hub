@@ -3,6 +3,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 const ML_API = 'https://api.mercadolibre.com';
@@ -1765,12 +1767,12 @@ Deno.serve(async (req) => {
       }
 
       // PASSO 2: detalhes (chunks de 20)
-      const detalhes: Record<string, { sku: string; titulo: string; link: string; preco: number }> = {};
+      const detalhes: Record<string, { sku: string; titulo: string; link: string; preco: number; listingType: string }> = {};
       for (let i = 0; i < itemIds.length; i += 20) {
         const chunk = itemIds.slice(i, i + 20).join(',');
         try {
-          let res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,title,permalink,seller_custom_field,attributes`, { headers: { 'Authorization': `Bearer ${token}` } });
-          if (res.status === 401) { token = await refreshToken(account); res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,title,permalink,seller_custom_field,attributes`, { headers: { 'Authorization': `Bearer ${token}` } }); }
+          let res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,title,permalink,seller_custom_field,catalog_listing,listing_type_id,attributes`, { headers: { 'Authorization': `Bearer ${token}` } });
+          if (res.status === 401) { token = await refreshToken(account); res = await fetch(`${ML_API}/items?ids=${chunk}&attributes=id,title,permalink,seller_custom_field,catalog_listing,listing_type_id,attributes`, { headers: { 'Authorization': `Bearer ${token}` } }); }
           if (!res.ok) continue;
           const batchData = await res.json();
           for (const item of batchData) {
@@ -1782,7 +1784,9 @@ Deno.serve(async (req) => {
               sku = attrSku?.value_name || '';
             }
             if (!sku) sku = 'SEM_SKU';
-            detalhes[b.id] = { sku, titulo: b.title || '', link: b.permalink || '', preco: 0 };
+            
+            const listingType = (b.catalog_listing === true) ? 'Catálogo' : 'Tradicional';
+            detalhes[b.id] = { sku, titulo: b.title || '', link: b.permalink || '', preco: 0, listingType };
           }
         } catch { /* continua */ }
       }
@@ -1798,28 +1802,41 @@ Deno.serve(async (req) => {
         } catch { /* ignora */ }
       }));
 
-      // PASSO 3: visitas
+      // PASSO 3: visitas (batch em blocos de 50 para performance e evitar timeout)
       const date_from_str = dateFrom.slice(0, 10);
       const date_to_str = dateTo.slice(0, 10);
       const visitas: Record<string, number> = {};
-      for (let i = 0; i < itemIds.length; i += 20) {
-        const batch = itemIds.slice(i, i + 20);
-        await Promise.all(batch.map(async (mlb) => {
-          try {
-            const url = `${ML_API}/items/visits?ids=${mlb}&date_from=${date_from_str}&date_to=${date_to_str}`;
-            let res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (res.status === 401) { token = await refreshToken(account); res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }); }
-            if (!res.ok) { visitas[mlb] = 0; return; }
+      
+      const BATCH_VISITS = 50; 
+      for (let i = 0; i < itemIds.length; i += BATCH_VISITS) {
+        const batch = itemIds.slice(i, i + BATCH_VISITS);
+        try {
+          const url = `${ML_API}/items/visits?ids=${batch.join(',')}&date_from=${date_from_str}&date_to=${date_to_str}`;
+          let res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+          if (res.status === 401) { token = await refreshToken(account); res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }); }
+          
+          if (res.ok) {
             const dados = await res.json();
+            // A API de visitas retorna um array de objetos se mais de um ID for passado
             if (Array.isArray(dados)) {
-              visitas[mlb] = parseInt(String(dados[0]?.total_visits ?? 0)) || 0;
+              for (const entry of dados) {
+                const mlb = entry.item_id || Object.keys(entry)[0]; // Pode variar dependendo da versão/região
+                visitas[mlb] = parseInt(String(entry.total_visits ?? 0)) || 0;
+              }
             } else if (dados && typeof dados === 'object') {
-              visitas[mlb] = parseInt(String(dados.total_visits ?? dados[mlb]?.total_visits ?? 0)) || 0;
-            } else {
-              visitas[mlb] = 0;
+              // Caso retorne objeto mapeado por ID
+              for (const mlb of batch) {
+                const total = dados[mlb]?.total_visits ?? dados.total_visits ?? 0;
+                visitas[mlb] = parseInt(String(total)) || 0;
+              }
             }
-          } catch { visitas[mlb] = 0; }
-        }));
+          }
+        } catch (e) {
+          console.error(`[PERF] Erro ao buscar visitas batch ${i}:`, e);
+          batch.forEach(id => visitas[id] = 0);
+        }
+        // Pequena pausa para respeitar rate limits se houver muitos itens
+        if (itemIds.length > 200) await new Promise(r => setTimeout(r, 100));
       }
 
       // PASSO 4: vendas
@@ -1926,18 +1943,19 @@ Deno.serve(async (req) => {
       const dataRef = `${fmtDataRef(dateFrom)} a ${fmtDataRef(dateTo)}`;
       const rows: any[][] = [];
       for (const mlb of itemIds) {
-        const d = detalhes[mlb] || { sku: 'SEM_SKU', titulo: '', link: '', preco: 0 };
+        const d = detalhes[mlb] || { sku: 'SEM_SKU', titulo: '', link: '', preco: 0, listingType: 'Tradicional' };
         const v = visitas[mlb] || 0;
         const s = vendas[mlb] || { total: 0, canceladas: 0 };
         const conv = v > 0 ? s.total / v : 0;
         const precoFmt = formatarPreco(d.preco || 0);
         const convFmt = `${(conv * 100).toFixed(2).replace('.', ',')}%`;
-        rows.push(['Mercado Livre', mlb, d.sku, d.titulo, precoFmt, v, s.total, s.canceladas, convFmt, d.link, account.nome, dataRef]);
+        // Adicionando 'Tipo' na 4ª coluna (índice 3)
+        rows.push(['Mercado Livre', mlb, d.sku, d.listingType, d.titulo, precoFmt, v, s.total, s.canceladas, convFmt, d.link, account.nome, dataRef]);
       }
 
       // PASSO 6: escrever
       if (rows.length > 0) {
-        const header = ['Plataforma', 'ID Anúncio', 'SKU', 'Título', 'Preço', 'Visitas', 'Vendas', 'Canceladas', 'Conversão %', 'Link', 'Conta', 'Data Ref'];
+        const header = ['Plataforma', 'ID Anúncio', 'SKU', 'Tipo', 'Título', 'Preço', 'Visitas', 'Vendas', 'Canceladas', 'Conversão %', 'Link', 'Conta', 'Data Ref'];
         let abaTemHeader = false;
         try {
           const gsUrl = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))! + '/functions/v1/google-sheets';
@@ -1954,8 +1972,8 @@ Deno.serve(async (req) => {
         } catch { /* assume vazia */ }
 
         const finalValues = abaTemHeader ? rows : [header, ...rows];
-        // For PERF, 'Data Ref' is at column 11 (zero-indexed)
-        await invokeSheets(sheetId, `${nomeAba}!A:L`, finalValues, 'dedup_write', 11);
+        // For PERF, 'Data Ref' is at column 12 (now zero-indexed 12 because we added 'Tipo')
+        await invokeSheets(sheetId, `${nomeAba}!A:M`, finalValues, 'dedup_write', 12);
       }
 
       const msg = `Performance ${account.nome}: ${rows.length} itens em ${nomeAba}`;
@@ -2439,7 +2457,7 @@ Deno.serve(async (req) => {
     // ─── get_listing_types: batch-fetch catalog_listing for performance items ───
     if (action === 'get_listing_types') {
       try {
-        const { item_ids, account_id } = body;
+        const { item_ids, account_id, force_refresh } = body;
         if (!Array.isArray(item_ids) || item_ids.length === 0) {
           return new Response(JSON.stringify({ types: {} }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -2457,24 +2475,20 @@ Deno.serve(async (req) => {
           const accountRes = await supabaseFetch(`/ml_accounts?ativo=eq.true&limit=1`);
           const accts = await accountRes.json();
           if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
-          if (!Array.isArray(accts)) throw new Error('Query ml_accounts failed: ' + JSON.stringify(accts));
         }
         if (!tokenToUse) throw new Error('No active ML account found');
 
         // Load existing cache from app_data
         const cacheRes = await supabaseFetch(`/app_data?data_key=eq.ml_listing_types_cache&limit=1`);
         const cacheRows = await cacheRes.json();
-        if (!Array.isArray(cacheRows)) {
-            console.error('app_data issue: ', cacheRows);
-        }
         const cachedTypes: Record<string, { catalog: boolean; listingType: string }> = 
           (Array.isArray(cacheRows) && cacheRows[0]?.data_value) ? cacheRows[0].data_value as any : {};
 
-        // Determine which IDs are missing from cache
-        const missing = item_ids.filter(id => !(id in cachedTypes));
+        // Determine which IDs to fetch
+        const missing = force_refresh ? item_ids : item_ids.filter(id => !(id in cachedTypes));
 
-        // Batch fetch in groups of 20
-        const BATCH = 20;
+        // Batch fetch in groups of 50
+        const BATCH = 50;
         for (let i = 0; i < missing.length; i += BATCH) {
           const batch = missing.slice(i, i + BATCH);
           try {
@@ -2494,7 +2508,7 @@ Deno.serve(async (req) => {
                 }
               }
             } else {
-              throw new Error(`ML API Error in batch: ${res.status}`);
+              console.warn(`[listing_types] ML API Error batch index ${i}: ${res.status}`);
             }
           } catch (e) {
             console.error('[listing_types] batch error', e);

@@ -147,11 +147,11 @@ export function AtualizarDadosPage() {
     setListingTypesLoading(true);
     try {
       const { data } = await supabase.functions.invoke('mercado-livre', {
-        body: { action: 'get_listing_types', item_ids: [...new Set(itemIds)] },
+        body: { action: 'get_listing_types', item_ids: [...new Set(itemIds)], force_refresh: true },
       });
       if (data?.types) {
         setListingTypeMap(data.types);
-        toast.success(`Tipos atualizados! ${data.updated ?? 0} novos anúncios identificados.`);
+        toast.success(`Tipos validados com sucesso! ${Object.keys(data.types || {}).length} anúncios verificados na API.`);
       }
     } catch (e: any) {
       toast.error(`Erro ao buscar tipos: ${e.message}`);
@@ -1388,9 +1388,14 @@ export function AtualizarDadosPage() {
                                 <td className="px-3 py-2 max-w-[200px] truncate" title={item.titulo}>{item.titulo}</td>
                                 <td className="px-3 py-2 text-center">
                                   {(() => {
-                                    const lt = listingTypeMap[item.idAnuncio];
-                                    if (!lt) return <span className="text-[10px] text-muted-foreground">—</span>;
-                                    return lt.catalog
+                                    // Prioritize listingType from sheet data, fallback to local cache
+                                    const typeSource = (item.listingType === 'Catálogo' || item.listingType === 'Tradicional') 
+                                      ? { catalog: item.listingType === 'Catálogo' }
+                                      : listingTypeMap[item.idAnuncio];
+                                      
+                                    if (!typeSource) return <span className="text-[10px] text-muted-foreground">—</span>;
+                                    
+                                    return typeSource.catalog
                                       ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400">Catálogo</span>
                                       : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400">Tradicional</span>;
                                   })()}
