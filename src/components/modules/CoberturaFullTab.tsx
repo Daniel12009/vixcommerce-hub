@@ -57,18 +57,14 @@ export function CoberturaFullTab() {
   const mergedData = useMemo<CoberturaRow[]>(() => {
     if (!estoqueFullItems) return [];
 
-    // VMD por SKU agregado de TODAS as contas (já que conta no estoque ≠ conta nas vendas)
-    // Estratégia: somar VMD por SKU global, depois distribuir/exibir por linha de estoque
+    // VMD agregada SOMENTE por SKU (somando todas as contas) — conta nas vendas ≠ conta no estoque
     const sqlVmdBySku = new Map<string, number>();
-    const sqlVmdByKey = new Map<string, number>(); // sku||contaNorm
     vmdSalesData.forEach(s => {
       const sku = s.sku.trim().toUpperCase();
-      const contaNorm = normalizeConta(s.conta);
       const vmd = (Number(s.quantidade) || 0) / 30;
       sqlVmdBySku.set(sku, (sqlVmdBySku.get(sku) || 0) + vmd);
-      const k = `${sku}||${contaNorm}`;
-      sqlVmdByKey.set(k, (sqlVmdByKey.get(k) || 0) + vmd);
     });
+    console.log('[CoberturaFull] VMD por SKU:', sqlVmdBySku.size, 'SKUs | exemplo:', Array.from(sqlVmdBySku.entries()).slice(0, 5));
 
     const stockMap = new Map<string, { full: number; conta: string; sku: string }>();
     estoqueFullItems.forEach(i => {
@@ -81,11 +77,7 @@ export function CoberturaFullTab() {
     });
 
     return Array.from(stockMap.values()).map(item => {
-      const contaNorm = normalizeConta(item.conta);
-      // tenta match por (sku+conta) primeiro; se não houver, usa total do SKU
-      const vmdAtual = sqlVmdByKey.get(`${item.sku}||${contaNorm}`)
-        ?? sqlVmdBySku.get(item.sku)
-        ?? 0;
+      const vmdAtual = sqlVmdBySku.get(item.sku) ?? 0;
       const vmdMeta = metasVMD[`${item.sku}||${item.conta}`] || metasVMD[item.sku] || 0;
       
       const coberturaAlvo = 30;
