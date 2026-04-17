@@ -2475,10 +2475,22 @@ Deno.serve(async (req) => {
           const accts = await accountRes.json();
           if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
         } else if (account_name) {
-          // Busca pelo nome da conta (ex: "GS", "DECARION")
-          const accountRes = await supabaseFetch(`/ml_accounts?nome=eq.${encodeURIComponent(account_name)}&limit=1`);
+          // Busca pelo nome da conta (ex: "GS", "DECARION") de forma insensível a maiúsculas/minúsculas
+          console.log(`[listing_types] Buscando conta: ${account_name}`);
+          const accountRes = await supabaseFetch(`/ml_accounts?nome=ilike.${encodeURIComponent(account_name)}&limit=1`);
           const accts = await accountRes.json();
-          if (Array.isArray(accts) && accts.length > 0) tokenToUse = accts[0].access_token;
+          if (Array.isArray(accts) && accts.length > 0) {
+            tokenToUse = accts[0].access_token;
+            console.log(`[listing_types] Conta encontrada: ${accts[0].nome} (ID: ${accts[0].id})`);
+          } else {
+            console.warn(`[listing_types] Conta "${account_name}" não encontrada no banco. Tentando busca parcial...`);
+            const fallbackRes = await supabaseFetch(`/ml_accounts?nome=ilike.*${encodeURIComponent(account_name)}*&limit=1`);
+            const fallbacks = await fallbackRes.json();
+            if (Array.isArray(fallbacks) && fallbacks.length > 0) {
+              tokenToUse = fallbacks[0].access_token;
+              console.log(`[listing_types] Conta encontrada (busca parcial): ${fallbacks[0].nome}`);
+            }
+          }
         }
 
         if (!tokenToUse) {
