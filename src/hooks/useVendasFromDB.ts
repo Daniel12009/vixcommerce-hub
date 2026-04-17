@@ -156,3 +156,41 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
 
   return { data, loading, error };
 }
+
+export function useVendasSKUEstoqueFromDB(dateIni: string, dateFim: string, contas?: string[]) {
+  const [data, setData] = useState<{ sku: string; conta: string; quantidade: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_marketplace_sku_estoque', {
+          p_data_ini: dateIni,
+          p_data_fim: dateFim,
+          p_contas: (contas && contas.length > 0 && contas[0] && contas[0] !== 'all') ? contas : null
+        });
+
+        if (rpcError) throw rpcError;
+
+        if (active) {
+          setData((rpcData as any[]) || []);
+          setError(null);
+        }
+      } catch (err: any) {
+        console.error('[useVendasSKUEstoqueFromDB] error:', err);
+        if (active) setError(err.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    if (dateIni && dateFim) fetchData();
+    return () => { active = false; };
+  }, [dateIni, dateFim, JSON.stringify(contas)]);
+
+  return { data, loading, error };
+}

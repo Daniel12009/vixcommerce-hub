@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Package, TrendingUp, TrendingDown, Target, Shield, Info, Pencil, Check, X } from 'lucide-react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
-import { useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
+import { useVendasSKUEstoqueFromDB } from '@/hooks/useVendasFromDB';
 import { formatNumber } from '@/lib/utils-vix';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { toast } from 'sonner';
@@ -24,7 +24,7 @@ export function CoberturaFullTab() {
   // Fetch real VMD from SQL for the last 30 days
   const dateFim = new Date().toISOString().split('T')[0];
   const dateIni = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const { data: vmdSalesData, loading: loadingSales } = useVendasSKUFromDB(dateIni, dateFim);
+  const { data: vmdSalesData, loading: loadingSales } = useVendasSKUEstoqueFromDB(dateIni, dateFim);
 
   // States for local overrides (persisted in localStorage)
   const [metasVMD, setMetasVMD] = useState<Record<string, number>>(() => {

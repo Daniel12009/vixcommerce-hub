@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     const dateFim = new Date().toISOString().split('T')[0];
 
     const { url, key } = await getSupabaseClient();
-    const rpcRes = await fetch(`${url}/rest/v1/rpc/get_marketplace_sku`, {
+    const rpcRes = await fetch(`${url}/rest/v1/rpc/get_marketplace_sku_estoque`, {
       method: 'POST',
       headers: {
         'apikey': key,
