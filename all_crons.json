@@ -1,0 +1,39 @@
+{
+  "jobs": [
+    {
+      "jobid": 14,
+      "jobname": "daily-sync-6am",
+      "schedule": "0 9 * * *",
+      "command": "\r\n  SELECT net.http_post(\r\n    url := 'https://mbxpkqhjapmhehdngfaj.supabase.co/functions/v1/daily-sync',\r\n    headers := jsonb_build_object(\r\n      'Content-Type', 'application/json',\r\n      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieHBrcWhqYXBtaGVoZG5nZmFqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzkzMjg5NiwiZXhwIjoyMDg5NTA4ODk2fQ.Z5urVHTv5oLodyYnnXM_RBALEl8Ji_5ld-HNtLjxLjQ'\r\n    ),\r\n    body := '{}'::jsonb\r\n  );\r\n  ",
+      "active": true
+    },
+    {
+      "jobid": 19,
+      "jobname": "estoque-snapshot-daily",
+      "schedule": "55 23 * * *",
+      "command": "SELECT net.http_post(url := current_setting('app.supabase_url') || '/functions/v1/estoque-snapshot', headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || current_setting('app.service_role_key')), body := '{}'::jsonb)",
+      "active": true
+    },
+    {
+      "jobid": 24,
+      "jobname": "ml-auto-answer",
+      "schedule": "1-59/10 * * * *",
+      "command": "\r\n    SELECT net.http_post(\r\n        url := 'https://mbxpkqhjapmhehdngfaj.supabase.co/functions/v1/ml-auto-answer',\r\n        headers := jsonb_build_object(\r\n            'Content-Type', 'application/json',\r\n            'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieHBrcWhqYXBtaGVoZG5nZmFqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzkzMjg5NiwiZXhwIjoyMDg5NTA4ODk2fQ.Z5urVHTv5oLodyYnnXM_RBALEl8Ji_5ld-HNtLjxLjQ'\r\n        ),\r\n        body := '{}'::jsonb\r\n    );\r\n    ",
+      "active": true
+    },
+    {
+      "jobid": 23,
+      "jobname": "ml-fetch-questions",
+      "schedule": "*/10 * * * *",
+      "command": "\r\n    SELECT net.http_post(\r\n        url := 'https://mbxpkqhjapmhehdngfaj.supabase.co/functions/v1/ml-fetch-questions',\r\n        headers := jsonb_build_object(\r\n            'Content-Type', 'application/json',\r\n            'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ieHBrcWhqYXBtaGVoZG5nZmFqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzkzMjg5NiwiZXhwIjoyMDg5NTA4ODk2fQ.Z5urVHTv5oLodyYnnXM_RBALEl8Ji_5ld-HNtLjxLjQ'\r\n        ),\r\n        body := '{}'::jsonb\r\n    );\r\n    ",
+      "active": true
+    },
+    {
+      "jobid": 22,
+      "jobname": "sync-ml-vendas",
+      "schedule": "50 18 * * *",
+      "command": "SELECT net.http_post(url := current_setting('app.supabase_url') || '/functions/v1/daily-sync', headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || current_setting('app.service_role_key')), body := '{\"module\": \"ml_vendas\"}'::jsonb)",
+      "active": true
+    }
+  ]
+}

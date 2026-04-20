@@ -35,10 +35,10 @@ Deno.serve(async (req: Request) => {
       const data = await shopeeFetch(account, '/api/v2/product/get_comment', {
         filter_type: '0',   // 0 = sem resposta do vendedor
         offset: '0',
-        limit: '50',
+        page_size: '50',
       });
 
-      for (const item of data?.response?.comment_list ?? []) {
+      for (const item of data?.response?.item_comment_list ?? []) {
         if (!item.comment || item.comment.trim() === '') continue;
 
         await supabase.from('shopee_questions_queue').upsert({

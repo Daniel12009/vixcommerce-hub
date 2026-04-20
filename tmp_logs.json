@@ -1,0 +1,47 @@
+[
+  {
+    "id": "41abc860-d469-4d06-9ea4-176247886ec4",
+    "run_date": "2026-04-20",
+    "module": "tiny_estoque",
+    "status": "running",
+    "message": "Iniciando...",
+    "started_at": "2026-04-20T10:00:02.023406+00:00",
+    "finished_at": null
+  },
+  {
+    "id": "312492a2-7619-4ac6-85d5-51fae2ced945",
+    "run_date": "2026-04-20",
+    "module": "ml_ads",
+    "status": "success",
+    "message": "ðŸ“‹ 3 contas ML ativas\nâœ… ðŸ“¢ ADS ML Via Flix: ADS Via Flix: 20 linhas em ADS, 1 resumos em ADS-TOTAL-ML\nâœ… ðŸ“¢ ADS ML GS Torneiras: ADS GS Torneiras: 21 linhas em ADS, 1 resumos em ADS-TOTAL-ML\nâœ… ðŸ“¢ ADS ML Decarion Torneiras: ADS Decarion Torneiras: 18 linhas em ADS, 1 resumos em ADS-TOTAL-ML",
+    "started_at": "2026-04-20T09:30:01.752276+00:00",
+    "finished_at": "2026-04-20T09:30:42.226+00:00"
+  },
+  {
+    "id": "9336b77f-1d92-4328-b938-7acfdde85874",
+    "run_date": "2026-04-20",
+    "module": "ml_v7",
+    "status": "success",
+    "message": "ðŸ“‹ 3 contas ML ativas\nâœ… ðŸ“ˆ V7 ML Via Flix: V7 Via Flix: 29 SKUs em V7-VIA FLIX\nâœ… ðŸ“ˆ V7 ML GS Torneiras: V7 GS Torneiras: 33 SKUs em V7-GS TORNEIRAS\nâœ… ðŸ“ˆ V7 ML Decarion Torneiras: V7 Decarion Torneiras: 26 SKUs em V7-DECARION TORNEIRAS",
+    "started_at": "2026-04-20T09:20:01.085805+00:00",
+    "finished_at": "2026-04-20T09:20:11.317+00:00"
+  },
+  {
+    "id": "47167c91-7f92-484b-9adc-a6f619b819a6",
+    "run_date": "2026-04-20",
+    "module": "ml_performance",
+    "status": "success",
+    "message": "ðŸ“‹ 3 contas ML ativas\nâœ… ðŸ“Š Performance ML Via Flix: Performance Via Flix: 44 itens em PERF-VIA FLIX\nâœ… ðŸ“Š Performance ML GS Torneiras: Performance GS Torneiras: 79 itens em PERF-GS TORNEIRAS\nâœ… ðŸ“Š Performance ML Decarion Torneiras: Performance Decarion Torneiras: 46 itens em PERF-DECARION TORNEIRAS",
+    "started_at": "2026-04-20T09:15:01.971538+00:00",
+    "finished_at": "2026-04-20T09:15:35.658+00:00"
+  },
+  {
+    "id": "e6a9e187-20ee-4b18-ab00-1ce65bfb54ae",
+    "run_date": "2026-04-20",
+    "module": "tiny_estoque",
+    "status": "running",
+    "message": "Iniciando...",
+    "started_at": "2026-04-20T09:01:31.75701+00:00",
+    "finished_at": null
+  }
+]

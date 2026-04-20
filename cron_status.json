@@ -1,0 +1,23 @@
+[
+  {
+    "jobid": 21,
+    "jobname": "ml-auto-answer",
+    "schedule": "1-59/10 * * * *",
+    "command": "\r\n    SELECT net.http_post(\r\n        url := current_setting('app.supabase_url') || '/functions/v1/ml-auto-answer',\r\n        headers := jsonb_build_object(\r\n            'Content-Type', 'application/json',\r\n            'Authorization', 'Bearer ' || current_setting('app.service_role_key')\r\n        ),\r\n        body := '{}'::jsonb\r\n    );\r\n    ",
+    "active": true
+  },
+  {
+    "jobid": 20,
+    "jobname": "ml-fetch-questions",
+    "schedule": "*/10 * * * *",
+    "command": "\r\n    SELECT net.http_post(\r\n        url := current_setting('app.supabase_url') || '/functions/v1/ml-fetch-questions',\r\n        headers := jsonb_build_object(\r\n            'Content-Type', 'application/json',\r\n            'Authorization', 'Bearer ' || current_setting('app.service_role_key')\r\n        ),\r\n        body := '{}'::jsonb\r\n    );\r\n    ",
+    "active": true
+  },
+  {
+    "jobid": 22,
+    "jobname": "sync-ml-vendas",
+    "schedule": "50 18 * * *",
+    "command": "SELECT net.http_post(url := current_setting('app.supabase_url') || '/functions/v1/daily-sync', headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || current_setting('app.service_role_key')), body := '{\"module\": \"ml_vendas\"}'::jsonb)",
+    "active": true
+  }
+]
