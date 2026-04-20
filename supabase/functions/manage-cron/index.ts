@@ -8,18 +8,15 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-// Move environment variable checks inside the handler to ensure OPTIONS preflight can always return success headers
 const getEnv = (name: string) => Deno.env.get(name) || '';
 
 function brtToCron(brtTime: string): string {
-  // brtTime = "HH:MM", convert BRT to UTC (+3h)
   const [h, m] = brtTime.split(':').map(Number);
   const utcH = (h + 3) % 24;
   return `${m} ${utcH} * * *`;
 }
 
 function cronToBrt(cron: string): string | null {
-  // cron = "M H * * *"
   const parts = cron.split(' ');
   if (parts.length < 5) return null;
   const m = parseInt(parts[0]);
@@ -40,25 +37,61 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // GET all current schedules
+    // ═══ LIST ALL JOBS ═══
+    // Retorna todos os jobs do pg_cron sem filtro (para a aba Cron Jobs em Configurações)
+    if (action === 'list_all_jobs') {
+      const { data, error } = await supabase.rpc('get_cron_jobs');
+      if (error) {
+        return new Response(JSON.stringify({ jobs: [], error: error.message }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ jobs: data ?? [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ═══ DELETE JOB ═══
+    // Remove um job específico do pg_cron pelo nome
+    if (action === 'delete_job') {
+      const { job_name } = body;
+      if (!job_name) {
+        return new Response(JSON.stringify({ error: 'job_name is required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { error } = await supabase.rpc('unschedule_cron_job', { job_name });
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, deleted: job_name }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ═══ GET SCHEDULES ═══
     if (action === 'get_schedules') {
       const { data, error } = await supabase.rpc('get_cron_jobs');
       if (error) {
-        // Fallback: query cron.job directly via REST won't work, use app_data
         const { data: appData } = await supabase
           .from('app_data')
           .select('data_value')
           .eq('data_key', 'daily_sync_schedules')
           .maybeSingle();
-        
-        return new Response(JSON.stringify({ 
-          schedules: appData?.data_value || {} 
+
+        return new Response(JSON.stringify({
+          schedules: appData?.data_value || {}
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Parse cron jobs into module schedules
       const schedules: Record<string, string> = {};
       if (data) {
         for (const job of data) {
@@ -75,7 +108,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // SET schedule for a module
+    // ═══ SET SCHEDULE ═══
     if (action === 'set_schedule') {
       const { module_key, time_brt, enabled } = body;
       if (!module_key) throw new Error('module_key required');
@@ -83,12 +116,10 @@ Deno.serve(async (req) => {
       const jobName = `sync-${module_key.replace(/_/g, '-')}`;
       const cronExpr = time_brt ? brtToCron(time_brt) : null;
 
-      // Unschedule existing job
       try {
         await supabase.rpc('unschedule_cron_job', { job_name: jobName });
       } catch {}
 
-      // If enabled and has time, create new schedule
       if (enabled && cronExpr && time_brt) {
         const sqlBody = `{"module": "${module_key}"}`;
         await supabase.rpc('schedule_cron_job', {
@@ -99,7 +130,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Save to app_data for persistence
       const { data: existing } = await supabase
         .from('app_data')
         .select('data_value')
@@ -124,7 +154,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // SYNC all schedules from app_data to cron (rebuild all jobs)
+    // ═══ SYNC ALL ═══
     if (action === 'sync_all') {
       const { data: modulesData } = await supabase
         .from('app_data')
@@ -147,7 +177,6 @@ Deno.serve(async (req) => {
         const jobName = `sync-${key.replace(/_/g, '-')}`;
         const isEnabled = modules[key] === true;
 
-        // Unschedule first
         try {
           await supabase.rpc('unschedule_cron_job', { job_name: jobName });
         } catch {}
@@ -167,13 +196,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Also handle verify job
       const verifyJobName = 'sync-verify';
       try {
         await supabase.rpc('unschedule_cron_job', { job_name: verifyJobName });
       } catch {}
 
-      // Find latest time and add 10 min for verify
       const times = Object.entries(schedules)
         .filter(([k]) => modules[k])
         .map(([_, t]) => t)

@@ -25,16 +25,23 @@ interface Template {
   id: string; title: string; keywords: string[]; answer_text: string;
   active: boolean; use_count: number; last_used_at: string | null;
 }
+type Marketplace = 'ml' | 'shopee';
 type MainTab = 'fila' | 'templates' | 'ia';
 type FilterTab = 'UNANSWERED' | 'ANSWERED' | 'ALL';
 
 // ─── AtendimentoPage ──────────────────────────────────────────────────
 export function AtendimentoPage() {
+  const [marketplace, setMarketplace] = useState<Marketplace>('ml');
   const [mainTab, setMainTab] = useState<MainTab>('fila');
+  const [shopeeTab, setShopeeTab] = useState<'questions' | 'chat'>('questions');
 
   // ML accounts for seller selection
   const [mlAccounts, setMlAccounts] = useState<any[]>([]);
   const [selectedSeller, setSelectedSeller] = useState('');
+
+  // Shopee accounts
+  const [shopeeAccounts, setShopeeAccounts] = useState<any[]>([]);
+  const [selectedShopee, setSelectedShopee] = useState('');
 
   useEffect(() => {
     supabase.from('ml_accounts').select('id, nome, seller_id').eq('ativo', true).order('nome')
@@ -42,52 +49,130 @@ export function AtendimentoPage() {
         setMlAccounts(data ?? []);
         if (data && data.length > 0) setSelectedSeller(String(data[0].seller_id || data[0].id));
       });
+
+    supabase.from('shopee_accounts').select('id, nome, shop_id').eq('ativo', true).order('nome')
+      .then(({ data }) => {
+        setShopeeAccounts(data ?? []);
+        if (data && data.length > 0) setSelectedShopee(String(data[0].shop_id));
+      });
   }, []);
 
   return (
     <div>
-      <PageHeader title="Atendimento" subtitle="Perguntas e respostas do Mercado Livre" />
+      <PageHeader title="Atendimento" subtitle="Perguntas e respostas automatizadas por IA" />
 
-      {/* Account selector + Tab nav */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        {mlAccounts.length > 1 && (
-          <select
-            value={selectedSeller}
-            onChange={e => setSelectedSeller(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs outline-none"
+      {/* ── Marketplace selector ── */}
+      <div className="flex items-center gap-2 mb-5">
+        {[
+          { id: 'ml' as Marketplace, label: 'Mercado Livre', emoji: '🛒' },
+          { id: 'shopee' as Marketplace, label: 'Shopee', emoji: '🛍️' },
+        ].map(({ id, label, emoji }) => (
+          <button
+            key={id}
+            onClick={() => setMarketplace(id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+              marketplace === id
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted'
+            }`}
           >
-            {mlAccounts.map(a => (
-              <option key={a.id} value={String(a.seller_id || a.id)}>{a.nome}</option>
-            ))}
-          </select>
-        )}
-        <div className="flex gap-1 bg-card border border-border rounded-lg p-1 ml-auto">
-          {([
-            { id: 'fila' as MainTab, label: 'Fila', icon: MessageCircle },
-            { id: 'templates' as MainTab, label: 'Templates', icon: LayoutTemplate },
-            { id: 'ia' as MainTab, label: 'IA de Treinamento', icon: Sparkles },
-          ]).map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setMainTab(id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                mainTab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
+            <span>{emoji}</span>
+            {label}
+          </button>
+        ))}
       </div>
 
-      {mainTab === 'fila' && <FilaTab
-        sellerId={selectedSeller}
-        accountId={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.id}
-        sellerName={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.nome}
-      />}
-      {mainTab === 'templates' && <TemplatesTab sellerId={selectedSeller} />}
-      {mainTab === 'ia' && <IATab sellerId={selectedSeller} />}
+      {/* ── ML: account selector + sub-tabs ── */}
+      {marketplace === 'ml' && (
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          {mlAccounts.length > 1 && (
+            <select
+              value={selectedSeller}
+              onChange={e => setSelectedSeller(e.target.value)}
+              className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs outline-none"
+            >
+              {mlAccounts.map(a => (
+                <option key={a.id} value={String(a.seller_id || a.id)}>{a.nome}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex gap-1 bg-card border border-border rounded-lg p-1 ml-auto">
+            {([
+              { id: 'fila' as MainTab, label: 'Fila', icon: MessageCircle },
+              { id: 'templates' as MainTab, label: 'Templates', icon: LayoutTemplate },
+              { id: 'ia' as MainTab, label: 'IA de Treinamento', icon: Sparkles },
+            ]).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setMainTab(id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  mainTab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Shopee: account selector + sub-tabs ── */}
+      {marketplace === 'shopee' && (
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          {shopeeAccounts.length > 1 && (
+            <select
+              value={selectedShopee}
+              onChange={e => setSelectedShopee(e.target.value)}
+              className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs outline-none"
+            >
+              {shopeeAccounts.map(a => (
+                <option key={a.id} value={String(a.shop_id)}>{a.nome}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex gap-1 bg-card border border-border rounded-lg p-1 ml-auto">
+            {([
+              { id: 'questions' as const, label: 'Perguntas de Produto', icon: MessageCircle },
+              { id: 'chat' as const, label: 'Chat Pós-Venda', icon: Send },
+            ]).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setShopeeTab(id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  shopeeTab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── ML tabs ── */}
+      {marketplace === 'ml' && mainTab === 'fila' && (
+        <FilaTab
+          sellerId={selectedSeller}
+          accountId={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.id}
+          sellerName={mlAccounts.find(a => String(a.seller_id || a.id) === selectedSeller)?.nome}
+        />
+      )}
+      {marketplace === 'ml' && mainTab === 'templates' && (
+        <TemplatesTab sellerId={selectedSeller} />
+      )}
+      {marketplace === 'ml' && mainTab === 'ia' && (
+        <IATab sellerId={selectedSeller} />
+      )}
+
+      {/* ── Shopee tabs ── */}
+      {marketplace === 'shopee' && shopeeTab === 'questions' && (
+        <ShopeeQuestionsTab shopId={selectedShopee} />
+      )}
+      {marketplace === 'shopee' && shopeeTab === 'chat' && (
+        <ShopeeChatTab shopId={selectedShopee} />
+      )}
     </div>
   );
 }
@@ -765,6 +850,268 @@ function IATab({ sellerId }: { sellerId: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Aba: Shopee Perguntas ────────────────────────────────────────────
+function ShopeeQuestionsTab({ shopId }: { shopId: string }) {
+  const [pending, setPending] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [forcingRobot, setForcingRobot] = useState(false);
+  const [importingHistory, setImportingHistory] = useState(false);
+  const [answerTexts, setAnswerTexts] = useState<Record<number, string>>({});
+  const [sendingAnswers, setSendingAnswers] = useState<Record<number, boolean>>({});
+
+  const fetchPending = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('shopee_questions_queue' as any)
+      .select('*')
+      .eq('shop_id', shopId)
+      .in('status', ['pending', 'suggested'])
+      .order('date_created', { ascending: true });
+    setPending(data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { if (shopId) fetchPending(); }, [shopId]);
+
+  const forceRobot = async () => {
+    setForcingRobot(true);
+    try {
+      await supabase.functions.invoke('shopee-fetch-questions');
+      await supabase.functions.invoke('shopee-auto-answer');
+      toast.success('Robô Shopee executado!');
+      await fetchPending();
+    } catch (e: any) {
+      toast.error('Erro: ' + e.message);
+    }
+    setForcingRobot(false);
+  };
+
+  const importHistory = async () => {
+    setImportingHistory(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('shopee-import-history', { body: {} });
+      if (error) throw error;
+      toast.success(`Histórico Shopee importado! ${data?.total_imported ?? 0} pergunta(s).`);
+    } catch (e: any) {
+      toast.error('Erro ao importar: ' + e.message);
+    }
+    setImportingHistory(false);
+  };
+
+  const handleReply = async (p: any) => {
+    const text = answerTexts[p.id]?.trim();
+    if (!text) return;
+    setSendingAnswers(prev => ({ ...prev, [p.id]: true }));
+    try {
+      toast.success('Em uma versão futura, esta função enviará a resposta à Shopee e atualizará a fila.');
+    } catch (e: any) {
+      toast.error('Erro ao responder: ' + e.message);
+    }
+    setSendingAnswers(prev => ({ ...prev, [p.id]: false }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Perguntas Shopee</h3>
+          <p className="text-xs text-muted-foreground">{pending.length} aguardando revisão ou resposta</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={fetchPending} disabled={loading} className="p-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={importHistory} disabled={importingHistory} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium hover:bg-muted/80 disabled:opacity-50">
+            <Download className="w-3.5 h-3.5" /> Importar Histórico Shopee
+          </button>
+          <button onClick={forceRobot} disabled={forcingRobot} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 text-xs font-medium hover:bg-emerald-500/20 disabled:opacity-50">
+            {forcingRobot ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />} Forçar Robô Agora
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {pending.map(p => (
+           <div key={p.id} className="bg-card border border-border rounded-xl p-4 overflow-hidden shadow-sm hover:shadow-md transition-shadow relative">
+           <div className="flex gap-4">
+             <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                 <p className="font-medium text-sm text-foreground">Comprador ({p.buyer_name || p.buyer_id})</p>
+                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                   <Clock className="w-3 h-3" />
+                   {new Date(p.date_created).toLocaleString()}
+                 </div>
+               </div>
+               <div className="bg-muted/30 rounded-r-xl rounded-bl-xl p-3 mb-4 inline-block max-w-[90%]">
+                 <p className="text-sm text-foreground whitespace-pre-wrap">{p.question_text}</p>
+               </div>
+               
+               {p.suggested_answer && (
+                 <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 mb-4 relative">
+                    <div className="flex items-center gap-1.5 mb-1 text-emerald-600">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider">Sugestão da IA</span>
+                    </div>
+                    <p className="text-xs text-foreground mt-1">{p.suggested_answer}</p>
+                 </div>
+               )}
+
+               <div className="flex items-end gap-2 mt-2">
+                 <div className="flex-1 relative">
+                   <textarea
+                     value={answerTexts[p.id] !== undefined ? answerTexts[p.id] : (p.suggested_answer || '')}
+                     onChange={e => setAnswerTexts({ ...answerTexts, [p.id]: e.target.value })}
+                     placeholder="Escreva sua resposta..."
+                     className="w-full text-xs min-h-[44px] max-h-[120px] bg-background border border-border rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y block pr-12 transition-all hover:bg-muted/30 focus:bg-background"
+                   />
+                 </div>
+                 <button
+                   onClick={() => handleReply(p)}
+                   disabled={sendingAnswers[p.id] || !(answerTexts[p.id] !== undefined ? answerTexts[p.id] : p.suggested_answer)?.trim()}
+                   className="h-[44px] flex items-center gap-1.5 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-all shrink-0"
+                 >
+                   {sendingAnswers[p.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                   Enviar
+                 </button>
+               </div>
+             </div>
+           </div>
+         </div>
+        ))}
+        {pending.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-border rounded-xl bg-card">
+              <CheckCircle className="w-8 h-8 text-emerald-500 mb-3" />
+              <p className="text-sm font-medium text-foreground">Fila zerada!</p>
+              <p className="text-xs text-muted-foreground mt-1">Todas as perguntas da Shopee foram respondidas.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Aba: Shopee Chat Pós Venda ───────────────────────────────────────
+function ShopeeChatTab({ shopId }: { shopId: string }) {
+  const [chats, setChats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [forcingRobot, setForcingRobot] = useState(false);
+  const [answerTexts, setAnswerTexts] = useState<Record<number, string>>({});
+  const [sendingAnswers, setSendingAnswers] = useState<Record<number, boolean>>({});
+
+  const fetchChats = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('shopee_chat_queue' as any)
+      .select('*')
+      .eq('shop_id', shopId)
+      .in('status', ['pending', 'suggested'])
+      .order('date_created', { ascending: true });
+    setChats(data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { if (shopId) fetchChats(); }, [shopId]);
+
+  const forceRobot = async () => {
+    setForcingRobot(true);
+    try {
+      await supabase.functions.invoke('shopee-fetch-chat');
+      await supabase.functions.invoke('shopee-auto-chat');
+      toast.success('Robô de chat Shopee executado!');
+      await fetchChats();
+    } catch (e: any) {
+      toast.error('Erro: ' + e.message);
+    }
+    setForcingRobot(false);
+  };
+
+  const handleReply = async (p: any) => {
+    const text = answerTexts[p.id]?.trim();
+    if (!text) return;
+    setSendingAnswers(prev => ({ ...prev, [p.id]: true }));
+    try {
+      toast.success('Em uma versão futura, esta função enviará a resposta à Shopee e atualizará a fila.');
+    } catch (e: any) {
+      toast.error('Erro ao responder: ' + e.message);
+    }
+    setSendingAnswers(prev => ({ ...prev, [p.id]: false }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Chat Pós-Venda Shopee</h3>
+          <p className="text-xs text-muted-foreground">{chats.length} conversas não lidas</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={fetchChats} disabled={loading} className="p-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={forceRobot} disabled={forcingRobot} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 border border-blue-500/30 text-xs font-medium hover:bg-blue-500/20 disabled:opacity-50">
+            {forcingRobot ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />} Forçar Robô de Chat
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {chats.map(p => (
+           <div key={p.id} className="bg-card border border-border rounded-xl p-4 overflow-hidden shadow-sm hover:shadow-md transition-shadow relative">
+           <div className="flex gap-4">
+             <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                 <span className="text-[10px] font-semibold tracking-wider uppercase text-blue-600 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">Pós-venda</span>
+                 <p className="font-medium text-sm text-foreground">{p.buyer_name}</p>
+                 {p.order_sn && <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded-md border border-border">Pedido {p.order_sn}</span>}
+               </div>
+               <div className="bg-muted/30 rounded-r-xl rounded-bl-xl p-3 mb-4 inline-block max-w-[90%] border-l-2 border-primary/40">
+                 <p className="text-sm text-foreground whitespace-pre-wrap">{p.message_text}</p>
+                 <p className="text-[10px] text-muted-foreground mt-1 text-right">{new Date(p.date_created).toLocaleString()}</p>
+               </div>
+               
+               {p.suggested_answer && (
+                 <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 mb-4 relative">
+                    <div className="flex items-center gap-1.5 mb-1 text-blue-600">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider">Sugestão da IA (Chat)</span>
+                    </div>
+                    <p className="text-xs text-foreground mt-1">{p.suggested_answer}</p>
+                 </div>
+               )}
+
+               <div className="flex items-end gap-2 mt-2">
+                 <div className="flex-1 relative">
+                   <textarea
+                     value={answerTexts[p.id] !== undefined ? answerTexts[p.id] : (p.suggested_answer || '')}
+                     onChange={e => setAnswerTexts({ ...answerTexts, [p.id]: e.target.value })}
+                     placeholder="Escreva sua resposta de Pós-Venda..."
+                     className="w-full text-xs min-h-[44px] max-h-[120px] bg-background border border-border rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y block pr-12 transition-all hover:bg-muted/30 focus:bg-background"
+                   />
+                 </div>
+                 <button
+                   onClick={() => handleReply(p)}
+                   disabled={sendingAnswers[p.id] || !(answerTexts[p.id] !== undefined ? answerTexts[p.id] : p.suggested_answer)?.trim()}
+                   className="h-[44px] flex items-center gap-1.5 px-4 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-all shrink-0"
+                 >
+                   {sendingAnswers[p.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                   Enviar
+                 </button>
+               </div>
+             </div>
+           </div>
+         </div>
+        ))}
+        {chats.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-border rounded-xl bg-card">
+              <CheckCircle className="w-8 h-8 text-blue-500 mb-3" />
+              <p className="text-sm font-medium text-foreground">Todos os chats respondidos!</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
