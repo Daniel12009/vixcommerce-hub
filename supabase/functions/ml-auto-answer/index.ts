@@ -336,40 +336,89 @@ serve(async (req) => {
         }
       } else {
         // Sem match: gerar sugestão com IA
-        log(`[BOT] No match (Score: ${bestScore}). Starting AI generation...`);
+        log(`[BOT] No match (Score: ${bestScore}). Starting AI generation...`)
 
-        // Buscar token do seller (para o contexto do item)
-        const { data: seller } = await supabase
+        log(`[BOT] Buscando contexto histórico do banco para o item ${question.item_id}...`)
+        let context = await getRecentAnswers(supabase, question.seller_id, question.item_id, log)
+
+        // Buscar token do seller para contexto do anúncio
+        const { data: sellerForItem } = await supabase
           .from('ml_accounts')
-          .select('access_token, id')
+          .select('access_token, refresh_token, id')
           .eq('seller_id', question.seller_id)
           .maybeSingle()
 
-        // Buscar contexto histórico do banco (sem depender do token ML)
-        log(`[BOT] Buscando contexto histórico do banco para o item ${question.item_id}...`);
-        let context = await getRecentAnswers(supabase, question.seller_id, question.item_id, log)
-
-        // Buscar dados do anúncio para dar contexto real à IA
         let itemContext = ''
-        if (seller?.access_token) {
-          itemContext = await getItemContext(question.item_id, seller.access_token, log)
+        if (sellerForItem?.access_token) {
+          itemContext = await getItemContext(question.item_id, sellerForItem.access_token, log)
           log(`[BOT] Contexto do anúncio: ${itemContext.length} chars`)
         }
 
         const suggestion = await generateAISuggestion(question.question_text, context, itemContext, log)
-        log(`[BOT] AI suggestion generated (length: ${suggestion?.length || 0})`);
-        
-        const { error: upErr } = await supabase.from('ml_questions_queue').update({
-          status: 'suggested',
-          match_template_id: bestTemplate?.id ?? null,
-          match_score: bestScore > 0 ? bestScore : null,
-          suggested_answer: suggestion || null,
-        }).eq('id', question.id)
+        log(`[BOT] AI suggestion generated (length: ${suggestion?.length || 0})`)
 
-        if (upErr) {
-          log(`[BOT] DB Update error: ${JSON.stringify(upErr)}`);
+        // Se bot ativo E gerou sugestão → envia automaticamente
+        if (botMode === 'active' && suggestion) {
+          log(`[BOT] Bot ativo, enviando sugestão de IA automaticamente...`)
+
+          const { data: sellerData } = await supabase
+            .from('ml_accounts')
+            .select('access_token, id')
+            .eq('seller_id', question.seller_id)
+            .maybeSingle()
+
+          const token = sellerData?.access_token
+          if (token) {
+            const mlRes = await sendAnswer(token, question.question_id, suggestion)
+            const responseTimeMin = Math.round(
+              (Date.now() - new Date(question.date_created).getTime()) / 60000
+            )
+
+            if (mlRes.ok) {
+              log(`[BOT] Sugestão de IA enviada com sucesso.`)
+              await supabase.from('ml_questions_queue').update({
+                status: 'auto_answered',
+                final_answer: suggestion,
+                suggested_answer: suggestion,
+                answered_at: new Date().toISOString(),
+              }).eq('id', question.id)
+
+              await supabase.from('ml_answers_log').insert({
+                question_id: question.question_id,
+                seller_id: question.seller_id,
+                answer_text: suggestion,
+                answer_type: 'ai_suggested',
+                response_time_min: responseTimeMin,
+              })
+
+              await supabase.from('ml_bot_config').update({
+                auto_count: (config?.auto_count || 0) + 1,
+              }).eq('seller_id', question.seller_id)
+
+              autoCount++
+            } else {
+              const err = await mlRes.json()
+              log(`[BOT] Erro ao enviar sugestão de IA: ${JSON.stringify(err)}`)
+              await supabase.from('ml_questions_queue').update({
+                status: 'error',
+                error_message: JSON.stringify(err),
+              }).eq('id', question.id)
+            }
+          } else {
+            log(`[BOT] Token não encontrado, salvando como sugestão.`)
+            await supabase.from('ml_questions_queue').update({
+              status: 'suggested',
+              suggested_answer: suggestion,
+            }).eq('id', question.id)
+            manualCount++
+          }
         } else {
-          log(`[BOT] Question ${question.id} successfully updated to 'suggested'.`);
+          // Modo learning ou sem sugestão → só salva para revisão manual
+          await supabase.from('ml_questions_queue').update({
+            status: 'suggested',
+            match_score: bestScore > 0 ? bestScore : null,
+            suggested_answer: suggestion || null,
+          }).eq('id', question.id)
           manualCount++
         }
       }
