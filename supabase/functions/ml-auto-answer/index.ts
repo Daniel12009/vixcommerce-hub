@@ -55,7 +55,88 @@ async function getRecentAnswers(
   }
 }
 
-async function generateAISuggestion(questionText: string, historicalContext: string, logFunc: (msg: string) => void): Promise<string> {
+async function getItemContext(
+  itemId: string,
+  token: string,
+  logFunc: (msg: string) => void
+): Promise<string> {
+  try {
+    logFunc(`[BOT] Buscando dados do anúncio ${itemId}...`)
+
+    // Busca principal: título, descrição curta, atributos e variações
+    const [itemRes, descRes] = await Promise.all([
+      fetch(`https://api.mercadolibre.com/items/${itemId}?attributes=title,short_description,attributes,variations`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch(`https://api.mercadolibre.com/items/${itemId}/description`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ])
+
+    const lines: string[] = []
+
+    if (itemRes.ok) {
+      const item = await itemRes.json()
+
+      if (item.title) {
+        lines.push(`Título: ${item.title}`)
+      }
+
+      // Atributos relevantes (cor, material, voltagem, dimensões, etc.)
+      if (item.attributes?.length) {
+        const ATTRS_RELEVANTES = new Set([
+          'COLOR', 'MAIN_COLOR', 'MATERIAL', 'VOLTAGE', 'WEIGHT',
+          'HEIGHT', 'WIDTH', 'LENGTH', 'DEPTH', 'BRAND', 'MODEL',
+          'FINISH_TYPE', 'ITEM_CONDITION', 'FLOW_RATE', 'POWER',
+        ])
+        const attrs = item.attributes
+          .filter((a: any) => ATTRS_RELEVANTES.has(a.id) && a.value_name)
+          .map((a: any) => `${a.name}: ${a.value_name}`)
+        if (attrs.length) {
+          lines.push(`\nAtributos do produto:\n${attrs.join('\n')}`)
+        }
+      }
+
+      // Variações disponíveis (ex: cores, tamanhos)
+      if (item.variations?.length) {
+        const varLines: string[] = []
+        for (const v of item.variations.slice(0, 10)) { // máximo 10 variações
+          const attrs = (v.attribute_combinations ?? [])
+            .map((a: any) => `${a.name}: ${a.value_name}`)
+            .join(', ')
+          if (attrs) varLines.push(`- ${attrs}`)
+        }
+        if (varLines.length) {
+          lines.push(`\nVariações disponíveis:\n${varLines.join('\n')}`)
+        }
+      }
+    } else {
+      logFunc(`[BOT] Erro ao buscar item ${itemId}: ${itemRes.status}`)
+    }
+
+    // Descrição do anúncio (texto livre do vendedor)
+    if (descRes.ok) {
+      const desc = await descRes.json()
+      const texto = (desc.plain_text || desc.text || '').trim()
+      if (texto) {
+        // Limita a 500 chars para não inflar o prompt
+        lines.push(`\nDescrição do anúncio:\n${texto.slice(0, 500)}${texto.length > 500 ? '...' : ''}`)
+      }
+    }
+
+    return lines.join('\n')
+  } catch (e: any) {
+    logFunc(`[BOT] Erro ao buscar contexto do anúncio: ${e.message}`)
+    return ''
+  }
+}
+
+async function generateAISuggestion(
+  questionText: string,
+  historicalContext: string,
+  itemContext: string,
+  logFunc: (msg: string) => void
+): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) {
     logFunc("[BOT] ANTHROPIC_API_KEY not found in env.");
@@ -78,17 +159,18 @@ async function generateAISuggestion(questionText: string, historicalContext: str
         max_tokens: 300,
         messages: [{
           role: 'user',
-          content: `Você é um assistente de vendas no Mercado Livre Brasil, especializado em produtos de casa e construção (torneiras, pias, suportes, chuveiros, iluminação). 
+          content: `Você é um assistente de vendas no Mercado Livre Brasil, especializado em produtos de casa e construção (torneiras, pias, suportes, chuveiros, iluminação).
 
 Instruções:
 1. Responda de forma direta, profissional e gentil.
 2. Máximo 300 caracteres.
-3. Se o cliente pedir outros produtos, links ou variações que você não tem certeza, sugira que ele acesse 'Ver mais dados deste vendedor' para conferir nosso catálogo completo no Mercado Livre.
+3. Use SOMENTE texto puro. NUNCA use Markdown, asteriscos, negrito, itálico, emojis ou qualquer formatação especial. O texto será exibido diretamente ao cliente no Mercado Livre.
+4. Baseie sua resposta nas informações reais do produto abaixo. Se a informação não estiver disponível, sugira que o cliente acesse "Ver mais dados deste vendedor" para conferir o catálogo completo.
 
-${historicalContext ? `Baseie-se nestas respostas anteriores para manter o tom:\n\n${historicalContext}\n\n` : ''}
-Pergunta do Cliente: ${questionText}`,
+${itemContext ? `=== DADOS DO PRODUTO ===\n${itemContext}\n========================\n\n` : ''}${historicalContext ? `=== RESPOSTAS ANTERIORES (tom de referência) ===\n${historicalContext}\n================================================\n\n` : ''}Pergunta do Cliente: ${questionText}`,
         }],
       }),
+
     })
     
     if (res.ok) {
@@ -256,11 +338,25 @@ serve(async (req) => {
         // Sem match: gerar sugestão com IA
         log(`[BOT] No match (Score: ${bestScore}). Starting AI generation...`);
 
+        // Buscar token do seller (para o contexto do item)
+        const { data: seller } = await supabase
+          .from('ml_accounts')
+          .select('access_token, id')
+          .eq('seller_id', question.seller_id)
+          .maybeSingle()
+
         // Buscar contexto histórico do banco (sem depender do token ML)
         log(`[BOT] Buscando contexto histórico do banco para o item ${question.item_id}...`);
         let context = await getRecentAnswers(supabase, question.seller_id, question.item_id, log)
 
-        const suggestion = await generateAISuggestion(question.question_text, context, log)
+        // Buscar dados do anúncio para dar contexto real à IA
+        let itemContext = ''
+        if (seller?.access_token) {
+          itemContext = await getItemContext(question.item_id, seller.access_token, log)
+          log(`[BOT] Contexto do anúncio: ${itemContext.length} chars`)
+        }
+
+        const suggestion = await generateAISuggestion(question.question_text, context, itemContext, log)
         log(`[BOT] AI suggestion generated (length: ${suggestion?.length || 0})`);
         
         const { error: upErr } = await supabase.from('ml_questions_queue').update({
