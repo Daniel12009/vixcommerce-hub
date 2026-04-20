@@ -82,16 +82,11 @@ async function getItemContext(
         lines.push(`Título: ${item.title}`)
       }
 
-      // Atributos relevantes (cor, material, voltagem, dimensões, etc.)
       if (item.attributes?.length) {
-        const ATTRS_RELEVANTES = new Set([
-          'COLOR', 'MAIN_COLOR', 'MATERIAL', 'VOLTAGE', 'WEIGHT',
-          'HEIGHT', 'WIDTH', 'LENGTH', 'DEPTH', 'BRAND', 'MODEL',
-          'FINISH_TYPE', 'ITEM_CONDITION', 'FLOW_RATE', 'POWER',
-        ])
         const attrs = item.attributes
-          .filter((a: any) => ATTRS_RELEVANTES.has(a.id) && a.value_name)
+          .filter((a: any) => a.value_name && a.value_name.trim() !== '')
           .map((a: any) => `${a.name}: ${a.value_name}`)
+        
         if (attrs.length) {
           lines.push(`\nAtributos do produto:\n${attrs.join('\n')}`)
         }
@@ -119,8 +114,8 @@ async function getItemContext(
       const desc = await descRes.json()
       const texto = (desc.plain_text || desc.text || '').trim()
       if (texto) {
-        // Limita a 500 chars para não inflar o prompt
-        lines.push(`\nDescrição do anúncio:\n${texto.slice(0, 500)}${texto.length > 500 ? '...' : ''}`)
+        // Aumentado o limite para 1500 chars 
+        lines.push(`\nDescrição do anúncio:\n${texto.slice(0, 1500)}${texto.length > 1500 ? '...' : ''}`)
       }
     }
 
@@ -351,7 +346,7 @@ serve(async (req) => {
         let itemContext = ''
         if (sellerForItem?.access_token) {
           itemContext = await getItemContext(question.item_id, sellerForItem.access_token, log)
-          log(`[BOT] Contexto do anúncio: ${itemContext.length} chars`)
+          log(`[BOT] Item context completo:\n${itemContext}`)
         }
 
         const suggestion = await generateAISuggestion(question.question_text, context, itemContext, log)
