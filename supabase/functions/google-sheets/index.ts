@@ -159,7 +159,22 @@ Deno.serve(async (req) => {
         filtered = dataRows.filter(row => String(row[dateColumn] ?? '') !== targetDate);
       }
 
-      const combined = [header, ...filtered, ...newRows];
+      // Colunas que devem ser sempre tratadas como texto puro:
+      // Índice 2 = coluna C = Data Criação  ('DD/MM/YYYY)
+      // Índice 3 = coluna D = Data Fechamento ('DD/MM/YYYY)
+      // Índice 4 = coluna E = ID Pedido ('2000007890123456) — número grande → notação científica sem o apóstrofo
+      // O Sheets não retorna o apóstrofo na leitura FORMATTED_VALUE, então precisamos recolocar nas linhas relidas.
+      const TEXT_FORCE_COLUMNS = new Set([2, 3, 4]);
+      const reprotectRow = (row: any[]): any[] =>
+        row.map((cell, colIdx) => {
+          if (!TEXT_FORCE_COLUMNS.has(colIdx)) return cell;
+          const s = String(cell ?? '').trim();
+          if (!s) return cell;
+          return s.startsWith("'") ? s : `'${s}`;
+        });
+
+      const reprotectedFiltered = filtered.map(reprotectRow);
+      const combined = [header, ...reprotectedFiltered, ...newRows];
       // Write back with USER_ENTERED so text/number types are preserved correctly
       const writeRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
         method: 'PUT',

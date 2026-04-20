@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileSpreadsheet, Users, Key, Wifi, Loader2, CheckCircle, PlugZap, Zap } from 'lucide-react';
+import { FileSpreadsheet, Users, Key, Wifi, Loader2, CheckCircle, PlugZap, Zap, Clock } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserManagementPage } from '@/components/auth/UserManagementPage';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -9,6 +9,7 @@ import { PlanilhasConfigSection } from './PlanilhasConfigSection';
 import { ApiConfigSection } from './ApiConfigSection';
 import { MarketplaceSourceConfig } from './MarketplaceSourceConfig';
 import { SyncTestPanel } from './SyncTestPanel';
+import { CronJobsTab } from './CronJobsTab';
 
 export function ConfiguracoesPage() {
   const [tab, setTab] = useState('planilhas');
@@ -29,6 +30,7 @@ export function ConfiguracoesPage() {
           {isAdmin && <TabsTrigger value="usuarios"><Users className="w-4 h-4 mr-1.5" /> Usuários</TabsTrigger>}
           <TabsTrigger value="fonte"><PlugZap className="w-4 h-4 mr-1.5" /> Fonte de Dados</TabsTrigger>
           <TabsTrigger value="sync"><Zap className="w-4 h-4 mr-1.5" /> Sync Teste</TabsTrigger>
+          {isAdmin && <TabsTrigger value="cron"><Clock className="w-4 h-4 mr-1.5" /> Cron Jobs</TabsTrigger>}
         </TabsList>
 
         {/* ═══ PLANILHAS TAB ═══ */}
@@ -59,6 +61,13 @@ export function ConfiguracoesPage() {
         <TabsContent value="sync">
           <SyncTestPanel />
         </TabsContent>
+
+        {/* ═══ CRON JOBS TAB (admin only) ═══ */}
+        {isAdmin && (
+          <TabsContent value="cron">
+            <CronJobsTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

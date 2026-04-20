@@ -14,20 +14,43 @@ function matchScore(questionText: string, keywords: string[]): number {
   return hits / keywords.length
 }
 
-async function getRecentAnswers(seller: any, itemId: string, logFunc: (msg: string) => void): Promise<string> {
+async function getRecentAnswers(
+  supabase: any,
+  sellerId: string,
+  itemId: string,
+  logFunc: (msg: string) => void
+): Promise<string> {
   try {
-    const res = await fetch(`https://api.mercadolibre.com/questions/search?item=${itemId}&status=ANSWERED&limit=15&api_version=4`, {
-      headers: { Authorization: `Bearer ${seller.access_token}` }
-    })
-    if (!res.ok) return ''
-    const data = await res.json()
-    const questions = (data.questions ?? [])
-      .filter((q: any) => q.text && q.answer?.text)
-      .map((q: any) => `P: ${q.text}\nR: ${q.answer.text}`)
+    // 1. Tenta buscar perguntas do mesmo item
+    const { data: itemHistory } = await supabase
+      .from('ml_questions_history')
+      .select('question_text, answer_text')
+      .eq('seller_id', sellerId)
+      .eq('item_id', itemId)
+      .order('date_created', { ascending: false })
+      .limit(10)
+
+    // 2. Se tiver menos de 5 do item, complementa com perguntas gerais do seller
+    let rows = itemHistory ?? []
+    if (rows.length < 5) {
+      const { data: sellerHistory } = await supabase
+        .from('ml_questions_history')
+        .select('question_text, answer_text')
+        .eq('seller_id', sellerId)
+        .neq('item_id', itemId)
+        .order('date_created', { ascending: false })
+        .limit(10 - rows.length)
+
+      rows = [...rows, ...(sellerHistory ?? [])]
+    }
+
+    if (!rows.length) return ''
+
+    return rows
+      .map((r: any) => `P: ${r.question_text}\nR: ${r.answer_text}`)
       .join('\n\n')
-    return questions
-  } catch (e) {
-    logFunc(`[BOT] Erro ao buscar histórico: ${e.message}`)
+  } catch (e: any) {
+    logFunc(`[BOT] Erro ao buscar histórico do banco: ${e.message}`)
     return ''
   }
 }
@@ -232,19 +255,10 @@ serve(async (req) => {
       } else {
         // Sem match: gerar sugestão com IA
         log(`[BOT] No match (Score: ${bestScore}). Starting AI generation...`);
-        
-        // Buscar token do seller para o histórico
-        const { data: seller } = await supabase
-          .from('ml_accounts')
-          .select('access_token, refresh_token, id')
-          .eq('seller_id', question.seller_id)
-          .maybeSingle()
 
-        let context = ''
-        if (seller?.access_token) {
-          log(`[BOT] Buscando contexto histórico para o item ${question.item_id}...`);
-          context = await getRecentAnswers(seller, question.item_id, log)
-        }
+        // Buscar contexto histórico do banco (sem depender do token ML)
+        log(`[BOT] Buscando contexto histórico do banco para o item ${question.item_id}...`);
+        let context = await getRecentAnswers(supabase, question.seller_id, question.item_id, log)
 
         const suggestion = await generateAISuggestion(question.question_text, context, log)
         log(`[BOT] AI suggestion generated (length: ${suggestion?.length || 0})`);

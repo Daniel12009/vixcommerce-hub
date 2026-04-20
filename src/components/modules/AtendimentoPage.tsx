@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, RefreshCw, Loader2, Clock, Send, Search, ChevronDown,
-  Bot, LayoutTemplate, Sparkles, Plus, X, Pencil, Trash2, CheckCircle,
+  Bot, LayoutTemplate, Sparkles, Plus, X, Pencil, Trash2, CheckCircle, Download,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { supabase } from '@/integrations/supabase/client';
@@ -100,6 +100,7 @@ function FilaTab({ sellerId, accountId, sellerName }: { sellerId: string; accoun
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [forcingRobot, setForcingRobot] = useState(false);
+  const [importingHistory, setImportingHistory] = useState(false);
   const [answerTexts, setAnswerTexts] = useState<Record<number, string>>({});
   const [sendingAnswers, setSendingAnswers] = useState<Record<number, boolean>>({});
 
@@ -136,6 +137,18 @@ function FilaTab({ sellerId, accountId, sellerName }: { sellerId: string; accoun
       toast.error('Erro ao forçar o robô: ' + (e.message || e));
     }
     setForcingRobot(false);
+  };
+
+  const importHistory = async () => {
+    setImportingHistory(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-import-history', { body: {} });
+      if (error) throw error;
+      toast.success(`Histórico importado! ${data?.total_imported ?? 0} pergunta(s) nova(s) salvas.`);
+    } catch (e: any) {
+      toast.error('Erro ao importar histórico: ' + (e.message || e));
+    }
+    setImportingHistory(false);
   };
 
   const { config, loading: botLoading, setMode, incrementManual } = useMLBotMode(sellerId);
@@ -237,6 +250,10 @@ function FilaTab({ sellerId, accountId, sellerName }: { sellerId: string; accoun
         <button onClick={forceRobot} disabled={forcingRobot || loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">
           {forcingRobot ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
           {forcingRobot ? 'Rodando...' : 'Forçar Robô Agora'}
+        </button>
+        <button onClick={importHistory} disabled={importingHistory} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 disabled:opacity-50 transition-colors">
+          {importingHistory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          {importingHistory ? 'Importando...' : 'Importar histórico ML'}
         </button>
         <div className="flex gap-1 bg-card border border-border rounded-lg p-1">
           {([
