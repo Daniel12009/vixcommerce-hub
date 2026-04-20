@@ -47,6 +47,7 @@ Deno.serve(async (req: Request) => {
           item_id: item.item_id,
           question_text: item.comment.trim(),
           buyer_id: item.buyer_id ?? null,
+          buyer_name: item.buyer_username ?? null,
           date_created: new Date(item.create_time * 1000).toISOString(),
           status: 'pending',
         }, { onConflict: 'question_id', ignoreDuplicates: true });

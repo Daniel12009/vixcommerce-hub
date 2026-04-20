@@ -865,14 +865,22 @@ function ShopeeQuestionsTab({ shopId }: { shopId: string }) {
 
   const fetchPending = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('shopee_questions_queue' as any)
-      .select('*')
-      .eq('shop_id', shopId)
-      .in('status', ['pending', 'suggested'])
-      .order('date_created', { ascending: true });
-    setPending(data ?? []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('shopee_questions_queue' as any)
+        .select('*')
+        .eq('shop_id', shopId)
+        .in('status', ['pending', 'suggested'])
+        .order('date_created', { ascending: true });
+      
+      if (error) throw error;
+      setPending(data ?? []);
+    } catch (e: any) {
+      console.error('Erro Shopee Queue:', e);
+      toast.error('Erro ao buscar perguntas Shopee: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { if (shopId) fetchPending(); }, [shopId]);
