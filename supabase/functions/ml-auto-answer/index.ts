@@ -253,9 +253,9 @@ serve(async (req) => {
 
       if (cErr) log(`[BOT] Error fetching config: ${JSON.stringify(cErr)}`);
       
-      const botMode = config?.mode ?? 'learning'
-      const minScore = config?.min_score ?? 0.70
-      log(`[BOT] Bot Mode: ${botMode}, Min Score: ${minScore}`);
+      const botMode = 'active' // Forçar modo ativo — sempre responder
+      const minScore = config?.min_score ?? 0.30 // Score mínimo baixo para aproveitar templates
+      log(`[BOT] Bot Mode: ${botMode} (forçado), Min Score: ${minScore}`);
 
       if (bestTemplate && bestScore >= minScore) {
         log(`[BOT] Match found! Template ID: ${bestTemplate.id}`);
@@ -352,9 +352,9 @@ serve(async (req) => {
         const suggestion = await generateAISuggestion(question.question_text, context, itemContext, log)
         log(`[BOT] AI suggestion generated (length: ${suggestion?.length || 0})`)
 
-        // Se bot ativo E gerou sugestão → envia automaticamente
-        if (botMode === 'active' && suggestion) {
-          log(`[BOT] Bot ativo, enviando sugestão de IA automaticamente...`)
+        // Sempre enviar automaticamente se gerou sugestão
+        if (suggestion) {
+          log(`[BOT] Enviando sugestão de IA automaticamente...`)
 
           const { data: sellerData } = await supabase
             .from('ml_accounts')
