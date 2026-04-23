@@ -177,7 +177,8 @@ export function ExpedicaoTab() {
       atrasados: [] as Shipment[],
       flex: [] as Shipment[],
       coletaMl: [] as Shipment[],
-      shopee: [] as Shipment[],
+      shopeeXpress: [] as Shipment[],
+      shopeeDireta: [] as Shipment[],
       outros: [] as Shipment[] // shein, amazon, tiny manual, etc
     };
 
@@ -229,7 +230,12 @@ export function ExpedicaoTab() {
         }
       } else if (s.plataforma === 'shopee') {
         outrosMarketplaces++;
-        grupos.shopee.push(s);
+        const logStr = (s.logisticType || '').toLowerCase();
+        if (logStr.includes('diret') || logStr.includes('direct')) {
+          grupos.shopeeDireta.push(s);
+        } else {
+          grupos.shopeeXpress.push(s);
+        }
       } else {
         // Tiny, Shein, TikTok, etc
         outrosMarketplaces++;
@@ -345,7 +351,7 @@ export function ExpedicaoTab() {
         <KpiCard title="Atrasados" value={stats.atrasados.toString()} icon={AlertTriangle} delay={50} valueColor="text-[hsl(var(--vix-danger))]" />
         <KpiCard title="ML Flex (Hoje)" value={stats.flexPendentes.toString()} icon={Clock} delay={100} valueColor="text-[hsl(var(--vix-warning))]" />
         <KpiCard title="ML Coleta/Correios" value={stats.coletaNormal.toString()} icon={Truck} delay={150} />
-        <KpiCard title="Outros (Shopee/Tiny)" value={stats.outrosMarketplaces.toString()} icon={Package} delay={200} />
+        <KpiCard title="Outros (Shopee/Tiny)" value={stats.outrosMarketplaces.toString()} icon={Package} delay={200} subtitle={`Xpress: ${stats.grupos.shopeeXpress.length} · Direta: ${stats.grupos.shopeeDireta.length}`} />
       </div>
 
       {/* Tabelas de Agrupamento */}
@@ -377,13 +383,21 @@ export function ExpedicaoTab() {
             emptyMsg="Nenhum pacote normal aguardando coleta ML."
           />
           <ShipmentTable 
-            title="Shopee" 
+            title="Shopee Xpress" 
             icon={Package} 
-            data={stats.grupos.shopee} 
+            data={stats.grupos.shopeeXpress} 
             colorClass="bg-[hsl(16,100%,60%,0.1)] text-[hsl(16,100%,50%)] border-[hsl(16,100%,60%,0.2)]"
-            emptyMsg="Nenhum pedido da Shopee pronto para envio."
+            emptyMsg="Nenhum pedido Shopee Xpress pendente."
           />
         </div>
+
+        <ShipmentTable 
+          title="Shopee Entrega Direta" 
+          icon={Truck} 
+          data={stats.grupos.shopeeDireta} 
+          colorClass="bg-[hsl(270,60%,55%,0.1)] text-[hsl(270,60%,55%)] border-[hsl(270,60%,55%,0.2)]"
+          emptyMsg="Nenhum pedido de entrega direta Shopee."
+        />
 
         {stats.grupos.outros.length > 0 && (
           <ShipmentTable 
