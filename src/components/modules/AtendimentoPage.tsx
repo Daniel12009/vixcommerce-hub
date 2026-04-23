@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, RefreshCw, Loader2, Clock, Send, Search, ChevronDown,
-  Bot, LayoutTemplate, Sparkles, Plus, X, Pencil, Trash2, CheckCircle, Download,
+  Bot, LayoutTemplate, Sparkles, Plus, X, Pencil, Trash2, CheckCircle, Download, Star,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +12,7 @@ import { useMLAnalysis } from '@/hooks/useMLAnalysis';
 import { BotModeBanner } from '@/components/ml/BotModeBanner';
 import { MLQuestionsQueue } from '@/components/ml/MLQuestionsQueue';
 import { CompetitorItemsManager } from '@/components/ml/CompetitorItemsManager';
+import { AvaliacoesTab } from '@/components/modules/AvaliacoesTab';
 
 // ─── Types ────────────────────────────────────────────────────────────
 interface Question {
@@ -26,14 +27,14 @@ interface Template {
   active: boolean; use_count: number; last_used_at: string | null;
 }
 type Marketplace = 'ml' | 'shopee';
-type MainTab = 'fila' | 'templates' | 'ia';
+type MainTab = 'fila' | 'templates' | 'ia' | 'avaliacoes';
 type FilterTab = 'UNANSWERED' | 'ANSWERED' | 'ALL';
 
 // ─── AtendimentoPage ──────────────────────────────────────────────────
 export function AtendimentoPage() {
   const [marketplace, setMarketplace] = useState<Marketplace>('ml');
   const [mainTab, setMainTab] = useState<MainTab>('fila');
-  const [shopeeTab, setShopeeTab] = useState<'questions' | 'chat'>('questions');
+  const [shopeeTab, setShopeeTab] = useState<'questions' | 'chat' | 'avaliacoes'>('questions');
 
   // ML accounts for seller selection
   const [mlAccounts, setMlAccounts] = useState<any[]>([]);
@@ -101,6 +102,7 @@ export function AtendimentoPage() {
               { id: 'fila' as MainTab, label: 'Fila', icon: MessageCircle },
               { id: 'templates' as MainTab, label: 'Templates', icon: LayoutTemplate },
               { id: 'ia' as MainTab, label: 'IA de Treinamento', icon: Sparkles },
+              { id: 'avaliacoes' as MainTab, label: 'Avaliações', icon: Star },
             ]).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -135,6 +137,7 @@ export function AtendimentoPage() {
             {([
               { id: 'questions' as const, label: 'Perguntas de Produto', icon: MessageCircle },
               { id: 'chat' as const, label: 'Chat Pós-Venda', icon: Send },
+              { id: 'avaliacoes' as const, label: 'Avaliações', icon: Star },
             ]).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -172,6 +175,14 @@ export function AtendimentoPage() {
       )}
       {marketplace === 'shopee' && shopeeTab === 'chat' && (
         <ShopeeChatTab shopId={selectedShopee} />
+      )}
+      {marketplace === 'shopee' && shopeeTab === 'avaliacoes' && (
+        <AvaliacoesTab plataforma="shopee" />
+      )}
+
+      {/* ── ML Avaliações ── */}
+      {marketplace === 'ml' && mainTab === 'avaliacoes' && (
+        <AvaliacoesTab plataforma="ml" />
       )}
     </div>
   );
