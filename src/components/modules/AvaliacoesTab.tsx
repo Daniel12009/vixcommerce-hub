@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Star, TrendingUp, TrendingDown, RefreshCw, Loader2, BarChart3, MessageSquare, X, Bot } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown, RefreshCw, Loader2, BarChart3, MessageSquare, X, Bot, ArrowUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
@@ -36,6 +36,12 @@ export function AvaliacoesTab({ plataforma }: { plataforma: 'ml' | 'shopee' }) {
   const [activeStar, setActiveStar] = useState<number>(1);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<{ summary: string; reviews: any[] } | null>(null);
+
+  // Ordenação da tabela
+  const [sortConfig, setSortConfig] = useState<{ key: keyof ReviewSnapshot; direction: 'asc' | 'desc' }>({
+    key: 'total_reviews',
+    direction: 'desc'
+  });
 
   const loadSnapshots = async () => {
     setLoading(true);
@@ -150,14 +156,29 @@ export function AvaliacoesTab({ plataforma }: { plataforma: 'ml' | 'shopee' }) {
         total: totalCount,
       }));
 
-    // Top items (sorted by total reviews desc)
-    const topItems = [...latest]
-      .filter(s => s.total_reviews > 0)
-      .sort((a, b) => b.total_reviews - a.total_reviews)
-      .slice(0, 20);
+    // Top items (sorted and limited)
+    let sortedItems = [...latest].filter(s => s.total_reviews > 0);
+    sortedItems.sort((a, b) => {
+      const aVal = a[sortConfig.key];
+      const bVal = b[sortConfig.key];
+      if (aVal === null || bVal === null) return 0;
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    
+    const topItems = sortedItems.slice(0, 50);
 
     return { totalReviews, avgRating, pct5, pctNeg, starDistribution, trendData, topItems, itemCount: latest.length };
-  }, [snapshots]);
+  }, [snapshots, sortConfig]);
+
+  const requestSort = (key: keyof ReviewSnapshot) => {
+    let direction: 'asc' | 'desc' = 'desc';
+    if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = 'asc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   const renderStars = (avg: number) => {
     const full = Math.floor(avg);
@@ -322,13 +343,69 @@ export function AvaliacoesTab({ plataforma }: { plataforma: 'ml' | 'shopee' }) {
                 <tr>
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Anúncio</th>
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground w-28">Conta</th>
-                  <th className="px-4 py-2 text-center font-medium text-muted-foreground w-24">Média</th>
-                  <th className="px-4 py-2 text-center font-medium text-muted-foreground w-20">Total</th>
-                  <th className="px-4 py-2 text-center font-medium text-muted-foreground w-16">5★</th>
-                  <th className="px-4 py-2 text-center font-medium text-muted-foreground w-16">4★</th>
-                  <th className="px-4 py-2 text-center font-medium text-muted-foreground w-16">3★</th>
-                  <th className="px-4 py-2 text-center font-medium text-muted-foreground w-16">2★</th>
-                  <th className="px-4 py-2 text-center font-medium text-muted-foreground w-16">1★</th>
+                  
+                  <th 
+                    className="px-4 py-2 text-center font-medium text-muted-foreground w-24 cursor-pointer hover:text-foreground transition-colors group"
+                    onClick={() => requestSort('rating_average')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      Média <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                    </div>
+                  </th>
+                  
+                  <th 
+                    className="px-4 py-2 text-center font-medium text-muted-foreground w-20 cursor-pointer hover:text-foreground transition-colors group"
+                    onClick={() => requestSort('total_reviews')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      Total <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                    </div>
+                  </th>
+
+                  <th 
+                    className="px-4 py-2 text-center font-medium text-emerald-500/80 w-16 cursor-pointer hover:text-emerald-500 transition-colors group"
+                    onClick={() => requestSort('stars_5')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      5★ <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                    </div>
+                  </th>
+                  
+                  <th 
+                    className="px-4 py-2 text-center font-medium text-lime-500/80 w-16 cursor-pointer hover:text-lime-500 transition-colors group"
+                    onClick={() => requestSort('stars_4')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      4★ <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                    </div>
+                  </th>
+                  
+                  <th 
+                    className="px-4 py-2 text-center font-medium text-amber-500/80 w-16 cursor-pointer hover:text-amber-500 transition-colors group"
+                    onClick={() => requestSort('stars_3')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      3★ <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                    </div>
+                  </th>
+                  
+                  <th 
+                    className="px-4 py-2 text-center font-medium text-orange-500/80 w-16 cursor-pointer hover:text-orange-500 transition-colors group"
+                    onClick={() => requestSort('stars_2')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      2★ <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                    </div>
+                  </th>
+                  
+                  <th 
+                    className="px-4 py-2 text-center font-medium text-red-500/80 w-16 cursor-pointer hover:text-red-500 transition-colors group"
+                    onClick={() => requestSort('stars_1')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      1★ <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
