@@ -32,7 +32,7 @@ ${reviewsText.slice(0, 15000)} /* Limite de segurança */`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20240620',
+        model: 'claude-sonnet-4-6',
         max_tokens: 400,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -42,12 +42,13 @@ ${reviewsText.slice(0, 15000)} /* Limite de segurança */`;
       const data = await res.json();
       return data.content?.[0]?.text ?? "Sem resumo.";
     } else {
-      console.error("Erro IA:", await res.text());
-      return "Erro ao gerar resumo pela IA.";
+      const errText = await res.text();
+      console.error("Erro IA:", errText);
+      return `Erro detalhado da IA: ${res.status} - ${errText}`;
     }
   } catch (e: any) {
     console.error("Exceção IA:", e);
-    return "Erro de conexão ao gerar resumo.";
+    return `Erro de conexão ao gerar resumo: ${e.message}`;
   }
 }
 
