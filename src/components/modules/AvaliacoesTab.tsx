@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Star, TrendingUp, TrendingDown, RefreshCw, Loader2, BarChart3, MessageSquare } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown, RefreshCw, Loader2, BarChart3, MessageSquare, X, Bot } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
@@ -30,6 +30,12 @@ export function AvaliacoesTab({ plataforma }: { plataforma: 'ml' | 'shopee' }) {
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
   const [days, setDays] = useState(30);
+
+  // Detalhes / Análise on-demand
+  const [selectedItem, setSelectedItem] = useState<ReviewSnapshot | null>(null);
+  const [activeStar, setActiveStar] = useState<number>(1);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisData, setAnalysisData] = useState<{ summary: string; reviews: any[] } | null>(null);
 
   const loadSnapshots = async () => {
     setLoading(true);
@@ -68,6 +74,29 @@ export function AvaliacoesTab({ plataforma }: { plataforma: 'ml' | 'shopee' }) {
       toast.error('Erro ao sincronizar: ' + e.message);
     } finally {
       setFetching(false);
+    }
+  };
+
+  const openItemDetails = (item: ReviewSnapshot) => {
+    setSelectedItem(item);
+    setActiveStar(1); // Default to 1 star (complaints)
+    analyzeReviews(item, 1);
+  };
+
+  const analyzeReviews = async (item: ReviewSnapshot, star: number) => {
+    setActiveStar(star);
+    setAnalysisLoading(true);
+    setAnalysisData(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-item-reviews', {
+        body: { item_id: item.item_id, plataforma: item.plataforma, conta: item.conta, rating: star }
+      });
+      if (error) throw error;
+      setAnalysisData(data);
+    } catch (e: any) {
+      toast.error('Erro ao analisar: ' + e.message);
+    } finally {
+      setAnalysisLoading(false);
     }
   };
 
@@ -304,7 +333,11 @@ export function AvaliacoesTab({ plataforma }: { plataforma: 'ml' | 'shopee' }) {
               </thead>
               <tbody>
                 {stats.topItems.map(s => (
-                  <tr key={s.item_id} className="border-b border-border hover:bg-muted/10 transition-colors">
+                  <tr 
+                    key={s.item_id} 
+                    className="border-b border-border hover:bg-muted/10 transition-colors cursor-pointer"
+                    onClick={() => openItemDetails(s)}
+                  >
                     <td className="px-4 py-3">
                       <p className="font-medium text-foreground truncate max-w-[300px]">{s.item_title || s.item_id}</p>
                       <p className="text-[10px] text-muted-foreground font-mono">{s.item_id}</p>
@@ -338,6 +371,108 @@ export function AvaliacoesTab({ plataforma }: { plataforma: 'ml' | 'shopee' }) {
           </div>
         )}
       </div>
+
+      {/* Modal de Detalhes / Análise da IA */}
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
+              <div>
+                <h3 className="font-semibold text-foreground line-clamp-1 pr-4">{selectedItem.item_title || selectedItem.item_id}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Analisando avaliações via IA • {selectedItem.plataforma.toUpperCase()} ({selectedItem.conta})
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedItem(null)}
+                className="p-1.5 hover:bg-muted rounded-md transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+              
+              {/* Star Tabs */}
+              <div className="flex bg-muted/30 p-1 rounded-lg w-fit mx-auto">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => analyzeReviews(selectedItem, star)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      activeStar === star 
+                        ? 'bg-background shadow-sm text-foreground' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    {star} <Star className={`w-3.5 h-3.5 ${activeStar === star ? 'fill-amber-400 text-amber-400' : ''}`} />
+                  </button>
+                ))}
+              </div>
+
+              {/* Connteudo */}
+              {analysisLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                  <Bot className="w-10 h-10 text-primary animate-pulse mb-4" />
+                  <p className="text-sm font-medium text-foreground">A IA está lendo as avaliações de {activeStar} estrela(s)...</p>
+                  <p className="text-xs text-muted-foreground mt-2">Extraindo os principais pontos e reclamações para você.</p>
+                </div>
+              ) : analysisData ? (
+                <div className="space-y-6 animate-fade-in">
+                  
+                  {/* Resumo IA */}
+                  <div className="bg-primary/10 border border-primary/20 rounded-xl p-5">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-primary/20 rounded-lg shrink-0 mt-0.5">
+                        <Bot className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-primary mb-2 flex items-center gap-2">
+                          Diagnóstico Inteligente ({activeStar} Estrela{activeStar > 1 ? 's' : ''})
+                        </h4>
+                        <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                          {analysisData.summary}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lista de Comentários */}
+                  <div>
+                    <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 px-1 flex items-center justify-between">
+                      Comentários Reais Recebidos
+                      <span className="bg-muted px-2 py-0.5 rounded-full text-[10px]">{analysisData.reviews.length} avaliações</span>
+                    </h5>
+                    
+                    {analysisData.reviews.length > 0 ? (
+                      <div className="space-y-3">
+                        {analysisData.reviews.map((rev, idx) => (
+                          <div key={idx} className="bg-muted/10 border border-border/50 rounded-lg p-3.5">
+                            {rev.title && <h6 className="font-medium text-sm text-foreground mb-1">{rev.title}</h6>}
+                            <p className="text-sm text-muted-foreground">{rev.content}</p>
+                            <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-border/30 text-[11px] text-muted-foreground/70 font-mono">
+                              <span>{new Date(rev.date).toLocaleDateString()}</span>
+                              {rev.buyer && <span>• {rev.buyer}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-8">Nenhum comentário em texto para exibir nesta nota.</p>
+                    )}
+                  </div>
+
+                </div>
+              ) : null}
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
