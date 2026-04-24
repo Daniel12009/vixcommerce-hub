@@ -349,6 +349,38 @@ export function DashboardPage() {
     [...topSkus].sort((a, b) => b.faturamento - a.faturamento).slice(0, 10)
   , [topSkus]);
 
+  // SKUs com VMD > 0 que ainda NÃO venderam hoje (oportunidades / alerta)
+  const skusSemVendaHoje = useMemo(() => {
+    const vendidosHoje = new Set<string>();
+    paidOrders.forEach(o => o.items.forEach(item => {
+      const sku = (item.sku || item.title || 'N/A').trim().toUpperCase();
+      vendidosHoje.add(sku);
+    }));
+
+    const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
+    (comprasItems || []).forEach((item: any) => {
+      if (item.sku && item.mediaVendaDiaria) {
+        const sku = item.sku.trim().toUpperCase();
+        vmdMap.set(sku, { vmd: item.mediaVendaDiaria, preco: item.preco || 0, nome: item.nome || sku });
+      }
+    });
+    (estoqueItems || []).forEach((item: any) => {
+      if (item.skuPrincipal && item.vmd) {
+        const sku = item.skuPrincipal.trim().toUpperCase();
+        const prev = vmdMap.get(sku);
+        vmdMap.set(sku, { vmd: item.vmd, preco: prev?.preco || 0, nome: item.nome || prev?.nome || sku });
+      }
+    });
+
+    const lista: { sku: string; vmd: number; vmdFaturamento: number; nome: string }[] = [];
+    vmdMap.forEach((v, sku) => {
+      if (v.vmd > 0 && !vendidosHoje.has(sku)) {
+        lista.push({ sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome });
+      }
+    });
+    return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
+  }, [paidOrders, comprasItems, estoqueItems]);
+
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
     [...paidOrders].sort((a, b) => new Date(b.date_created).getTime() - new Date(a.date_created).getTime()),
