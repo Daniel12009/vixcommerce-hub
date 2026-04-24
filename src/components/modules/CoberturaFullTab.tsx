@@ -186,7 +186,7 @@ export function CoberturaFullTab() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KpiCard title="VMD Total (30d SQL)" value={kpis.totalVmd.toFixed(1)} icon={Package} delay={0} />
+        <KpiCard title="VMD Total (15d SQL)" value={kpis.totalVmd.toFixed(1)} icon={Package} delay={0} />
         <KpiCard title="Oversales" value={String(kpis.oversales)} icon={TrendingUp} valueColor="text-[hsl(var(--vix-danger))]" delay={100} />
         <KpiCard title="Undersales" value={String(kpis.undersales)} icon={TrendingDown} valueColor="text-[hsl(var(--vix-warning))]" delay={200} />
         <KpiCard title="Objetivo Compra (60d)" value={formatNumber(kpis.totalSugerido)} icon={Target} delay={300} />
