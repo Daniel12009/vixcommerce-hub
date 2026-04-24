@@ -187,8 +187,8 @@ Deno.serve(async (req) => {
     let inserted = 0;
     let errors = 0;
     let lastErr = '';
-    for (let i = 0; i < records.length; i += BATCH) {
-      const chunk = records.slice(i, i + BATCH);
+    for (let i = 0; i < dedupRecords.length; i += BATCH) {
+      const chunk = dedupRecords.slice(i, i + BATCH);
       const insRes = await pgFetch('/vendas_items?on_conflict=numero_pedido,sku', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
