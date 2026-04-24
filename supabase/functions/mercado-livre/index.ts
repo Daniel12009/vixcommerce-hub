@@ -1685,6 +1685,7 @@ Deno.serve(async (req) => {
         await invokeSheets(sheetId, `${sheetTab}!A:S`, loteLinhas, 'dedup_write', 2);
       }
 
+      let dbStatus = `dbRows=${loteDbRows.length}`;
       if (loteDbRows.length > 0) {
         try {
           const resDb = await supabaseFetch('/vendas_items?on_conflict=numero_pedido,sku', {
@@ -1692,17 +1693,21 @@ Deno.serve(async (req) => {
             headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
             body: JSON.stringify(loteDbRows)
           });
+          const txt = await resDb.text();
           if (!resDb.ok) {
-             console.error('[VENDAS_ITEMS] upsert error:', await resDb.text());
+             console.error('[VENDAS_ITEMS] upsert error:', resDb.status, txt);
+             dbStatus += ` | DB_ERR_${resDb.status}: ${txt.slice(0,200)}`;
           } else {
              console.log('[VENDAS_ITEMS] upsert ok:', loteDbRows.length, 'linhas');
+             dbStatus += ` | DB_OK_${resDb.status}`;
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error('[SYNC VENDAS DB ML] Erro fatal no fetch do banco:', e);
+          dbStatus += ` | DB_THROW: ${e.message}`;
         }
       }
 
-      const msg = `ML Vendas ${account.nome}: ${loteLinhas.length} linhas em ${sheetTab} (${dateFrom})`;
+      const msg = `ML Vendas ${account.nome}: ${loteLinhas.length} linhas em ${sheetTab} (${dateFrom}) [${dbStatus}]`;
       console.log(`[SYNC] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: loteLinhas.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
