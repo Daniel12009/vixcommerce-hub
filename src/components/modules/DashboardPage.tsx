@@ -154,7 +154,7 @@ export function DashboardPage() {
         yesterday.setDate(yesterday.getDate() - 1);
         const dateStr = yesterday.toISOString().split('T')[0];
         
-        const { data: snap } = await supabase
+        const { data: snap } = await (supabase as any)
           .from('daily_sales_snapshots')
           .select('*')
           .eq('data_referencia', dateStr)
