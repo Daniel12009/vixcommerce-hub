@@ -40,8 +40,10 @@ export function CoberturaFullTab() {
   const { estoqueFullItems } = useSheetsData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // VMD baseada nos últimos 15 dias
+  const VMD_DIAS = 15;
   const dateFim = new Date().toISOString().split('T')[0];
-  const dateIni = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const dateIni = new Date(Date.now() - VMD_DIAS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const { data: vmdSalesData } = useVendasSKUEstoqueFromDB(dateIni, dateFim);
 
   const [metasVMD, setMetasVMD] = useState<Record<string, number>>(() => {
