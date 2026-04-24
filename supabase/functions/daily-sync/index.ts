@@ -1,8 +1,9 @@
 // sync_ads_db e sync_cmv_db habilitados - build 2026-04-15T11:20:13-03:00
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const SUPABASE_URL = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL')) || '';
-const SERVICE_KEY = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) || '';
+// PRIORIDADE: este projeto. EXTERNAL_DB_* só como fallback se SUPABASE_URL não existir.
+const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') || Deno.env.get('EXTERNAL_DB_URL')) || '';
+const SERVICE_KEY = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('EXTERNAL_DB_SERVICE_KEY')) || '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
