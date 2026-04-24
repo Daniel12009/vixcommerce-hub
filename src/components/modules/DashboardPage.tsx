@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
+import { useVendasSKUEstoqueFromDB } from '@/hooks/useVendasFromDB';
 import { MarketplaceTab } from './MarketplaceTab';
 import { FaturamentoTab } from './FaturamentoTab';
 
