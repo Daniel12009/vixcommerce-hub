@@ -40,8 +40,10 @@ export function CoberturaFullTab() {
   const { estoqueFullItems } = useSheetsData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // VMD baseada nos últimos 15 dias
+  const VMD_DIAS = 15;
   const dateFim = new Date().toISOString().split('T')[0];
-  const dateIni = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const dateIni = new Date(Date.now() - VMD_DIAS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const { data: vmdSalesData } = useVendasSKUEstoqueFromDB(dateIni, dateFim);
 
   const [metasVMD, setMetasVMD] = useState<Record<string, number>>(() => {
@@ -57,14 +59,18 @@ export function CoberturaFullTab() {
   const mergedData = useMemo<CoberturaRow[]>(() => {
     if (!estoqueFullItems) return [];
 
-    // VMD agregada SOMENTE por SKU (somando todas as contas) — conta nas vendas ≠ conta no estoque
+    // VMD por SKU+Conta E por SKU global (fallback quando contas não casam)
+    const sqlVmdBySkuConta = new Map<string, number>();
     const sqlVmdBySku = new Map<string, number>();
     vmdSalesData.forEach(s => {
       const sku = s.sku.trim().toUpperCase();
-      const vmd = (Number(s.quantidade) || 0) / 30;
+      const contaNorm = normalizeConta(s.conta);
+      const vmd = (Number(s.quantidade) || 0) / VMD_DIAS;
+      const k = `${sku}||${contaNorm}`;
+      sqlVmdBySkuConta.set(k, (sqlVmdBySkuConta.get(k) || 0) + vmd);
       sqlVmdBySku.set(sku, (sqlVmdBySku.get(sku) || 0) + vmd);
     });
-    console.log('[CoberturaFull] VMD por SKU:', sqlVmdBySku.size, 'SKUs | exemplo:', Array.from(sqlVmdBySku.entries()).slice(0, 5));
+    console.log('[CoberturaFull] VMD 15d:', sqlVmdBySku.size, 'SKUs |', sqlVmdBySkuConta.size, 'SKU+Conta');
 
     const stockMap = new Map<string, { full: number; conta: string; sku: string }>();
     estoqueFullItems.forEach(i => {
@@ -76,8 +82,20 @@ export function CoberturaFullTab() {
       stockMap.set(k, cur);
     });
 
+    // Detecta se um SKU aparece em múltiplas contas no estoque
+    const skuContasCount = new Map<string, number>();
+    Array.from(stockMap.values()).forEach(item => {
+      skuContasCount.set(item.sku, (skuContasCount.get(item.sku) || 0) + 1);
+    });
+
     return Array.from(stockMap.values()).map(item => {
-      const vmdAtual = sqlVmdBySku.get(item.sku) ?? 0;
+      const contaNorm = normalizeConta(item.conta);
+      const vmdPorConta = sqlVmdBySkuConta.get(`${item.sku}||${contaNorm}`);
+      const vmdGlobal = sqlVmdBySku.get(item.sku) ?? 0;
+      // Se SKU está em várias contas e tem match por conta -> usa por conta
+      // Senão (1 conta apenas, ou não casou conta) -> usa global
+      const multiContas = (skuContasCount.get(item.sku) || 1) > 1;
+      const vmdAtual = multiContas && vmdPorConta !== undefined ? vmdPorConta : vmdGlobal;
       const vmdMeta = metasVMD[`${item.sku}||${item.conta}`] || metasVMD[item.sku] || 0;
       
       const coberturaAlvo = 30;
@@ -168,7 +186,7 @@ export function CoberturaFullTab() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KpiCard title="VMD Total (30d SQL)" value={kpis.totalVmd.toFixed(1)} icon={Package} delay={0} />
+        <KpiCard title="VMD Total (15d SQL)" value={kpis.totalVmd.toFixed(1)} icon={Package} delay={0} />
         <KpiCard title="Oversales" value={String(kpis.oversales)} icon={TrendingUp} valueColor="text-[hsl(var(--vix-danger))]" delay={100} />
         <KpiCard title="Undersales" value={String(kpis.undersales)} icon={TrendingDown} valueColor="text-[hsl(var(--vix-warning))]" delay={200} />
         <KpiCard title="Objetivo Compra (60d)" value={formatNumber(kpis.totalSugerido)} icon={Target} delay={300} />
