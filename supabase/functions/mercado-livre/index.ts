@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+// build-tag: 2026-04-24-fix-vendas-items-v3
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
