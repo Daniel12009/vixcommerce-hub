@@ -9,10 +9,12 @@ const corsHeaders = {
 
 const ML_API = 'https://api.mercadolibre.com';
 
-// Supabase client to read ml_accounts table
+// Supabase client - PRIORIDADE: banco do projeto (Lovable Cloud).
+// EXTERNAL_DB_* fica como fallback APENAS se SUPABASE_URL não existir.
+// (Antes era o oposto — fazia o upsert ir para banco externo, deixando vendas_items vazio.)
 async function getSupabaseClient() {
-  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
-  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+  const url = (Deno.env.get('SUPABASE_URL') || Deno.env.get('EXTERNAL_DB_URL'))!;
+  const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('EXTERNAL_DB_SERVICE_KEY'))!;
   return { url, key };
 }
 
