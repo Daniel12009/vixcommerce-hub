@@ -18,8 +18,6 @@ Deno.serve(async (req) => {
 
     console.log('[Snapshot] Starting daily sales snapshot...');
 
-    // 1. Fetch orders from all platforms (today)
-    // We invoke the other edge functions directly
     const fetchFunc = async (name: string, action: string) => {
       const res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
         method: 'POST',
@@ -49,7 +47,6 @@ Deno.serve(async (req) => {
 
     console.log(`[Snapshot] Found ${allOrders.length} paid orders.`);
 
-    // 2. Aggregate by hour
     const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
     for (let h = 0; h <= 23; h++) {
       const label = `${String(h).padStart(2, '0')}h`;
@@ -59,8 +56,7 @@ Deno.serve(async (req) => {
     let totalFat = 0;
     allOrders.forEach(o => {
       const d = new Date(o.date_created);
-      // Adjust to SP time (assuming server is UTC)
-      d.setHours(d.getHours() - 3); 
+      d.setHours(d.getHours() - 3);
       const h = `${String(d.getHours()).padStart(2, '0')}h`;
       const cur = horaMap.get(h);
       if (cur) {
@@ -71,8 +67,7 @@ Deno.serve(async (req) => {
     });
 
     const vendasPorHora = Array.from(horaMap.values());
-    
-    // 3. Save to DB
+
     const spOffset = -3 * 60;
     const now = new Date();
     const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
