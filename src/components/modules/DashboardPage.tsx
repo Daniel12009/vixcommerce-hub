@@ -340,6 +340,9 @@ export function DashboardPage() {
       }
     });
 
+    // Source 3 (prioritário): VMD do SQL filtrada por conta
+    vmdSqlBySku.forEach((v, sku) => { if (v > 0) vmdMap.set(sku, v); });
+
     paidOrders.forEach(o => {
       o.items.forEach(item => {
         const rawSku = item.sku || item.title || 'N/A';
@@ -350,7 +353,6 @@ export function DashboardPage() {
           vendas: 0, 
           faturamento: 0, 
           vmd: vmdUnits,
-          // Estimate VMD revenue based on current item price if available
           vmdFaturamento: vmdUnits * (item.unit_price || 0)
         };
         cur.vendas += item.quantity;
@@ -359,7 +361,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, comprasItems, estoqueItems]);
+  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
