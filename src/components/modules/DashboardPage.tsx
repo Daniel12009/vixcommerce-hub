@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { RefreshCw, Filter, Clock, Globe, TrendingUp, DollarSign, Package, ShoppingCart } from 'lucide-react';
+import { RefreshCw, Filter, Clock, Globe, TrendingUp, DollarSign, Package, ShoppingCart, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Line } from 'recharts';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
