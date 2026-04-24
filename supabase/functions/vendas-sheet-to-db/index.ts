@@ -219,6 +219,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true,
       total_planilha: records.length,
+      total_dedup: dedupRecords.length,
       inserted,
       errors,
       truncate,
