@@ -96,11 +96,10 @@ export function CategoriasTab({ myItems, mySellerIds, loadingItems, callMarketDa
     setLoadingShare(cat.id);
     setExpanded(cat.id);
     try {
-      // Use first item's title as keyword, and category_id for scope
-      const firstItem = cat.items[0];
+      const fallbackCatId = cat.id !== 'unknown' ? cat.id : undefined;
       const result = await callMarketData('search_ranking', {
-        keyword: firstItem?.title?.slice(0, 50) || '',
-        category_id: cat.category_id || undefined,
+        keyword: '', // Empty keyword ensures we query the whole category
+        category_id: cat.category_id || fallbackCatId,
         limit: 50,
         my_seller_ids: mySellerIds,
       });

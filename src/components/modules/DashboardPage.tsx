@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ShoppingCart, DollarSign, Receipt, Package, RefreshCw, Globe, Clock, TrendingUp, Filter } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Line } from 'recharts';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
@@ -80,12 +79,14 @@ const getPlatformLabel = (p: string) => {
 // Module-level cache — survives component unmount/remount during navigation
 let _cachedOrders: DashOrder[] | null = null;
 let _cachedRefresh: string = '';
+let _cachedYesterday: any = null;
 let _refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 export function DashboardPage() {
   const [orders, setOrders] = useState<DashOrder[]>(_cachedOrders || []);
   const [loading, setLoading] = useState(!_cachedOrders);
   const [lastRefresh, setLastRefresh] = useState<string>(_cachedRefresh);
+  const [yesterdaySnapshot, setYesterdaySnapshot] = useState<any>(_cachedYesterday);
   const [error, setError] = useState<string | null>(null);
   const [filterPlataforma, setFilterPlataforma] = useState('all');
   const [filterCanal, setFilterCanal] = useState<CanalFilter>('all');
@@ -144,6 +145,25 @@ export function DashboardPage() {
       // Update state + module-level cache
       setOrders(allFetched);
       _cachedOrders = allFetched;
+      
+      // Fetch yesterday's snapshot if not cached
+      if (!_cachedYesterday) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const dateStr = yesterday.toISOString().split('T')[0];
+        
+        const { data: snap } = await supabase
+          .from('daily_sales_snapshots')
+          .select('*')
+          .eq('data_referencia', dateStr)
+          .maybeSingle();
+        
+        if (snap) {
+          setYesterdaySnapshot(snap);
+          _cachedYesterday = snap;
+        }
+      }
+
       const refreshTime = new Date().toLocaleString('pt-BR');
       setLastRefresh(refreshTime);
       _cachedRefresh = refreshTime;
@@ -241,42 +261,91 @@ export function DashboardPage() {
     return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
   }, [paidOrders]);
 
-  // Vendas por Hora (Area)
+  // Vendas por Hora (Area) com comparativo de ontem
   const vendasPorHora = useMemo(() => {
-    const hours: { hora: string; faturamento: number; pedidos: number }[] = [];
-    const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
-    const currentHour = new Date().getHours();
-    for (let h = 0; h <= currentHour; h++) {
-      const label = `${String(h).padStart(2, '0')}h`;
-      horaMap.set(label, { hora: label, faturamento: 0, pedidos: 0 });
+    const hours: any[] = [];
+    const yesterdayMap = new Map<string, number>();
+    
+    if (yesterdaySnapshot?.vendas_por_hora) {
+      yesterdaySnapshot.vendas_por_hora.forEach((h: any) => {
+        yesterdayMap.set(h.hora, h.faturamento);
+      });
     }
-    paidOrders.forEach(o => {
-      const d = new Date(o.date_created);
-      const h = `${String(d.getHours()).padStart(2, '0')}h`;
-      const cur = horaMap.get(h);
-      if (cur) {
-        cur.faturamento += o.total_amount;
-        cur.pedidos += 1;
+
+    const currentHour = new Date().getHours();
+    for (let h = 0; h <= 23; h++) {
+      const label = `${String(h).padStart(2, '0')}h`;
+      const fatHoje = paidOrders
+        .filter(o => {
+          const d = new Date(o.date_created);
+          return d.getHours() === h;
+        })
+        .reduce((s, o) => s + o.total_amount, 0);
+
+      // Only show today's line up to current hour to keep it clean, 
+      // but always show yesterday's full line for comparison
+      hours.push({
+        hora: label,
+        faturamento: h <= currentHour ? fatHoje : null,
+        faturamentoOntem: yesterdayMap.get(label) || 0
+      });
+    }
+    return hours;
+  }, [paidOrders, yesterdaySnapshot]);
+
+  const { comprasItems, estoqueItems } = useSheetsData();
+
+  // Top SKUs do dia (com VMD)
+  const topSkus = useMemo(() => {
+    const map = new Map<string, { sku: string; vendas: number; faturamento: number; vmd: number; vmdFaturamento: number }>();
+    
+    // Create VMD map from all possible sheet sources
+    const vmdMap = new Map<string, number>();
+    
+    // Source 1: Compras Sheet (mediaVendaDiaria)
+    (comprasItems || []).forEach(item => {
+      if (item.sku) {
+        const sku = item.sku.trim().toUpperCase();
+        if (item.mediaVendaDiaria) vmdMap.set(sku, item.mediaVendaDiaria);
       }
     });
-    horaMap.forEach(v => hours.push(v));
-    return hours;
-  }, [paidOrders]);
 
-  // Top SKUs do dia
-  const topSkus = useMemo(() => {
-    const map = new Map<string, { sku: string; vendas: number; faturamento: number }>();
+    // Source 2: Estoque Sheet (vmd) - overrides if exists
+    (estoqueItems || []).forEach(item => {
+      if (item.skuPrincipal) {
+        const sku = item.skuPrincipal.trim().toUpperCase();
+        if (item.vmd) vmdMap.set(sku, item.vmd);
+      }
+    });
+
     paidOrders.forEach(o => {
       o.items.forEach(item => {
-        const key = item.sku || item.title?.slice(0, 30) || 'N/A';
-        const cur = map.get(key) || { sku: key, vendas: 0, faturamento: 0 };
+        const rawSku = item.sku || item.title || 'N/A';
+        const sku = rawSku.trim().toUpperCase();
+        const vmdUnits = vmdMap.get(sku) || 0;
+        const cur = map.get(sku) || { 
+          sku, 
+          vendas: 0, 
+          faturamento: 0, 
+          vmd: vmdUnits,
+          // Estimate VMD revenue based on current item price if available
+          vmdFaturamento: vmdUnits * (item.unit_price || 0)
+        };
         cur.vendas += item.quantity;
-        cur.faturamento += item.unit_price * item.quantity;
-        map.set(key, cur);
+        cur.faturamento += (item.unit_price || 0) * item.quantity;
+        map.set(sku, cur);
       });
     });
-    return [...map.values()].sort((a, b) => b.vendas - a.vendas).slice(0, 10);
-  }, [paidOrders]);
+    return [...map.values()];
+  }, [paidOrders, comprasItems, estoqueItems]);
+
+  const topSkusByVendas = useMemo(() => 
+    [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
+  , [topSkus]);
+
+  const topSkusByFaturamento = useMemo(() => 
+    [...topSkus].sort((a, b) => b.faturamento - a.faturamento).slice(0, 10)
+  , [topSkus]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
@@ -411,8 +480,9 @@ export function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number, name: string) => String(name).toLowerCase() === 'faturamento' ? formatBRL(v) : v} />
-                  <Area type="monotone" dataKey="faturamento" stroke="#6366f1" fill="url(#fatGrad)" strokeWidth={2} name="Faturamento" />
+                  <Tooltip formatter={(v: any, name: string) => name.includes('Faturamento') ? formatBRL(Number(v)) : v} />
+                  <Area type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" fill="transparent" strokeWidth={1} strokeDasharray="5 5" name="Faturamento (Ontem)" />
+                  <Area type="monotone" dataKey="faturamento" stroke="#6366f1" fill="url(#fatGrad)" strokeWidth={2} name="Faturamento (Hoje)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -440,21 +510,40 @@ export function DashboardPage() {
 
           {/* Top SKUs */}
           {topSkus.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-4 md:p-6 mb-6 animate-fade-in min-w-0">
-              <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-                <Package className="w-4 h-4 text-indigo-500" /> Top Vendas do Dia (SKU)
-              </h3>
-              <ResponsiveContainer width="100%" height={Math.max(200, topSkus.length * 35)}>
-                <BarChart data={topSkus} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis dataKey="sku" type="category" tick={{ fontSize: 9 }} width={80} />
-                  <Tooltip formatter={(v: number, name: string) => String(name).toLowerCase() === 'faturamento' ? formatBRL(v) : v} />
-                  <Legend />
-                  <Bar dataKey="vendas" fill="#22c55e" name="Qtd" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="faturamento" fill="#6366f1" name="Faturamento" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
+                <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-indigo-500" /> Top Vendas (Unidades) vs VMD
+                </h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <ComposedChart data={topSkusByVendas}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="vendas" fill="#22c55e" name="Vendas Hoje" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="VMD (Meta)" strokeWidth={2} dot={{ r: 4 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
+                <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-green-500" /> Top Faturamento vs Meta (VMD)
+                </h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <ComposedChart data={topSkusByFaturamento}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip formatter={(v: any) => formatBRL(Number(v))} />
+                    <Legend />
+                    <Bar dataKey="faturamento" fill="#6366f1" name="Faturamento Hoje" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Line type="monotone" dataKey="vmdFaturamento" stroke="#ef4444" name="Fat. Médio (Meta)" strokeWidth={2} dot={{ r: 4 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
 

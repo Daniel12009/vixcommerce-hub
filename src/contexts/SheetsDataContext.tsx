@@ -92,7 +92,7 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
       .filter(r => r.skuPrincipal)
       .map(r => {
         const estoqueAtual = num(r.estoqueAtual);
-        const vmd = num(r.vmd) || Math.max(1, Math.round(Math.random() * 10 + 3));
+        const vmd = num(r.vmd) || 0;
         const diasCobertura = estoqueAtual > 0 && vmd > 0 ? Math.round(estoqueAtual / vmd) : 0;
         const leadTime = num(r.leadTime) || 15;
         const emTransito = num(r.emTransito);

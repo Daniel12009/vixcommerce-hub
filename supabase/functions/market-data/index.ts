@@ -263,15 +263,20 @@ Deno.serve(async (req: Request) => {
 
       // Progressive keyword candidates: more specific → broader
       const candidates: string[] = [...new Set([
-        kwNorm,                                  // full normalized            e.g. "Ducha Chuveiro Gas Aquecimento Solar"
-        words.slice(0, 4).join(' '),             // first 4 words              e.g. "Ducha Chuveiro Gas Aquecimento"
-        words.slice(1, 5).join(' '),             // drop first word (often sub-cat) e.g. "Chuveiro Gas Aquecimento Solar"
-        words.slice(0, 3).join(' '),             // first 3                    e.g. "Ducha Chuveiro Gas"
-        words.slice(1, 4).join(' '),             // words 2-4                  e.g. "Chuveiro Gas Aquecimento"
-        words.slice(1, 3).join(' '),             // words 2-3                  e.g. "Chuveiro Gas"
-        words.slice(0, 2).join(' '),             // first 2                    e.g. "Ducha Chuveiro"
-        kwRaw,                                   // raw (with accents) fallback
+        kwNorm,
+        words.slice(0, 4).join(' '),
+        words.slice(1, 5).join(' '),
+        words.slice(0, 3).join(' '),
+        words.slice(1, 4).join(' '),
+        words.slice(1, 3).join(' '),
+        words.slice(0, 2).join(' '),
+        kwRaw,
       ])].filter(Boolean);
+
+      // If no keyword candidates remain but we have a category_id, we MUST add an empty string candidate so it fetches the category alone
+      if (candidates.length === 0 && category_id) {
+        candidates.push('');
+      }
 
       // Build URL — with auth: sort=sold_quantity_desc is allowed
       const buildUrl = (kw: string, catId: string | undefined, offset: number) => {
@@ -285,30 +290,39 @@ Deno.serve(async (req: Request) => {
       const fetchPage = async (kw: string, offset: number) => {
         try {
           const res = await fetch(buildUrl(kw, category_id, offset), { headers: mlHeaders });
-          const d = await res.json();
+          const txt = await res.text();
+          console.log(`[search_ranking] ML ${res.status} for URL="${buildUrl(kw, category_id, offset)}"`);
           if (!res.ok) {
-            console.warn(`[search_ranking] ML ${res.status} for kw="${kw}":`, JSON.stringify(d).slice(0, 200));
-            return null;
+            console.warn(`[search_ranking] ML ${res.status} error body:`, txt.slice(0, 200));
+            return { error: true, status: res.status, body: txt };
           }
-          return { items: d.results || [], total: d.paging?.total || 0 };
-        } catch (e) {
+          const d = JSON.parse(txt);
+          return { items: d.results || [], total: d.paging?.total || 0, diagnosticBody: txt.slice(0, 500) };
+        } catch (e: any) {
           console.warn(`[search_ranking] fetch error for kw="${kw}":`, e);
-          return null;
+          return { error: true, status: 0, body: e.message };
         }
       };
 
       // Try keyword candidates until one returns results
-      let firstPage: { items: any[]; total: number } | null = null;
+      let fetchDiagnostic = null;
+      let firstPage: any = null;
       let usedKw = '';
       for (const kw of candidates) {
         firstPage = await fetchPage(kw, 0);
-        if (firstPage && firstPage.items.length > 0) { usedKw = kw; break; }
-        firstPage = null;
+        if (firstPage && firstPage.error) {
+          fetchDiagnostic = firstPage;
+        } else if (firstPage) {
+          // capture first successful fetch to know what it looked like
+          if (!fetchDiagnostic) fetchDiagnostic = { status: 200, itemsCount: firstPage.items?.length, bodySample: firstPage.diagnosticBody };
+        }
+        if (firstPage && !firstPage.error && firstPage.items && firstPage.items.length > 0) { usedKw = kw; break; }
+        firstPage = null; // Reset if empty so it falls through
       }
 
       if (!firstPage) {
-        console.warn(`[search_ranking] all candidates returned empty for keyword="${kwRaw}"`);
-        return ok({ ranking: [], my_positions: [], lider: null, total_results: 0, my_share: 0, total_vendas_top: 0, my_seller_ids: sellerIds, used_keyword: kwNorm, pages_searched: 0 });
+        console.warn(`[search_ranking] all candidates returned empty`);
+        return ok({ ranking: [], my_positions: [], lider: null, total_results: 0, my_share: 0, total_vendas_top: 0, my_seller_ids: sellerIds, used_keyword: kwNorm, pages_searched: 0, diagnostic: fetchDiagnostic });
       }
 
 
