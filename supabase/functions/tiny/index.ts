@@ -840,12 +840,26 @@ Deno.serve(async (req) => {
               }
             }
 
-            const saldoStr = sData?.retorno?.produto?.saldo || 
-                             sData?.retorno?.produto?.estoque_atual || 
-                             sData?.retorno?.produto?.estoque?.saldo || '0';
-            const saldo = parseFloat(String(saldoStr));
-            
-            console.log(`[TINY-STOCK] SKU: ${codigo}, ID: ${p.id}, Saldo: ${saldoStr} -> Parsed: ${saldo}`);
+            // Calcula saldo: soma todos os depósitos com desconsiderar=N (estoque real disponível).
+            // Se nenhum depósito válido, cai no saldo raiz como fallback.
+            const depositos = sData?.retorno?.produto?.depositos || [];
+            let saldo = 0;
+            let usedDepositos = false;
+            for (const d of depositos) {
+              const dep = d?.deposito || d;
+              if (String(dep?.desconsiderar || '').toUpperCase() === 'N') {
+                saldo += parseFloat(String(dep?.saldo ?? 0)) || 0;
+                usedDepositos = true;
+              }
+            }
+            if (!usedDepositos) {
+              const saldoStr = sData?.retorno?.produto?.saldo ||
+                               sData?.retorno?.produto?.estoque_atual ||
+                               sData?.retorno?.produto?.estoque?.saldo || '0';
+              saldo = parseFloat(String(saldoStr)) || 0;
+            }
+
+            console.log(`[TINY-STOCK] SKU: ${codigo}, ID: ${p.id}, Depositos válidos somados: ${usedDepositos}, Saldo final: ${saldo}`);
 
             // Only include products with stock >= 1
             if (Math.round(saldo) >= 1) {
