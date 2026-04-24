@@ -89,12 +89,11 @@ export function CoberturaFullTab() {
 
     return Array.from(stockMap.values()).map(item => {
       const contaNorm = normalizeConta(item.conta);
-      const vmdPorConta = sqlVmdBySkuConta.get(`${item.sku}||${contaNorm}`);
-      const vmdGlobal = sqlVmdBySku.get(item.sku) ?? 0;
-      // Se SKU está em várias contas e tem match por conta -> usa por conta
-      // Senão (1 conta apenas, ou não casou conta) -> usa global
-      const multiContas = (skuContasCount.get(item.sku) || 1) > 1;
-      const vmdAtual = multiContas && vmdPorConta !== undefined ? vmdPorConta : vmdGlobal;
+      const vmdPorConta = sqlVmdBySkuConta.get(`${item.sku}||${contaNorm}`) ?? 0;
+      // SEMPRE usa VMD específica da conta (faturamento da conta nos últimos 15d / 15)
+      // Se não houver vendas naquela conta nos últimos 15d, VMD = 0 (não usa fallback global,
+      // pois isso geraria o mesmo número para todas as contas do mesmo SKU)
+      const vmdAtual = vmdPorConta;
       const vmdMeta = metasVMD[`${item.sku}||${item.conta}`] || metasVMD[item.sku] || 0;
       
       const coberturaAlvo = 30;
