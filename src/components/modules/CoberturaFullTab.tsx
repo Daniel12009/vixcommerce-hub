@@ -20,20 +20,19 @@ interface CoberturaRow {
 }
 
 // Normaliza nomes de conta para casar entre vendas (DB) e estoque Full
-// Ex: "Via Flix" -> "VIAFLIX", "GS Torneiras" -> "GS", "Decarion Torneiras" -> "MONACO"/"DECARION"
+// Estoque Full usa: (VIAFLIX), (GS), (MONACO)
+// Vendas DB usa: "Via Flix", "VIA FLIX", "Via Fix", "Via Flix - A Casa...", "GS TORNEIRAS", "DECARION TORNEIRAS", "Monaco Metais"
 function normalizeConta(c: string): string {
   if (!c) return '';
-  const u = c.trim().toUpperCase().replace(/\s+/g, '');
-  // mapeamento de sinônimos
-  const map: Record<string, string> = {
-    'VIAFLIX': 'VIAFLIX',
-    'GSTORNEIRAS': 'GS',
-    'GS': 'GS',
-    'DECARIONTORNEIRAS': 'DECARION',
-    'DECARION': 'DECARION',
-    'MONACO': 'MONACO',
-  };
-  return map[u] || u;
+  // remove parênteses, espaços, hífens, pontuação; uppercase
+  const u = c.trim().toUpperCase().replace(/[()\-\s.,]/g, '');
+  // VIAFLIX, VIAFIX (typo), VIAFLIXACASADASTORNEIRAS -> VIAFLIX
+  if (u.startsWith('VIAFLIX') || u.startsWith('VIAFIX')) return 'VIAFLIX';
+  // GS, GSTORNEIRAS -> GS
+  if (u === 'GS' || u.startsWith('GSTORNEIRAS') || u.startsWith('GS')) return 'GS';
+  // DECARION..., MONACO... -> MONACO (estoque Full mapeia DECARION como MONACO)
+  if (u.startsWith('DECARION') || u.startsWith('MONACO')) return 'MONACO';
+  return u;
 }
 
 export function CoberturaFullTab() {
