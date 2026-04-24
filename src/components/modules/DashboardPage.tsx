@@ -394,6 +394,14 @@ export function DashboardPage() {
       }
     });
 
+    // Source 3 (prioritário): VMD do SQL filtrada por conta
+    vmdSqlBySku.forEach((v, sku) => {
+      if (v > 0) {
+        const prev = vmdMap.get(sku);
+        vmdMap.set(sku, { vmd: v, preco: prev?.preco || 0, nome: prev?.nome || sku });
+      }
+    });
+
     const lista: { sku: string; vmd: number; vmdFaturamento: number; nome: string }[] = [];
     vmdMap.forEach((v, sku) => {
       if (v.vmd > 0 && !vendidosHoje.has(sku)) {
@@ -401,7 +409,7 @@ export function DashboardPage() {
       }
     });
     return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
-  }, [paidOrders, comprasItems, estoqueItems]);
+  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
