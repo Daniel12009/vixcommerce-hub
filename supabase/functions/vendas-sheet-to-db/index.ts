@@ -205,7 +205,7 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 50));
     }
 
-    const msg = `✅ Vendas-Sheet→DB: ${inserted}/${records.length} linhas processadas${truncate ? ' (após truncate)' : ''}${errors ? ` | ⚠️ ${errors} falharam: ${lastErr}` : ''}`;
+    const msg = `✅ Vendas-Sheet→DB: ${inserted}/${dedupRecords.length} (planilha=${records.length}) linhas processadas${truncate ? ' (após truncate)' : ''}${errors ? ` | ⚠️ ${errors} falharam: ${lastErr}` : ''}`;
     console.log(msg);
     await tg(msg);
 
