@@ -228,6 +228,25 @@ export function DashboardPage() {
 
   const paidOrders = filteredOrders.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
 
+  // VMD baseada nos últimos 15 dias do SQL — respeita filtro de conta
+  const VMD_DIAS = 15;
+  const vmdDateFim = new Date().toISOString().split('T')[0];
+  const vmdDateIni = new Date(Date.now() - VMD_DIAS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { data: vmdSqlData } = useVendasSKUEstoqueFromDB(
+    vmdDateIni,
+    vmdDateFim,
+    filterConta !== 'all' ? [filterConta] : undefined
+  );
+  const vmdSqlBySku = useMemo(() => {
+    const m = new Map<string, number>();
+    (vmdSqlData || []).forEach(s => {
+      const sku = (s.sku || '').trim().toUpperCase();
+      if (!sku) return;
+      m.set(sku, (m.get(sku) || 0) + (Number(s.quantidade) || 0) / VMD_DIAS);
+    });
+    return m;
+  }, [vmdSqlData]);
+
   // Unique platforms & accounts
   const plataformas = useMemo(() => [...new Set(orders.map(o => o.plataforma || '').filter(Boolean))], [orders]);
   const contasUnicas = useMemo(() => [...new Set(orders.map(o => o.conta || 'Sem Conta'))].sort(), [orders]);
