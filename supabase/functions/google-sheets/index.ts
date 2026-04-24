@@ -134,12 +134,21 @@ Deno.serve(async (req) => {
       // contaColumn: optional zero-based index of the conta column — when set, dedup by date+conta together
       //              so multiple accounts can coexist for the same date without wiping each other
       const newRows = values || [];
-      // Read existing data with FORMATTED_VALUE render so dates come back as text ('10/04/2026') to match exactly with targetDate logic.
-      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`, { headers });
+      // Read TWICE: FORMATTED_VALUE for dedup matching by date string,
+      // and UNFORMATTED_VALUE to recover full numeric precision for big IDs (avoids 2,00E+15)
+      const [readResFmt, readResRaw] = await Promise.all([
+        fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`, { headers }),
+        fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`, { headers }),
+      ]);
       let existingRows: any[][] = [];
-      if (readRes.ok) {
-        const readData = await readRes.json();
+      let rawRows: any[][] = [];
+      if (readResFmt.ok) {
+        const readData = await readResFmt.json();
         existingRows = readData.values || [];
+      }
+      if (readResRaw.ok) {
+        const readData = await readResRaw.json();
+        rawRows = readData.values || [];
       }
       // Assume header is first row if present
       const header = existingRows[0] ?? [];
@@ -163,17 +172,35 @@ Deno.serve(async (req) => {
       // Índice 2 = coluna C = Data Criação  ('DD/MM/YYYY)
       // Índice 3 = coluna D = Data Fechamento ('DD/MM/YYYY)
       // Índice 4 = coluna E = ID Pedido ('2000007890123456) — número grande → notação científica sem o apóstrofo
-      // O Sheets não retorna o apóstrofo na leitura FORMATTED_VALUE, então precisamos recolocar nas linhas relidas.
       const TEXT_FORCE_COLUMNS = new Set([2, 3, 4]);
-      const reprotectRow = (row: any[]): any[] =>
+      // Para IDs grandes (col 4), usamos o valor UNFORMATTED (numérico exato) para evitar 2,00E+15.
+      const BIGINT_COLUMNS = new Set([4]);
+      const numToPlainString = (n: any): string => {
+        if (typeof n === 'number' && Number.isFinite(n)) {
+          if (Number.isInteger(n)) return n.toFixed(0);
+          return String(n);
+        }
+        return String(n ?? '');
+      };
+      const reprotectRow = (row: any[], rowIdx: number): any[] =>
         row.map((cell, colIdx) => {
           if (!TEXT_FORCE_COLUMNS.has(colIdx)) return cell;
-          const s = String(cell ?? '').trim();
+          let s: string;
+          if (BIGINT_COLUMNS.has(colIdx)) {
+            const rawCell = rawRows[rowIdx + 1]?.[colIdx];
+            const usable = (rawCell !== undefined && rawCell !== null && rawCell !== '') ? rawCell : cell;
+            s = numToPlainString(usable).trim();
+          } else {
+            s = String(cell ?? '').trim();
+          }
           if (!s) return cell;
           return s.startsWith("'") ? s : `'${s}`;
         });
 
-      const reprotectedFiltered = filtered.map(reprotectRow);
+      const reprotectedFiltered = filtered.map((row) => {
+        const originalIdx = dataRows.indexOf(row);
+        return reprotectRow(row, originalIdx);
+      });
       const combined = [header, ...reprotectedFiltered, ...newRows];
       // Write back with USER_ENTERED so text/number types are preserved correctly
       const writeRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
