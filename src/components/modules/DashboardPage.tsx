@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
+import { useVendasSKUEstoqueFromDB } from '@/hooks/useVendasFromDB';
 import { MarketplaceTab } from './MarketplaceTab';
 import { FaturamentoTab } from './FaturamentoTab';
 
@@ -227,6 +228,25 @@ export function DashboardPage() {
 
   const paidOrders = filteredOrders.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
 
+  // VMD baseada nos últimos 15 dias do SQL — respeita filtro de conta
+  const VMD_DIAS = 15;
+  const vmdDateFim = new Date().toISOString().split('T')[0];
+  const vmdDateIni = new Date(Date.now() - VMD_DIAS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { data: vmdSqlData } = useVendasSKUEstoqueFromDB(
+    vmdDateIni,
+    vmdDateFim,
+    filterConta !== 'all' ? [filterConta] : undefined
+  );
+  const vmdSqlBySku = useMemo(() => {
+    const m = new Map<string, number>();
+    (vmdSqlData || []).forEach(s => {
+      const sku = (s.sku || '').trim().toUpperCase();
+      if (!sku) return;
+      m.set(sku, (m.get(sku) || 0) + (Number(s.quantidade) || 0) / VMD_DIAS);
+    });
+    return m;
+  }, [vmdSqlData]);
+
   // Unique platforms & accounts
   const plataformas = useMemo(() => [...new Set(orders.map(o => o.plataforma || '').filter(Boolean))], [orders]);
   const contasUnicas = useMemo(() => [...new Set(orders.map(o => o.conta || 'Sem Conta'))].sort(), [orders]);
@@ -320,6 +340,9 @@ export function DashboardPage() {
       }
     });
 
+    // Source 3 (prioritário): VMD do SQL filtrada por conta
+    vmdSqlBySku.forEach((v, sku) => { if (v > 0) vmdMap.set(sku, v); });
+
     paidOrders.forEach(o => {
       o.items.forEach(item => {
         const rawSku = item.sku || item.title || 'N/A';
@@ -330,7 +353,6 @@ export function DashboardPage() {
           vendas: 0, 
           faturamento: 0, 
           vmd: vmdUnits,
-          // Estimate VMD revenue based on current item price if available
           vmdFaturamento: vmdUnits * (item.unit_price || 0)
         };
         cur.vendas += item.quantity;
@@ -339,7 +361,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, comprasItems, estoqueItems]);
+  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
@@ -372,6 +394,14 @@ export function DashboardPage() {
       }
     });
 
+    // Source 3 (prioritário): VMD do SQL filtrada por conta
+    vmdSqlBySku.forEach((v, sku) => {
+      if (v > 0) {
+        const prev = vmdMap.get(sku);
+        vmdMap.set(sku, { vmd: v, preco: prev?.preco || 0, nome: prev?.nome || sku });
+      }
+    });
+
     const lista: { sku: string; vmd: number; vmdFaturamento: number; nome: string }[] = [];
     vmdMap.forEach((v, sku) => {
       if (v.vmd > 0 && !vendidosHoje.has(sku)) {
@@ -379,7 +409,7 @@ export function DashboardPage() {
       }
     });
     return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
-  }, [paidOrders, comprasItems, estoqueItems]);
+  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
