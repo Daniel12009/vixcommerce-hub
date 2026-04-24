@@ -581,6 +581,33 @@ export function DashboardPage() {
             </div>
           )}
 
+          {/* SKUs com VMD que NÃO venderam hoje (alerta de oportunidade) */}
+          {skusSemVendaHoje.length > 0 && (
+            <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in mb-6">
+              <h3 className="text-foreground font-semibold mb-1 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" /> SKUs com VMD &gt; 0 sem venda hoje
+                <span className="text-xs bg-amber-500/15 text-amber-600 px-2 py-0.5 rounded-full ml-2">
+                  {skusSemVendaHoje.length}
+                </span>
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje. Ordenados pela VMD esperada.
+              </p>
+              <ResponsiveContainer width="100%" height={320}>
+                <ComposedChart data={skusSemVendaHoje}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v) => `R$${Math.round(v)}`} />
+                  <Tooltip formatter={(v: any, name: any) => name === 'Fat. Esperado' ? formatBRL(Number(v)) : Number(v).toFixed(2)} />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="vmd" fill="#f59e0b" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30} />
+                  <Line yAxisId="right" type="monotone" dataKey="vmdFaturamento" stroke="#6366f1" name="Fat. Esperado" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           {/* Últimos Pedidos - Scroll Horizontal */}
           <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in relative">
             <div className="flex items-center justify-between mb-4">
