@@ -154,6 +154,25 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 3.5 deduplica por (numero_pedido, sku) somando quantidades/valores quando aparecer 2x
+    const dedupMap = new Map<string, any>();
+    for (const r of records) {
+      const key = `${r.numero_pedido}|${r.sku}`;
+      const prev = dedupMap.get(key);
+      if (!prev) {
+        dedupMap.set(key, r);
+      } else {
+        prev.quantidade = (prev.quantidade || 0) + (r.quantidade || 0);
+        prev.valor_total = (prev.valor_total || 0) + (r.valor_total || 0);
+        prev.liquido = (prev.liquido || 0) + (r.liquido || 0);
+        prev.cmv = (prev.cmv || 0) + (r.cmv || 0);
+        prev.comissao = (prev.comissao || 0) + (r.comissao || 0);
+        prev.custo_envio = (prev.custo_envio || 0) + (r.custo_envio || 0);
+        prev.impostos = (prev.impostos || 0) + (r.impostos || 0);
+      }
+    }
+    const dedupRecords = Array.from(dedupMap.values());
+
     // 4. truncate opcional
     if (truncate) {
       const delRes = await pgFetch(`/vendas_items?id=neq.00000000-0000-0000-0000-000000000000`, { method: 'DELETE' });
