@@ -465,8 +465,11 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch {}
 
   const targetModule = body.module as string | undefined;
-  const dIni = getYesterdayBR();
-  const dIniBR = getYesterdayBR_DDMMYYYY();
+  // Permite override manual da data (formato YYYY-MM-DD) para catch-up de dias passados
+  const dIni = (body.target_date as string | undefined) || getYesterdayBR();
+  const dIniBR = body.target_date
+    ? (body.target_date as string).split('-').reverse().join('/')
+    : getYesterdayBR_DDMMYYYY();
   const runDate = getTodayBR();
 
   // If no module specified, run ALL enabled modules sequentially (manual/legacy mode)
