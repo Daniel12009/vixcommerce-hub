@@ -134,12 +134,21 @@ Deno.serve(async (req) => {
       // contaColumn: optional zero-based index of the conta column — when set, dedup by date+conta together
       //              so multiple accounts can coexist for the same date without wiping each other
       const newRows = values || [];
-      // Read existing data with FORMATTED_VALUE render so dates come back as text ('10/04/2026') to match exactly with targetDate logic.
-      const readRes = await fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`, { headers });
+      // Read TWICE: FORMATTED_VALUE for dedup matching by date string,
+      // and UNFORMATTED_VALUE to recover full numeric precision for big IDs (avoids 2,00E+15)
+      const [readResFmt, readResRaw] = await Promise.all([
+        fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`, { headers }),
+        fetch(`${baseUrl}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`, { headers }),
+      ]);
       let existingRows: any[][] = [];
-      if (readRes.ok) {
-        const readData = await readRes.json();
+      let rawRows: any[][] = [];
+      if (readResFmt.ok) {
+        const readData = await readResFmt.json();
         existingRows = readData.values || [];
+      }
+      if (readResRaw.ok) {
+        const readData = await readResRaw.json();
+        rawRows = readData.values || [];
       }
       // Assume header is first row if present
       const header = existingRows[0] ?? [];
