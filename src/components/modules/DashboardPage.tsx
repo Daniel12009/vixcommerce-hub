@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { RefreshCw, Filter, Clock, Globe, TrendingUp, DollarSign, Package, ShoppingCart } from 'lucide-react';
+import { RefreshCw, Filter, Clock, Globe, TrendingUp, DollarSign, Package, ShoppingCart, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Line } from 'recharts';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -349,6 +349,38 @@ export function DashboardPage() {
     [...topSkus].sort((a, b) => b.faturamento - a.faturamento).slice(0, 10)
   , [topSkus]);
 
+  // SKUs com VMD > 0 que ainda NÃO venderam hoje (oportunidades / alerta)
+  const skusSemVendaHoje = useMemo(() => {
+    const vendidosHoje = new Set<string>();
+    paidOrders.forEach(o => o.items.forEach(item => {
+      const sku = (item.sku || item.title || 'N/A').trim().toUpperCase();
+      vendidosHoje.add(sku);
+    }));
+
+    const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
+    (comprasItems || []).forEach((item: any) => {
+      if (item.sku && item.mediaVendaDiaria) {
+        const sku = item.sku.trim().toUpperCase();
+        vmdMap.set(sku, { vmd: item.mediaVendaDiaria, preco: item.preco || 0, nome: item.nome || sku });
+      }
+    });
+    (estoqueItems || []).forEach((item: any) => {
+      if (item.skuPrincipal && item.vmd) {
+        const sku = item.skuPrincipal.trim().toUpperCase();
+        const prev = vmdMap.get(sku);
+        vmdMap.set(sku, { vmd: item.vmd, preco: prev?.preco || 0, nome: item.nome || prev?.nome || sku });
+      }
+    });
+
+    const lista: { sku: string; vmd: number; vmdFaturamento: number; nome: string }[] = [];
+    vmdMap.forEach((v, sku) => {
+      if (v.vmd > 0 && !vendidosHoje.has(sku)) {
+        lista.push({ sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome });
+      }
+    });
+    return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
+  }, [paidOrders, comprasItems, estoqueItems]);
+
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
     [...paidOrders].sort((a, b) => new Date(b.date_created).getTime() - new Date(a.date_created).getTime()),
@@ -546,6 +578,33 @@ export function DashboardPage() {
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+          )}
+
+          {/* SKUs com VMD que NÃO venderam hoje (alerta de oportunidade) */}
+          {skusSemVendaHoje.length > 0 && (
+            <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in mb-6">
+              <h3 className="text-foreground font-semibold mb-1 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" /> SKUs com VMD &gt; 0 sem venda hoje
+                <span className="text-xs bg-amber-500/15 text-amber-600 px-2 py-0.5 rounded-full ml-2">
+                  {skusSemVendaHoje.length}
+                </span>
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje. Ordenados pela VMD esperada.
+              </p>
+              <ResponsiveContainer width="100%" height={320}>
+                <ComposedChart data={skusSemVendaHoje}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v) => `R$${Math.round(v)}`} />
+                  <Tooltip formatter={(v: any, name: any) => name === 'Fat. Esperado' ? formatBRL(Number(v)) : Number(v).toFixed(2)} />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="vmd" fill="#f59e0b" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30} />
+                  <Line yAxisId="right" type="monotone" dataKey="vmdFaturamento" stroke="#6366f1" name="Fat. Esperado" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
           )}
 
