@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getLocalDateStr } from '@/lib/utils-vix';
+import { canonicalSku } from '@/lib/sku-aliases';
 
 export interface MarketplaceDiaItem {
   data: string;
