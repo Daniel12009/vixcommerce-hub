@@ -332,6 +332,9 @@ export function DashboardPage() {
       if (!sku) return;
       m.set(sku, (m.get(sku) || 0) + (Number(s.quantidade) || 0) / VMD_DIAS);
     });
+    if (typeof window !== 'undefined') {
+      console.log('[VMD] linhas SQL:', (vmdSqlData || []).length, '| SKUs no map:', m.size, '| FC-138 →', m.get('FC-138'), '| filtroConta:', filterConta);
+    }
     return m;
   }, [vmdSqlData, filterConta]);
 
