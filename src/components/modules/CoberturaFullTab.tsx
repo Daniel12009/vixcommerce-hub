@@ -104,10 +104,10 @@ export function CoberturaFullTab() {
     return { totalVmd, oversales, undersales, totalSugerido };
   }, [mergedData]);
 
-  const handleSaveMeta = (sku: string, conta: string) => {
+  const handleSaveMeta = (sku: string) => {
     const val = parseFloat(tempMeta);
     if (isNaN(val)) { toast.error('Valor inválido'); return; }
-    setMetasVMD(prev => ({ ...prev, [`${sku}||${conta}`]: val }));
+    setMetasVMD(prev => ({ ...prev, [sku]: val }));
     setEditingSku(null);
     toast.success('Meta atualizada');
   };
