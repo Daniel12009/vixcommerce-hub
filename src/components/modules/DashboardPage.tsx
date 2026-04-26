@@ -630,7 +630,7 @@ export function DashboardPage() {
                     <Tooltip />
                     <Legend />
                     <Bar dataKey="vendas" fill="#22c55e" name="Vendas Hoje" radius={[4, 4, 0, 0]} barSize={40} />
-                    <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="VMD (Meta)" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="Média 15d (Unid./dia)" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
