@@ -402,39 +402,16 @@ export function DashboardPage() {
 
   const { comprasItems, estoqueItems } = useSheetsData();
 
-  // Top SKUs do dia (com VMD)
+  // Top SKUs do dia com média real dos últimos 15 dias do SQL
   const topSkus = useMemo(() => {
     const map = new Map<string, { sku: string; vendas: number; faturamento: number; vmd: number; vmdFaturamento: number }>();
-    
-    // Create VMD map from all possible sheet sources
-    const vmdMap = new Map<string, number>();
-    
-    // Source 1: Compras Sheet (mediaVendaDiaria)
-    (comprasItems || []).forEach(item => {
-      if (item.sku) {
-        const sku = item.sku.trim().toUpperCase();
-        if (item.mediaVendaDiaria) vmdMap.set(sku, item.mediaVendaDiaria);
-      }
-    });
-
-    // Source 2: Estoque Sheet (vmd) - overrides if exists
-    (estoqueItems || []).forEach(item => {
-      if (item.skuPrincipal) {
-        const sku = item.skuPrincipal.trim().toUpperCase();
-        if (item.vmd) vmdMap.set(sku, item.vmd);
-      }
-    });
-
-    // Source 3 (prioritário): VMD do SQL filtrada por conta
-    vmdSqlBySku.forEach((v, sku) => { if (v > 0) vmdMap.set(sku, v); });
 
     paidOrders.forEach(o => {
       o.items.forEach(item => {
         const rawSku = item.sku || item.title || 'N/A';
         const sku = rawSku.trim().toUpperCase();
-        const vmdUnits = vmdMap.get(sku) || 0;
-        // Faturamento médio diário (15d) vem do SQL; fallback: vmd × preço atual
-        const vmdFat = vmdFatBySku.get(sku) ?? (vmdUnits * (item.unit_price || 0));
+        const vmdUnits = vmdSqlBySku.get(sku) || 0;
+        const vmdFat = vmdFatBySku.get(sku) || 0;
         const cur = map.get(sku) || {
           sku,
           vendas: 0,
@@ -448,7 +425,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku, vmdFatBySku]);
+  }, [paidOrders, vmdSqlBySku, vmdFatBySku]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
