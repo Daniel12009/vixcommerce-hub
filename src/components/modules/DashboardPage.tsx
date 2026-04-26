@@ -283,33 +283,58 @@ export function DashboardPage() {
     return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
   }, [paidOrders]);
 
-  // Vendas por Hora (Area) com comparativo de ontem
+  // Vendas por Hora (Area) com comparativo de ontem — sempre em America/Sao_Paulo (BRT)
   const vendasPorHora = useMemo(() => {
     const hours: any[] = [];
     const yesterdayMap = new Map<string, number>();
-    
+
     if (yesterdaySnapshot?.vendas_por_hora) {
       yesterdaySnapshot.vendas_por_hora.forEach((h: any) => {
         yesterdayMap.set(h.hora, h.faturamento);
       });
     }
 
-    const currentHour = new Date().getHours();
+    // Helper: extrai a hora (0-23) considerando o fuso de São Paulo, independente do navegador
+    const getHourBRT = (iso: string): number => {
+      try {
+        const parts = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          hour12: false,
+        }).formatToParts(new Date(iso));
+        const hStr = parts.find(p => p.type === 'hour')?.value || '0';
+        const h = parseInt(hStr, 10);
+        return h === 24 ? 0 : h;
+      } catch {
+        return new Date(iso).getHours();
+      }
+    };
+
+    // Hora atual em BRT
+    const currentHour = (() => {
+      const parts = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        hour12: false,
+      }).formatToParts(new Date());
+      const hStr = parts.find(p => p.type === 'hour')?.value || '0';
+      const h = parseInt(hStr, 10);
+      return h === 24 ? 0 : h;
+    })();
+
+    // Pré-agrega por hora BRT
+    const fatHojePorHora = new Map<number, number>();
+    paidOrders.forEach(o => {
+      const h = getHourBRT(o.date_created);
+      fatHojePorHora.set(h, (fatHojePorHora.get(h) || 0) + o.total_amount);
+    });
+
     for (let h = 0; h <= 23; h++) {
       const label = `${String(h).padStart(2, '0')}h`;
-      const fatHoje = paidOrders
-        .filter(o => {
-          const d = new Date(o.date_created);
-          return d.getHours() === h;
-        })
-        .reduce((s, o) => s + o.total_amount, 0);
-
-      // Only show today's line up to current hour to keep it clean, 
-      // but always show yesterday's full line for comparison
       hours.push({
         hora: label,
-        faturamento: h <= currentHour ? fatHoje : null,
-        faturamentoOntem: yesterdayMap.get(label) || 0
+        faturamento: h <= currentHour ? (fatHojePorHora.get(h) || 0) : null,
+        faturamentoOntem: yesterdayMap.get(label) || 0,
       });
     }
     return hours;
