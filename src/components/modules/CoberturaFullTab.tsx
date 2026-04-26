@@ -57,59 +57,41 @@ export function CoberturaFullTab() {
   const mergedData = useMemo<CoberturaRow[]>(() => {
     if (!estoqueFullItems) return [];
 
-    // VMD por SKU+Conta E por SKU global (fallback quando contas não casam)
-    const sqlVmdBySkuConta = new Map<string, number>();
+    // VMD agregada por SKU (soma de TODAS as contas) — últimos 15 dias
     const sqlVmdBySku = new Map<string, number>();
     vmdSalesData.forEach(s => {
       const sku = s.sku.trim().toUpperCase();
-      const contaNorm = normalizeConta(s.conta);
       const vmd = (Number(s.quantidade) || 0) / VMD_DIAS;
-      const k = `${sku}||${contaNorm}`;
-      sqlVmdBySkuConta.set(k, (sqlVmdBySkuConta.get(k) || 0) + vmd);
       sqlVmdBySku.set(sku, (sqlVmdBySku.get(sku) || 0) + vmd);
     });
-    console.log('[CoberturaFull] VMD 15d:', sqlVmdBySku.size, 'SKUs |', sqlVmdBySkuConta.size, 'SKU+Conta');
+    console.log('[CoberturaFull] VMD 15d:', sqlVmdBySku.size, 'SKUs');
 
-    const stockMap = new Map<string, { full: number; conta: string; sku: string }>();
+    // Estoque Full agregado por SKU (soma de todas as contas)
+    const stockBySku = new Map<string, number>();
     estoqueFullItems.forEach(i => {
       const sku = i.sku.trim().toUpperCase();
-      const conta = i.conta.trim();
-      const k = `${sku}||${conta}`;
-      const cur = stockMap.get(k) || { full: 0, conta, sku };
-      cur.full += Number(i.aptasParaVenda || 0);
-      stockMap.set(k, cur);
+      stockBySku.set(sku, (stockBySku.get(sku) || 0) + Number(i.aptasParaVenda || 0));
     });
 
-    // Detecta se um SKU aparece em múltiplas contas no estoque
-    const skuContasCount = new Map<string, number>();
-    Array.from(stockMap.values()).forEach(item => {
-      skuContasCount.set(item.sku, (skuContasCount.get(item.sku) || 0) + 1);
-    });
+    return Array.from(stockBySku.entries()).map(([sku, full]) => {
+      const vmdAtual = sqlVmdBySku.get(sku) ?? 0;
+      const vmdMeta = metasVMD[sku] || 0;
 
-    return Array.from(stockMap.values()).map(item => {
-      const contaNorm = normalizeConta(item.conta);
-      const vmdPorConta = sqlVmdBySkuConta.get(`${item.sku}||${contaNorm}`) ?? 0;
-      // SEMPRE usa VMD específica da conta (faturamento da conta nos últimos 15d / 15)
-      // Se não houver vendas naquela conta nos últimos 15d, VMD = 0 (não usa fallback global,
-      // pois isso geraria o mesmo número para todas as contas do mesmo SKU)
-      const vmdAtual = vmdPorConta;
-      const vmdMeta = metasVMD[`${item.sku}||${item.conta}`] || metasVMD[item.sku] || 0;
-      
       const coberturaAlvo = 30;
       const estoqueSeguranca = Math.ceil(vmdAtual * 7);
-      
+
       let performance: 'oversales' | 'undersales' | 'ok' = 'ok';
       if (vmdMeta > 0) {
         if (vmdAtual > vmdMeta * 1.2) performance = 'oversales';
         else if (vmdAtual < vmdMeta * 0.8) performance = 'undersales';
       }
 
-      const compraSugerida = Math.max(0, Math.ceil((vmdAtual * 60) - item.full));
+      const compraSugerida = Math.max(0, Math.ceil((vmdAtual * 60) - full));
 
       return {
-        sku: item.sku, conta: item.conta, vmdAtual, vmdMeta,
-        estoqueFull: item.full, estoqueSeguranca, coberturaAlvo,
-        performance, compraSugerida
+        sku, vmdAtual, vmdMeta,
+        estoqueFull: full, estoqueSeguranca, coberturaAlvo,
+        performance, compraSugerida,
       };
     }).sort((a, b) => b.vmdAtual - a.vmdAtual);
   }, [estoqueFullItems, vmdSalesData, metasVMD]);
