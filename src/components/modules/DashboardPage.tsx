@@ -247,6 +247,22 @@ export function DashboardPage() {
     return m;
   }, [vmdSqlData]);
 
+  // Faturamento médio diário por SKU (últimos 15d) — respeita filtro de conta
+  const { data: vmdFatSqlData } = useVendasSKUFromDB(
+    vmdDateIni,
+    vmdDateFim,
+    filterConta !== 'all' ? [filterConta] : undefined
+  );
+  const vmdFatBySku = useMemo(() => {
+    const m = new Map<string, number>();
+    (vmdFatSqlData || []).forEach(s => {
+      const sku = (s.sku || '').trim().toUpperCase();
+      if (!sku) return;
+      m.set(sku, (m.get(sku) || 0) + (Number(s.faturamento_bruto) || 0) / VMD_DIAS);
+    });
+    return m;
+  }, [vmdFatSqlData]);
+
   // Unique platforms & accounts
   const plataformas = useMemo(() => [...new Set(orders.map(o => o.plataforma || '').filter(Boolean))], [orders]);
   const contasUnicas = useMemo(() => [...new Set(orders.map(o => o.conta || 'Sem Conta'))].sort(), [orders]);
