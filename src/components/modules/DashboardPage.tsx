@@ -737,12 +737,10 @@ export function DashboardPage() {
                 <ComposedChart data={skusSemVendaHoje}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v) => `R$${Math.round(v)}`} />
-                  <Tooltip formatter={(v: any, name: any) => name === 'Fat. Esperado' ? formatBRL(Number(v)) : Number(v).toFixed(2)} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
                   <Legend />
-                  <Bar yAxisId="left" dataKey="vmd" fill="#f59e0b" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30} />
-                  <Line yAxisId="right" type="monotone" dataKey="vmdFaturamento" stroke="#6366f1" name="Fat. Esperado" strokeWidth={2} dot={{ r: 3 }} />
+                  <Bar dataKey="vmd" fill="#f59e0b" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
