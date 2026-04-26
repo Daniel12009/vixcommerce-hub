@@ -273,7 +273,9 @@ export function CoberturaFullTab() {
                       </button>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right font-medium">{row.estoqueFull}</td>
+                  <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueFull)}</td>
+                  <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueTiny)}</td>
+                  <td className="px-4 py-3 text-right font-bold text-foreground">{formatNumber(row.estoqueTotal)}</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">{row.estoqueSeguranca}</td>
                   <td className="px-4 py-3 text-right font-bold text-[hsl(var(--vix-success))]">{row.compraSugerida > 0 ? formatNumber(row.compraSugerida) : '—'}</td>
                   <td className="px-4 py-3 text-center">
