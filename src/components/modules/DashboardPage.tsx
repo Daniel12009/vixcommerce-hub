@@ -389,12 +389,14 @@ export function DashboardPage() {
         const rawSku = item.sku || item.title || 'N/A';
         const sku = rawSku.trim().toUpperCase();
         const vmdUnits = vmdMap.get(sku) || 0;
-        const cur = map.get(sku) || { 
-          sku, 
-          vendas: 0, 
-          faturamento: 0, 
+        // Faturamento médio diário (15d) vem do SQL; fallback: vmd × preço atual
+        const vmdFat = vmdFatBySku.get(sku) ?? (vmdUnits * (item.unit_price || 0));
+        const cur = map.get(sku) || {
+          sku,
+          vendas: 0,
+          faturamento: 0,
           vmd: vmdUnits,
-          vmdFaturamento: vmdUnits * (item.unit_price || 0)
+          vmdFaturamento: vmdFat,
         };
         cur.vendas += item.quantity;
         cur.faturamento += (item.unit_price || 0) * item.quantity;
@@ -402,7 +404,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
+  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku, vmdFatBySku]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
