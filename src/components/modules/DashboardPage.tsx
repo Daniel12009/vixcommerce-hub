@@ -330,7 +330,7 @@ export function DashboardPage() {
   const vmdSqlBySku = useMemo(() => {
     const m = new Map<string, number>();
     (vmdSqlData || []).forEach(s => {
-      const sku = (s.sku || '').trim().toUpperCase();
+      const sku = canonicalSku(s.sku);
       if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
       if (!sku) return;
       m.set(sku, (m.get(sku) || 0) + (Number(s.quantidade) || 0) / VMD_DIAS);
