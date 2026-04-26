@@ -456,7 +456,7 @@ export function DashboardPage() {
     paidOrders.forEach(o => {
       o.items.forEach(item => {
         const rawSku = item.sku || item.title || 'N/A';
-        const sku = rawSku.trim().toUpperCase();
+        const sku = canonicalSku(rawSku);
         const vmdUnits = vmdSqlBySku.get(sku) || 0;
         const vmdFat = vmdFatBySku.get(sku) || 0;
         const cur = map.get(sku) || {
