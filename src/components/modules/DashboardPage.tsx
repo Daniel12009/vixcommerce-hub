@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
 import { useVendasSKUEstoqueFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
+import { canonicalSku } from '@/lib/sku-aliases';
 import { MarketplaceTab } from './MarketplaceTab';
 import { FaturamentoTab } from './FaturamentoTab';
 
