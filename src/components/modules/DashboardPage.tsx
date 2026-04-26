@@ -346,7 +346,7 @@ export function DashboardPage() {
   const vmdFatBySku = useMemo(() => {
     const m = new Map<string, number>();
     (vmdFatSqlData || []).forEach(s => {
-      const sku = (s.sku || '').trim().toUpperCase();
+      const sku = canonicalSku(s.sku);
       if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
       if (!sku) return;
       m.set(sku, (m.get(sku) || 0) + (Number(s.faturamento_bruto) || 0) / VMD_DIAS);
