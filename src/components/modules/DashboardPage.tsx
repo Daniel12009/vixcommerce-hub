@@ -767,17 +767,49 @@ export function DashboardPage() {
                   {skusSemVendaHoje.length}
                 </span>
               </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje. Ordenados pela VMD esperada.
+              <p className="text-xs text-muted-foreground mb-2">
+                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje.
               </p>
+              {/* Legenda de status */}
+              <div className="flex flex-wrap items-center gap-3 mb-4 text-xs">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#dc2626' }} />
+                  <span className="text-muted-foreground">Sem estoque (Full + Tiny)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#c2410c' }} />
+                  <span className="text-muted-foreground">Rompido no Full (tem no Tiny)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#fbbf24' }} />
+                  <span className="text-muted-foreground">Com estoque, sem venda</span>
+                </span>
+              </div>
               <ResponsiveContainer width="100%" height={320}>
                 <ComposedChart data={skusSemVendaHoje}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
-                  <Legend />
-                  <Bar dataKey="vmd" fill="#f59e0b" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30} />
+                  <Tooltip
+                    content={({ active, payload }: any) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-xs">
+                          <div className="font-semibold text-foreground mb-1">{d.sku}</div>
+                          <div style={{ color: d.cor }} className="font-medium mb-1">{d.statusLabel}</div>
+                          <div className="text-muted-foreground">VMD: <span className="text-foreground font-medium">{Number(d.vmd).toFixed(1)} un/dia</span></div>
+                          <div className="text-muted-foreground">Estoque Full: <span className="text-foreground font-medium">{d.estoqueFull}</span></div>
+                          <div className="text-muted-foreground">Estoque Tiny: <span className="text-foreground font-medium">{d.estoqueTiny}</span></div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="vmd" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30}>
+                    {skusSemVendaHoje.map((entry, i) => (
+                      <Cell key={i} fill={entry.cor} />
+                    ))}
+                  </Bar>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
