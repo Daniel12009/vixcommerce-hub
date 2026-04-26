@@ -486,7 +486,7 @@ export function DashboardPage() {
   const skusSemVendaHoje = useMemo(() => {
     const vendidosHoje = new Set<string>();
     paidOrders.forEach(o => o.items.forEach(item => {
-      const sku = (item.sku || item.title || 'N/A').trim().toUpperCase();
+      const sku = canonicalSku(item.sku || item.title || 'N/A');
       vendidosHoje.add(sku);
     }));
 
