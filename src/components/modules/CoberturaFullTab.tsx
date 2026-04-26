@@ -9,7 +9,6 @@ import * as XLSX from 'xlsx';
 
 interface CoberturaRow {
   sku: string;
-  conta: string;
   vmdAtual: number;
   vmdMeta: number;
   estoqueFull: number;
