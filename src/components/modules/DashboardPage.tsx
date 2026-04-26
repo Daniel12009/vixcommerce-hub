@@ -88,6 +88,24 @@ const normalizeConta = (conta: string): string => {
   return u;
 };
 
+const getBRTDateStr = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const d = parts.find(p => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+};
+
+const getBRTHour = (iso: string) => {
+  const h = Number(new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false,
+  }).formatToParts(new Date(iso)).find(p => p.type === 'hour')?.value || 0);
+  return h === 24 ? 0 : h;
+};
+
 // Module-level cache — survives component unmount/remount during navigation
 let _cachedOrders: DashOrder[] | null = null;
 let _cachedRefresh: string = '';
