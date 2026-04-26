@@ -209,7 +209,6 @@ export function CoberturaFullTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/20">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Conta</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">SKU</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">VMD Atual (SQL)</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">
@@ -223,12 +222,11 @@ export function CoberturaFullTab() {
             </thead>
             <tbody>
               {mergedData.map((row) => (
-                <tr key={`${row.sku}-${row.conta}`} className="border-b border-border hover:bg-muted/10 transition-colors">
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{row.conta}</td>
+                <tr key={row.sku} className="border-b border-border hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">{row.sku}</td>
                   <td className="px-4 py-3 text-right font-medium text-foreground">{row.vmdAtual.toFixed(2)}</td>
                   <td className="px-4 py-3 text-right">
-                    {editingSku === `${row.sku}||${row.conta}` ? (
+                    {editingSku === row.sku ? (
                       <div className="flex items-center justify-end gap-1">
                         <input
                           type="number" step="0.1"
@@ -236,13 +234,13 @@ export function CoberturaFullTab() {
                           onChange={e => setTempMeta(e.target.value)}
                           className="w-16 h-7 text-right text-xs bg-muted border border-primary rounded px-1"
                           autoFocus
-                          onKeyDown={e => e.key === 'Enter' && handleSaveMeta(row.sku, row.conta)}
+                          onKeyDown={e => e.key === 'Enter' && handleSaveMeta(row.sku)}
                         />
-                        <button onClick={() => handleSaveMeta(row.sku, row.conta)} className="p-1 hover:bg-primary/10 rounded"><Check className="w-3 h-3 text-[hsl(var(--vix-success))]" /></button>
+                        <button onClick={() => handleSaveMeta(row.sku)} className="p-1 hover:bg-primary/10 rounded"><Check className="w-3 h-3 text-[hsl(var(--vix-success))]" /></button>
                       </div>
                     ) : (
                       <button 
-                        onClick={() => { setEditingSku(`${row.sku}||${row.conta}`); setTempMeta(String(row.vmdMeta)); }}
+                        onClick={() => { setEditingSku(row.sku); setTempMeta(String(row.vmdMeta)); }}
                         className="group flex items-center justify-end gap-1 ml-auto text-muted-foreground hover:text-primary transition-colors"
                       >
                         {row.vmdMeta > 0 ? row.vmdMeta : 'Definir'}
