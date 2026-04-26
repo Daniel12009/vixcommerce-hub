@@ -447,7 +447,7 @@ export function DashboardPage() {
     return hours;
   }, [paidOrders, yesterdaySnapshot]);
 
-  const { comprasItems, estoqueItems } = useSheetsData();
+  const { comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems } = useSheetsData();
 
   // Top SKUs do dia com média real dos últimos 15 dias do SQL
   const topSkus = useMemo(() => {
