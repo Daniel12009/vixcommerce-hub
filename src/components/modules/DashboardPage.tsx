@@ -493,7 +493,7 @@ export function DashboardPage() {
     const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
     (comprasItems || []).forEach((item: any) => {
       if (item.sku && item.mediaVendaDiaria) {
-        const sku = item.sku.trim().toUpperCase();
+        const sku = canonicalSku(item.sku);
         vmdMap.set(sku, { vmd: item.mediaVendaDiaria, preco: item.preco || 0, nome: item.nome || sku });
       }
     });
