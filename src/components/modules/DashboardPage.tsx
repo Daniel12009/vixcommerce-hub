@@ -620,7 +620,7 @@ export function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-indigo-500" /> Top Vendas (Unidades) vs VMD
+                  <Package className="w-4 h-4 text-indigo-500" /> Top Vendas (Unidades) vs Média 15d
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <ComposedChart data={topSkusByVendas}>
