@@ -79,6 +79,15 @@ const getPlatformLabel = (p: string) => {
     default: return p || 'Outros';
   }
 };
+
+const normalizeConta = (conta: string): string => {
+  const u = (conta || '').trim().toUpperCase().replace(/[()\-\s.,]/g, '');
+  if (u.startsWith('VIAFLIX') || u.startsWith('VIAFIX')) return 'VIAFLIX';
+  if (u === 'GS' || u.startsWith('GSTORNEIRAS') || u.startsWith('GS')) return 'GS';
+  if (u.startsWith('DECARION') || u.startsWith('MONACO')) return 'MONACO';
+  return u;
+};
+
 // Module-level cache — survives component unmount/remount during navigation
 let _cachedOrders: DashOrder[] | null = null;
 let _cachedRefresh: string = '';
