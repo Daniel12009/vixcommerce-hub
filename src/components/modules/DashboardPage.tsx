@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
 import { useVendasSKUEstoqueFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
+import { canonicalSku } from '@/lib/sku-aliases';
 import { MarketplaceTab } from './MarketplaceTab';
 import { FaturamentoTab } from './FaturamentoTab';
 
@@ -329,7 +330,7 @@ export function DashboardPage() {
   const vmdSqlBySku = useMemo(() => {
     const m = new Map<string, number>();
     (vmdSqlData || []).forEach(s => {
-      const sku = (s.sku || '').trim().toUpperCase();
+      const sku = canonicalSku(s.sku);
       if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
       if (!sku) return;
       m.set(sku, (m.get(sku) || 0) + (Number(s.quantidade) || 0) / VMD_DIAS);
@@ -345,7 +346,7 @@ export function DashboardPage() {
   const vmdFatBySku = useMemo(() => {
     const m = new Map<string, number>();
     (vmdFatSqlData || []).forEach(s => {
-      const sku = (s.sku || '').trim().toUpperCase();
+      const sku = canonicalSku(s.sku);
       if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
       if (!sku) return;
       m.set(sku, (m.get(sku) || 0) + (Number(s.faturamento_bruto) || 0) / VMD_DIAS);
@@ -455,7 +456,7 @@ export function DashboardPage() {
     paidOrders.forEach(o => {
       o.items.forEach(item => {
         const rawSku = item.sku || item.title || 'N/A';
-        const sku = rawSku.trim().toUpperCase();
+        const sku = canonicalSku(rawSku);
         const vmdUnits = vmdSqlBySku.get(sku) || 0;
         const vmdFat = vmdFatBySku.get(sku) || 0;
         const cur = map.get(sku) || {
@@ -485,20 +486,20 @@ export function DashboardPage() {
   const skusSemVendaHoje = useMemo(() => {
     const vendidosHoje = new Set<string>();
     paidOrders.forEach(o => o.items.forEach(item => {
-      const sku = (item.sku || item.title || 'N/A').trim().toUpperCase();
+      const sku = canonicalSku(item.sku || item.title || 'N/A');
       vendidosHoje.add(sku);
     }));
 
     const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
     (comprasItems || []).forEach((item: any) => {
       if (item.sku && item.mediaVendaDiaria) {
-        const sku = item.sku.trim().toUpperCase();
+        const sku = canonicalSku(item.sku);
         vmdMap.set(sku, { vmd: item.mediaVendaDiaria, preco: item.preco || 0, nome: item.nome || sku });
       }
     });
     (estoqueItems || []).forEach((item: any) => {
       if (item.skuPrincipal && item.vmd) {
-        const sku = item.skuPrincipal.trim().toUpperCase();
+        const sku = canonicalSku(item.skuPrincipal);
         const prev = vmdMap.get(sku);
         vmdMap.set(sku, { vmd: item.vmd, preco: prev?.preco || 0, nome: item.nome || prev?.nome || sku });
       }
