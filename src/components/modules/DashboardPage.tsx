@@ -483,12 +483,27 @@ export function DashboardPage() {
   , [topSkus]);
 
   // SKUs com VMD > 0 que ainda NÃO venderam hoje (oportunidades / alerta)
+  // Status de estoque: 'sem_estoque' (vermelho) | 'sem_full' (laranja escuro) | 'com_estoque' (laranja claro)
   const skusSemVendaHoje = useMemo(() => {
     const vendidosHoje = new Set<string>();
     paidOrders.forEach(o => o.items.forEach(item => {
       const sku = canonicalSku(item.sku || item.title || 'N/A');
       vendidosHoje.add(sku);
     }));
+
+    // Mapas de estoque Full (ML) e Tiny (local)
+    const fullBySku = new Map<string, number>();
+    (estoqueFullItems || []).forEach((i: any) => {
+      const sku = canonicalSku(i.sku);
+      if (!sku) return;
+      fullBySku.set(sku, (fullBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
+    });
+    const tinyBySku = new Map<string, number>();
+    (estoqueTinyItems || []).forEach((i: any) => {
+      const sku = canonicalSku(i.sku);
+      if (!sku) return;
+      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
+    });
 
     const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
     (comprasItems || []).forEach((item: any) => {
@@ -513,14 +528,35 @@ export function DashboardPage() {
       }
     });
 
-    const lista: { sku: string; vmd: number; vmdFaturamento: number; nome: string }[] = [];
+    const lista: {
+      sku: string; vmd: number; vmdFaturamento: number; nome: string;
+      estoqueFull: number; estoqueTiny: number; status: 'sem_estoque' | 'sem_full' | 'com_estoque';
+      statusLabel: string; cor: string;
+    }[] = [];
     vmdMap.forEach((v, sku) => {
       if (v.vmd > 0 && !vendidosHoje.has(sku)) {
-        lista.push({ sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome });
+        const full = fullBySku.get(sku) || 0;
+        const tiny = tinyBySku.get(sku) || 0;
+        let status: 'sem_estoque' | 'sem_full' | 'com_estoque';
+        let statusLabel: string;
+        let cor: string;
+        if (full <= 0 && tiny <= 0) {
+          status = 'sem_estoque'; statusLabel = 'Sem estoque (Full + Tiny)'; cor = '#dc2626'; // vermelho
+        } else if (full <= 0 && tiny > 0) {
+          status = 'sem_full'; statusLabel = 'Rompido no Full'; cor = '#c2410c'; // laranja escuro
+        } else {
+          status = 'com_estoque'; statusLabel = 'Com estoque, sem venda'; cor = '#fbbf24'; // laranja claro
+        }
+        lista.push({
+          sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome,
+          estoqueFull: full, estoqueTiny: tiny, status, statusLabel, cor,
+        });
       }
     });
-    return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
-  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
+    // Ordena por gravidade (vermelho primeiro) e depois por VMD
+    const prio = { sem_estoque: 0, sem_full: 1, com_estoque: 2 };
+    return lista.sort((a, b) => prio[a.status] - prio[b.status] || b.vmd - a.vmd).slice(0, 15);
+  }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
