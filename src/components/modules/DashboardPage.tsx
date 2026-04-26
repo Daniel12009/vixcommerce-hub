@@ -79,6 +79,33 @@ const getPlatformLabel = (p: string) => {
     default: return p || 'Outros';
   }
 };
+
+const normalizeConta = (conta: string): string => {
+  const u = (conta || '').trim().toUpperCase().replace(/[()\-\s.,]/g, '');
+  if (u.startsWith('VIAFLIX') || u.startsWith('VIAFIX')) return 'VIAFLIX';
+  if (u === 'GS' || u.startsWith('GSTORNEIRAS') || u.startsWith('GS')) return 'GS';
+  if (u.startsWith('DECARION') || u.startsWith('MONACO')) return 'MONACO';
+  return u;
+};
+
+const getBRTDateStr = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const d = parts.find(p => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+};
+
+const getBRTHour = (iso: string) => {
+  const h = Number(new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false,
+  }).formatToParts(new Date(iso)).find(p => p.type === 'hour')?.value || 0);
+  return h === 24 ? 0 : h;
+};
+
 // Module-level cache — survives component unmount/remount during navigation
 let _cachedOrders: DashOrder[] | null = null;
 let _cachedRefresh: string = '';
@@ -148,6 +175,29 @@ export function DashboardPage() {
       // Update state + module-level cache
       setOrders(allFetched);
       _cachedOrders = allFetched;
+
+      // Salva/atualiza snapshot do dia atual a cada refresh do Dashboard
+      const paidForSnapshot = allFetched.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
+      const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
+      for (let h = 0; h <= 23; h++) {
+        const label = `${String(h).padStart(2, '0')}h`;
+        horaMap.set(label, { hora: label, faturamento: 0, pedidos: 0 });
+      }
+      paidForSnapshot.forEach(o => {
+        const label = `${String(getBRTHour(o.date_created)).padStart(2, '0')}h`;
+        const cur = horaMap.get(label);
+        if (!cur) return;
+        cur.faturamento += o.total_amount || 0;
+        cur.pedidos += 1;
+      });
+      (supabase as any).from('daily_sales_snapshots').upsert({
+        data_referencia: getBRTDateStr(),
+        vendas_por_hora: Array.from(horaMap.values()),
+        total_faturamento: paidForSnapshot.reduce((s, o) => s + (o.total_amount || 0), 0),
+        total_pedidos: paidForSnapshot.length,
+      }, { onConflict: 'data_referencia' }).then(({ error }: any) => {
+        if (error) console.warn('Erro ao salvar snapshot do dashboard:', error);
+      });
       
       // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       if (!_cachedYesterday) {
@@ -273,36 +323,30 @@ export function DashboardPage() {
   const VMD_DIAS = 15;
   const vmdDateFim = new Date().toISOString().split('T')[0];
   const vmdDateIni = new Date(Date.now() - VMD_DIAS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const { data: vmdSqlData } = useVendasSKUEstoqueFromDB(
-    vmdDateIni,
-    vmdDateFim,
-    filterConta !== 'all' ? [filterConta] : undefined
-  );
+  const { data: vmdSqlData } = useVendasSKUEstoqueFromDB(vmdDateIni, vmdDateFim);
   const vmdSqlBySku = useMemo(() => {
     const m = new Map<string, number>();
     (vmdSqlData || []).forEach(s => {
       const sku = (s.sku || '').trim().toUpperCase();
+      if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
       if (!sku) return;
       m.set(sku, (m.get(sku) || 0) + (Number(s.quantidade) || 0) / VMD_DIAS);
     });
     return m;
-  }, [vmdSqlData]);
+  }, [vmdSqlData, filterConta]);
 
   // Faturamento médio diário por SKU (últimos 15d) — respeita filtro de conta
-  const { data: vmdFatSqlData } = useVendasSKUFromDB(
-    vmdDateIni,
-    vmdDateFim,
-    filterConta !== 'all' ? [filterConta] : undefined
-  );
+  const { data: vmdFatSqlData } = useVendasSKUFromDB(vmdDateIni, vmdDateFim);
   const vmdFatBySku = useMemo(() => {
     const m = new Map<string, number>();
     (vmdFatSqlData || []).forEach(s => {
       const sku = (s.sku || '').trim().toUpperCase();
+      if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
       if (!sku) return;
       m.set(sku, (m.get(sku) || 0) + (Number(s.faturamento_bruto) || 0) / VMD_DIAS);
     });
     return m;
-  }, [vmdFatSqlData]);
+  }, [vmdFatSqlData, filterConta]);
 
   // Unique platforms & accounts
   const plataformas = useMemo(() => [...new Set(orders.map(o => o.plataforma || '').filter(Boolean))], [orders]);
@@ -399,39 +443,16 @@ export function DashboardPage() {
 
   const { comprasItems, estoqueItems } = useSheetsData();
 
-  // Top SKUs do dia (com VMD)
+  // Top SKUs do dia com média real dos últimos 15 dias do SQL
   const topSkus = useMemo(() => {
     const map = new Map<string, { sku: string; vendas: number; faturamento: number; vmd: number; vmdFaturamento: number }>();
-    
-    // Create VMD map from all possible sheet sources
-    const vmdMap = new Map<string, number>();
-    
-    // Source 1: Compras Sheet (mediaVendaDiaria)
-    (comprasItems || []).forEach(item => {
-      if (item.sku) {
-        const sku = item.sku.trim().toUpperCase();
-        if (item.mediaVendaDiaria) vmdMap.set(sku, item.mediaVendaDiaria);
-      }
-    });
-
-    // Source 2: Estoque Sheet (vmd) - overrides if exists
-    (estoqueItems || []).forEach(item => {
-      if (item.skuPrincipal) {
-        const sku = item.skuPrincipal.trim().toUpperCase();
-        if (item.vmd) vmdMap.set(sku, item.vmd);
-      }
-    });
-
-    // Source 3 (prioritário): VMD do SQL filtrada por conta
-    vmdSqlBySku.forEach((v, sku) => { if (v > 0) vmdMap.set(sku, v); });
 
     paidOrders.forEach(o => {
       o.items.forEach(item => {
         const rawSku = item.sku || item.title || 'N/A';
         const sku = rawSku.trim().toUpperCase();
-        const vmdUnits = vmdMap.get(sku) || 0;
-        // Faturamento médio diário (15d) vem do SQL; fallback: vmd × preço atual
-        const vmdFat = vmdFatBySku.get(sku) ?? (vmdUnits * (item.unit_price || 0));
+        const vmdUnits = vmdSqlBySku.get(sku) || 0;
+        const vmdFat = vmdFatBySku.get(sku) || 0;
         const cur = map.get(sku) || {
           sku,
           vendas: 0,
@@ -445,7 +466,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku, vmdFatBySku]);
+  }, [paidOrders, vmdSqlBySku, vmdFatBySku]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
