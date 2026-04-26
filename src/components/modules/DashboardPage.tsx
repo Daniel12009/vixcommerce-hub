@@ -221,11 +221,13 @@ export function DashboardPage() {
             const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
             const yyyy = yesterday.getFullYear();
             const dataBR = `${dd}/${mm}/${yyyy}`;
+            const dataISO = `${yyyy}-${mm}-${dd}`;
 
+            // Tenta ambos formatos (banco pode ter coluna date OU text)
             const { data: vRows } = await (supabase as any)
               .from('vendas_items')
               .select('data, valor_total, numero_pedido')
-              .eq('data', dataBR)
+              .or(`data.eq.${dataBR},data.eq.${dataISO}`)
               .limit(10000);
 
             if (vRows && vRows.length > 0) {
