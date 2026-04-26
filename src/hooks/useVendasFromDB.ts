@@ -113,7 +113,7 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
 
       setLoading(true);
       try {
-        const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_marketplace_sku', {
+        const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_marketplace_sku_faturamento', {
           p_data_ini: finalIni,
           p_data_fim: finalFim,
           p_contas: (contas && contas.length > 0 && contas[0] && contas[0] !== 'all') ? contas : null
