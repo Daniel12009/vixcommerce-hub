@@ -499,7 +499,7 @@ export function DashboardPage() {
     });
     (estoqueItems || []).forEach((item: any) => {
       if (item.skuPrincipal && item.vmd) {
-        const sku = item.skuPrincipal.trim().toUpperCase();
+        const sku = canonicalSku(item.skuPrincipal);
         const prev = vmdMap.get(sku);
         vmdMap.set(sku, { vmd: item.vmd, preco: prev?.preco || 0, nome: item.nome || prev?.nome || sku });
       }
