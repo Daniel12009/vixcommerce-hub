@@ -42,7 +42,7 @@ function normalizeConta(c: string): string {
 }
 
 export function CoberturaFullTab() {
-  const { estoqueFullItems } = useSheetsData();
+  const { estoqueFullItems, estoqueTinyItems } = useSheetsData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // VMD baseada nos últimos 15 dias
