@@ -12,10 +12,17 @@ interface CoberturaRow {
   vmdAtual: number;
   vmdMeta: number;
   estoqueFull: number;
+  estoqueTiny: number;
+  estoqueTotal: number;
   estoqueSeguranca: number;
   coberturaAlvo: number;
   performance: 'oversales' | 'undersales' | 'ok';
   compraSugerida: number;
+}
+
+// Arredonda VMD para inteiro ou meio (.5) — evita 32.3333
+function roundHalf(n: number): number {
+  return Math.round(n * 2) / 2;
 }
 
 // Normaliza nomes de conta para casar entre vendas (DB) e estoque Full
@@ -35,7 +42,7 @@ function normalizeConta(c: string): string {
 }
 
 export function CoberturaFullTab() {
-  const { estoqueFullItems } = useSheetsData();
+  const { estoqueFullItems, estoqueTinyItems } = useSheetsData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // VMD baseada nos últimos 15 dias
@@ -67,14 +74,28 @@ export function CoberturaFullTab() {
     console.log('[CoberturaFull] VMD 15d:', sqlVmdBySku.size, 'SKUs');
 
     // Estoque Full agregado por SKU (soma de todas as contas)
-    const stockBySku = new Map<string, number>();
+    const fullBySku = new Map<string, number>();
     estoqueFullItems.forEach(i => {
       const sku = i.sku.trim().toUpperCase();
-      stockBySku.set(sku, (stockBySku.get(sku) || 0) + Number(i.aptasParaVenda || 0));
+      fullBySku.set(sku, (fullBySku.get(sku) || 0) + Number(i.aptasParaVenda || 0));
     });
 
-    return Array.from(stockBySku.entries()).map(([sku, full]) => {
-      const vmdAtual = sqlVmdBySku.get(sku) ?? 0;
+    // Estoque Tiny (CD) agregado por SKU
+    const tinyBySku = new Map<string, number>();
+    (estoqueTinyItems || []).forEach(i => {
+      const sku = (i.sku || '').trim().toUpperCase();
+      if (!sku) return;
+      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + Number(i.quantidade || 0));
+    });
+
+    // União dos SKUs do Full + Tiny
+    const allSkus = new Set<string>([...fullBySku.keys(), ...tinyBySku.keys()]);
+
+    return Array.from(allSkus).map((sku) => {
+      const full = fullBySku.get(sku) || 0;
+      const tiny = tinyBySku.get(sku) || 0;
+      const total = full + tiny;
+      const vmdAtual = roundHalf(sqlVmdBySku.get(sku) ?? 0);
       const vmdMeta = metasVMD[sku] || 0;
 
       const coberturaAlvo = 30;
@@ -86,15 +107,17 @@ export function CoberturaFullTab() {
         else if (vmdAtual < vmdMeta * 0.8) performance = 'undersales';
       }
 
-      const compraSugerida = Math.max(0, Math.ceil((vmdAtual * 60) - full));
+      // Sugestão de compra considera estoque TOTAL (Full + Tiny)
+      const compraSugerida = Math.max(0, Math.ceil((vmdAtual * 60) - total));
 
       return {
         sku, vmdAtual, vmdMeta,
-        estoqueFull: full, estoqueSeguranca, coberturaAlvo,
+        estoqueFull: full, estoqueTiny: tiny, estoqueTotal: total,
+        estoqueSeguranca, coberturaAlvo,
         performance, compraSugerida,
       };
     }).sort((a, b) => b.vmdAtual - a.vmdAtual);
-  }, [estoqueFullItems, vmdSalesData, metasVMD]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdSalesData, metasVMD]);
 
   const kpis = useMemo(() => {
     const totalVmd = mergedData.reduce((acc, curr) => acc + curr.vmdAtual, 0);
@@ -215,6 +238,8 @@ export function CoberturaFullTab() {
                   Meta VMD <Info className="inline w-3 h-3 ml-1 opacity-50 cursor-help" />
                 </th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Est. Segurança</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Sugestão Compra (60d)</th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">Status Performance</th>
@@ -224,7 +249,7 @@ export function CoberturaFullTab() {
               {mergedData.map((row) => (
                 <tr key={row.sku} className="border-b border-border hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">{row.sku}</td>
-                  <td className="px-4 py-3 text-right font-medium text-foreground">{row.vmdAtual.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right font-medium text-foreground">{row.vmdAtual % 1 === 0 ? row.vmdAtual : row.vmdAtual.toFixed(1)}</td>
                   <td className="px-4 py-3 text-right">
                     {editingSku === row.sku ? (
                       <div className="flex items-center justify-end gap-1">
@@ -248,7 +273,9 @@ export function CoberturaFullTab() {
                       </button>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right font-medium">{row.estoqueFull}</td>
+                  <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueFull)}</td>
+                  <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueTiny)}</td>
+                  <td className="px-4 py-3 text-right font-bold text-foreground">{formatNumber(row.estoqueTotal)}</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">{row.estoqueSeguranca}</td>
                   <td className="px-4 py-3 text-right font-bold text-[hsl(var(--vix-success))]">{row.compraSugerida > 0 ? formatNumber(row.compraSugerida) : '—'}</td>
                   <td className="px-4 py-3 text-center">
