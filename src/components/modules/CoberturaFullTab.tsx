@@ -12,10 +12,17 @@ interface CoberturaRow {
   vmdAtual: number;
   vmdMeta: number;
   estoqueFull: number;
+  estoqueTiny: number;
+  estoqueTotal: number;
   estoqueSeguranca: number;
   coberturaAlvo: number;
   performance: 'oversales' | 'undersales' | 'ok';
   compraSugerida: number;
+}
+
+// Arredonda VMD para inteiro ou meio (.5) — evita 32.3333
+function roundHalf(n: number): number {
+  return Math.round(n * 2) / 2;
 }
 
 // Normaliza nomes de conta para casar entre vendas (DB) e estoque Full
