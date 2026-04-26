@@ -204,7 +204,18 @@ export function useVendasSKUEstoqueFromDB(dateIni: string, dateFim: string, cont
         if (rpcError) throw rpcError;
 
         if (active) {
-          setData((rpcData as any[]) || []);
+          const items = (rpcData as any[]) || [];
+          const aggMap = new Map<string, { sku: string; conta: string; quantidade: number }>();
+          for (const item of items) {
+            const sku = canonicalSku(item.sku);
+            const conta = String(item.conta || '');
+            const key = `${sku}||${conta}`;
+            const prev = aggMap.get(key);
+            const qtd = Number(item.quantidade || 0);
+            if (!prev) aggMap.set(key, { sku, conta, quantidade: qtd });
+            else prev.quantidade += qtd;
+          }
+          setData(Array.from(aggMap.values()));
           setError(null);
         }
       } catch (err: any) {
