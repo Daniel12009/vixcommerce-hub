@@ -238,6 +238,8 @@ export function CoberturaFullTab() {
                   Meta VMD <Info className="inline w-3 h-3 ml-1 opacity-50 cursor-help" />
                 </th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Est. Segurança</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Sugestão Compra (60d)</th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">Status Performance</th>
