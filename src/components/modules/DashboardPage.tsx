@@ -447,7 +447,7 @@ export function DashboardPage() {
     return hours;
   }, [paidOrders, yesterdaySnapshot]);
 
-  const { comprasItems, estoqueItems } = useSheetsData();
+  const { comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems } = useSheetsData();
 
   // Top SKUs do dia com média real dos últimos 15 dias do SQL
   const topSkus = useMemo(() => {
@@ -483,12 +483,27 @@ export function DashboardPage() {
   , [topSkus]);
 
   // SKUs com VMD > 0 que ainda NÃO venderam hoje (oportunidades / alerta)
+  // Status de estoque: 'sem_estoque' (vermelho) | 'sem_full' (laranja escuro) | 'com_estoque' (laranja claro)
   const skusSemVendaHoje = useMemo(() => {
     const vendidosHoje = new Set<string>();
     paidOrders.forEach(o => o.items.forEach(item => {
       const sku = canonicalSku(item.sku || item.title || 'N/A');
       vendidosHoje.add(sku);
     }));
+
+    // Mapas de estoque Full (ML) e Tiny (local)
+    const fullBySku = new Map<string, number>();
+    (estoqueFullItems || []).forEach((i: any) => {
+      const sku = canonicalSku(i.sku);
+      if (!sku) return;
+      fullBySku.set(sku, (fullBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
+    });
+    const tinyBySku = new Map<string, number>();
+    (estoqueTinyItems || []).forEach((i: any) => {
+      const sku = canonicalSku(i.sku);
+      if (!sku) return;
+      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
+    });
 
     const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
     (comprasItems || []).forEach((item: any) => {
@@ -513,14 +528,35 @@ export function DashboardPage() {
       }
     });
 
-    const lista: { sku: string; vmd: number; vmdFaturamento: number; nome: string }[] = [];
+    const lista: {
+      sku: string; vmd: number; vmdFaturamento: number; nome: string;
+      estoqueFull: number; estoqueTiny: number; status: 'sem_estoque' | 'sem_full' | 'com_estoque';
+      statusLabel: string; cor: string;
+    }[] = [];
     vmdMap.forEach((v, sku) => {
       if (v.vmd > 0 && !vendidosHoje.has(sku)) {
-        lista.push({ sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome });
+        const full = fullBySku.get(sku) || 0;
+        const tiny = tinyBySku.get(sku) || 0;
+        let status: 'sem_estoque' | 'sem_full' | 'com_estoque';
+        let statusLabel: string;
+        let cor: string;
+        if (full <= 0 && tiny <= 0) {
+          status = 'sem_estoque'; statusLabel = 'Sem estoque (Full + Tiny)'; cor = '#dc2626'; // vermelho
+        } else if (full <= 0 && tiny > 0) {
+          status = 'sem_full'; statusLabel = 'Rompido no Full'; cor = '#c2410c'; // laranja escuro
+        } else {
+          status = 'com_estoque'; statusLabel = 'Com estoque, sem venda'; cor = '#fbbf24'; // laranja claro
+        }
+        lista.push({
+          sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome,
+          estoqueFull: full, estoqueTiny: tiny, status, statusLabel, cor,
+        });
       }
     });
-    return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
-  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
+    // Ordena por gravidade (vermelho primeiro) e depois por VMD
+    const prio = { sem_estoque: 0, sem_full: 1, com_estoque: 2 };
+    return lista.sort((a, b) => prio[a.status] - prio[b.status] || b.vmd - a.vmd).slice(0, 15);
+  }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
@@ -731,17 +767,49 @@ export function DashboardPage() {
                   {skusSemVendaHoje.length}
                 </span>
               </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje. Ordenados pela VMD esperada.
+              <p className="text-xs text-muted-foreground mb-2">
+                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje.
               </p>
+              {/* Legenda de status */}
+              <div className="flex flex-wrap items-center gap-3 mb-4 text-xs">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#dc2626' }} />
+                  <span className="text-muted-foreground">Sem estoque (Full + Tiny)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#c2410c' }} />
+                  <span className="text-muted-foreground">Rompido no Full (tem no Tiny)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#fbbf24' }} />
+                  <span className="text-muted-foreground">Com estoque, sem venda</span>
+                </span>
+              </div>
               <ResponsiveContainer width="100%" height={320}>
                 <ComposedChart data={skusSemVendaHoje}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
-                  <Legend />
-                  <Bar dataKey="vmd" fill="#f59e0b" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30} />
+                  <Tooltip
+                    content={({ active, payload }: any) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-xs">
+                          <div className="font-semibold text-foreground mb-1">{d.sku}</div>
+                          <div style={{ color: d.cor }} className="font-medium mb-1">{d.statusLabel}</div>
+                          <div className="text-muted-foreground">VMD: <span className="text-foreground font-medium">{Number(d.vmd).toFixed(1)} un/dia</span></div>
+                          <div className="text-muted-foreground">Estoque Full: <span className="text-foreground font-medium">{d.estoqueFull}</span></div>
+                          <div className="text-muted-foreground">Estoque Tiny: <span className="text-foreground font-medium">{d.estoqueTiny}</span></div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="vmd" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30}>
+                    {skusSemVendaHoje.map((entry, i) => (
+                      <Cell key={i} fill={entry.cor} />
+                    ))}
+                  </Bar>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
