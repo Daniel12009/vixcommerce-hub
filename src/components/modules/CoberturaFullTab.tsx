@@ -249,7 +249,7 @@ export function CoberturaFullTab() {
               {mergedData.map((row) => (
                 <tr key={row.sku} className="border-b border-border hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">{row.sku}</td>
-                  <td className="px-4 py-3 text-right font-medium text-foreground">{row.vmdAtual.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right font-medium text-foreground">{row.vmdAtual % 1 === 0 ? row.vmdAtual : row.vmdAtual.toFixed(1)}</td>
                   <td className="px-4 py-3 text-right">
                     {editingSku === row.sku ? (
                       <div className="flex items-center justify-end gap-1">
