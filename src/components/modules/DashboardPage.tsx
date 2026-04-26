@@ -637,7 +637,7 @@ export function DashboardPage() {
 
               <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-green-500" /> Top Faturamento vs Meta (VMD)
+                  <DollarSign className="w-4 h-4 text-green-500" /> Top Faturamento vs Média 15d
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <ComposedChart data={topSkusByFaturamento}>
