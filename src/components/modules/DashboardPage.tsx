@@ -149,21 +149,62 @@ export function DashboardPage() {
       setOrders(allFetched);
       _cachedOrders = allFetched;
       
-      // Fetch yesterday's snapshot if not cached
+      // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       if (!_cachedYesterday) {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const dateStr = yesterday.toISOString().split('T')[0];
-        
+
         const { data: snap } = await (supabase as any)
           .from('daily_sales_snapshots')
           .select('*')
           .eq('data_referencia', dateStr)
           .maybeSingle();
-        
+
         if (snap) {
           setYesterdaySnapshot(snap);
           _cachedYesterday = snap;
+        } else {
+          // Fallback: monta o snapshot a partir de vendas_items (planilha Vendas)
+          try {
+            const dd = String(yesterday.getDate()).padStart(2, '0');
+            const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+            const yyyy = yesterday.getFullYear();
+            const dataBR = `${dd}/${mm}/${yyyy}`;
+
+            const { data: vRows } = await (supabase as any)
+              .from('vendas_items')
+              .select('data, valor_total, numero_pedido')
+              .eq('data', dataBR)
+              .limit(10000);
+
+            if (vRows && vRows.length > 0) {
+              // Sem horário no campo `data` (só dd/MM/yyyy), distribui no total do dia em "TOTAL"
+              // mas o gráfico precisa de horas — então usa apenas o total do dia como linha plana.
+              const totalDia = vRows.reduce((s: number, r: any) => s + (Number(r.valor_total) || 0), 0);
+              const pedidosDia = new Set(vRows.map((r: any) => r.numero_pedido)).size;
+
+              // Distribui o total uniformemente nas horas comerciais (8h-22h) para visualizar tendência
+              const horas: any[] = [];
+              const horasComerciais = 15; // 8 às 22
+              for (let h = 0; h <= 23; h++) {
+                const label = `${String(h).padStart(2, '0')}h`;
+                const fat = (h >= 8 && h <= 22) ? totalDia / horasComerciais : 0;
+                horas.push({ hora: label, faturamento: fat, pedidos: 0 });
+              }
+
+              const synthetic = {
+                data_referencia: dateStr,
+                vendas_por_hora: horas,
+                total_faturamento: totalDia,
+                total_pedidos: pedidosDia,
+              };
+              setYesterdaySnapshot(synthetic);
+              _cachedYesterday = synthetic;
+            }
+          } catch (e) {
+            console.warn('Fallback yesterday from vendas_items failed:', e);
+          }
         }
       }
 
