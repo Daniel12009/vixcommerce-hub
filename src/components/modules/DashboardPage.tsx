@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
-import { useVendasSKUEstoqueFromDB } from '@/hooks/useVendasFromDB';
+import { useVendasSKUEstoqueFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
 import { MarketplaceTab } from './MarketplaceTab';
 import { FaturamentoTab } from './FaturamentoTab';
 
@@ -149,21 +149,62 @@ export function DashboardPage() {
       setOrders(allFetched);
       _cachedOrders = allFetched;
       
-      // Fetch yesterday's snapshot if not cached
+      // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       if (!_cachedYesterday) {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const dateStr = yesterday.toISOString().split('T')[0];
-        
+
         const { data: snap } = await (supabase as any)
           .from('daily_sales_snapshots')
           .select('*')
           .eq('data_referencia', dateStr)
           .maybeSingle();
-        
+
         if (snap) {
           setYesterdaySnapshot(snap);
           _cachedYesterday = snap;
+        } else {
+          // Fallback: monta o snapshot a partir de vendas_items (planilha Vendas)
+          try {
+            const dd = String(yesterday.getDate()).padStart(2, '0');
+            const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+            const yyyy = yesterday.getFullYear();
+            const dataBR = `${dd}/${mm}/${yyyy}`;
+
+            const { data: vRows } = await (supabase as any)
+              .from('vendas_items')
+              .select('data, valor_total, numero_pedido')
+              .eq('data', dataBR)
+              .limit(10000);
+
+            if (vRows && vRows.length > 0) {
+              // Sem horário no campo `data` (só dd/MM/yyyy), distribui no total do dia em "TOTAL"
+              // mas o gráfico precisa de horas — então usa apenas o total do dia como linha plana.
+              const totalDia = vRows.reduce((s: number, r: any) => s + (Number(r.valor_total) || 0), 0);
+              const pedidosDia = new Set(vRows.map((r: any) => r.numero_pedido)).size;
+
+              // Distribui o total uniformemente nas horas comerciais (8h-22h) para visualizar tendência
+              const horas: any[] = [];
+              const horasComerciais = 15; // 8 às 22
+              for (let h = 0; h <= 23; h++) {
+                const label = `${String(h).padStart(2, '0')}h`;
+                const fat = (h >= 8 && h <= 22) ? totalDia / horasComerciais : 0;
+                horas.push({ hora: label, faturamento: fat, pedidos: 0 });
+              }
+
+              const synthetic = {
+                data_referencia: dateStr,
+                vendas_por_hora: horas,
+                total_faturamento: totalDia,
+                total_pedidos: pedidosDia,
+              };
+              setYesterdaySnapshot(synthetic);
+              _cachedYesterday = synthetic;
+            }
+          } catch (e) {
+            console.warn('Fallback yesterday from vendas_items failed:', e);
+          }
         }
       }
 
@@ -246,6 +287,22 @@ export function DashboardPage() {
     });
     return m;
   }, [vmdSqlData]);
+
+  // Faturamento médio diário por SKU (últimos 15d) — respeita filtro de conta
+  const { data: vmdFatSqlData } = useVendasSKUFromDB(
+    vmdDateIni,
+    vmdDateFim,
+    filterConta !== 'all' ? [filterConta] : undefined
+  );
+  const vmdFatBySku = useMemo(() => {
+    const m = new Map<string, number>();
+    (vmdFatSqlData || []).forEach(s => {
+      const sku = (s.sku || '').trim().toUpperCase();
+      if (!sku) return;
+      m.set(sku, (m.get(sku) || 0) + (Number(s.faturamento_bruto) || 0) / VMD_DIAS);
+    });
+    return m;
+  }, [vmdFatSqlData]);
 
   // Unique platforms & accounts
   const plataformas = useMemo(() => [...new Set(orders.map(o => o.plataforma || '').filter(Boolean))], [orders]);
@@ -373,12 +430,14 @@ export function DashboardPage() {
         const rawSku = item.sku || item.title || 'N/A';
         const sku = rawSku.trim().toUpperCase();
         const vmdUnits = vmdMap.get(sku) || 0;
-        const cur = map.get(sku) || { 
-          sku, 
-          vendas: 0, 
-          faturamento: 0, 
+        // Faturamento médio diário (15d) vem do SQL; fallback: vmd × preço atual
+        const vmdFat = vmdFatBySku.get(sku) ?? (vmdUnits * (item.unit_price || 0));
+        const cur = map.get(sku) || {
+          sku,
+          vendas: 0,
+          faturamento: 0,
           vmd: vmdUnits,
-          vmdFaturamento: vmdUnits * (item.unit_price || 0)
+          vmdFaturamento: vmdFat,
         };
         cur.vendas += item.quantity;
         cur.faturamento += (item.unit_price || 0) * item.quantity;
@@ -386,7 +445,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku]);
+  }, [paidOrders, comprasItems, estoqueItems, vmdSqlBySku, vmdFatBySku]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
@@ -602,7 +661,7 @@ export function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-indigo-500" /> Top Vendas (Unidades) vs VMD
+                  <Package className="w-4 h-4 text-indigo-500" /> Top Vendas (Unidades) vs Média 15d
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <ComposedChart data={topSkusByVendas}>
@@ -612,14 +671,14 @@ export function DashboardPage() {
                     <Tooltip />
                     <Legend />
                     <Bar dataKey="vendas" fill="#22c55e" name="Vendas Hoje" radius={[4, 4, 0, 0]} barSize={40} />
-                    <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="VMD (Meta)" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="Média 15d (Unid./dia)" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
 
               <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-green-500" /> Top Faturamento vs Meta (VMD)
+                  <DollarSign className="w-4 h-4 text-green-500" /> Top Faturamento vs Média 15d
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <ComposedChart data={topSkusByFaturamento}>
@@ -629,7 +688,7 @@ export function DashboardPage() {
                     <Tooltip formatter={(v: any) => formatBRL(Number(v))} />
                     <Legend />
                     <Bar dataKey="faturamento" fill="#6366f1" name="Faturamento Hoje" radius={[4, 4, 0, 0]} barSize={40} />
-                    <Line type="monotone" dataKey="vmdFaturamento" stroke="#ef4444" name="Fat. Médio (Meta)" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="vmdFaturamento" stroke="#ef4444" name="Fat. Médio 15d/dia" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>

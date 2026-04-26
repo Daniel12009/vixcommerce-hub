@@ -101,6 +101,36 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_sales_snapshots: {
+        Row: {
+          created_at: string
+          data_referencia: string
+          id: string
+          total_faturamento: number
+          total_pedidos: number
+          updated_at: string
+          vendas_por_hora: Json
+        }
+        Insert: {
+          created_at?: string
+          data_referencia: string
+          id?: string
+          total_faturamento?: number
+          total_pedidos?: number
+          updated_at?: string
+          vendas_por_hora?: Json
+        }
+        Update: {
+          created_at?: string
+          data_referencia?: string
+          id?: string
+          total_faturamento?: number
+          total_pedidos?: number
+          updated_at?: string
+          vendas_por_hora?: Json
+        }
+        Relationships: []
+      }
       envios_full: {
         Row: {
           caixas: number | null
