@@ -694,7 +694,7 @@ export function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                     <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
                     <Legend />
                     <Bar dataKey="vendas" fill="#22c55e" name="Vendas Hoje" radius={[4, 4, 0, 0]} barSize={40} />
                     <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="Média 15d (Unid./dia)" strokeWidth={2} dot={{ r: 4 }} />
