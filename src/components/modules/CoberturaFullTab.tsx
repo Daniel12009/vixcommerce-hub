@@ -21,13 +21,26 @@ interface CoberturaRow {
 
 const PERIODOS_PRESET = [7, 15, 30, 40, 60, 90, 120] as const;
 
-// Cores fixas para contas no gráfico
+// Cores fixas para contas no gráfico (por SKU)
 const CONTA_COLORS: Record<string, string> = {
   VIAFLIX: 'hsl(var(--primary))',
   GS: 'hsl(var(--vix-success))',
   MONACO: 'hsl(var(--vix-warning))',
 };
-const FALLBACK_COLORS = ['#8b5cf6', '#ec4899', '#06b6d4', '#f59e0b'];
+// Cores por origem (gráfico global)
+const ORIGEM_COLORS: Record<string, string> = {
+  'Mercado Livre': 'hsl(var(--primary))',
+  'Shopee': '#ee4d2d',
+  'Shein': '#000000',
+  'Amazon Seller': '#ff9900',
+  'TikTok Shop': '#25f4ee',
+  'Temu': '#fb7701',
+  'Atacado': 'hsl(var(--vix-success))',
+  'Atacado VF': '#16a34a',
+  'Loja Fisica VF': '#7c3aed',
+  'Showroom': '#a855f7',
+};
+const FALLBACK_COLORS = ['#8b5cf6', '#ec4899', '#06b6d4', '#f59e0b', '#84cc16', '#f43f5e'];
 
 function roundHalf(n: number): number {
   return Math.round(n * 2) / 2;
