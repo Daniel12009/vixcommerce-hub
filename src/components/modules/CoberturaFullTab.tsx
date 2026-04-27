@@ -337,6 +337,7 @@ export function CoberturaFullTab() {
     let filtered = globalDaily;
     if (filtroConta !== 'all') filtered = filtered.filter(r => r.conta === filtroConta);
     if (filtroOrigem !== 'all') filtered = filtered.filter(r => r.origem === filtroOrigem);
+    if (origensOcultas.size > 0) filtered = filtered.filter(r => !origensOcultas.has(r.origem));
     const buscaUp = busca.trim().toUpperCase();
     if (buscaUp) filtered = filtered.filter(r => r.sku.includes(buscaUp));
 
