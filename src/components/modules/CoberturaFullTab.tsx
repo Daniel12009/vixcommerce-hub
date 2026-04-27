@@ -443,7 +443,7 @@ export function CoberturaFullTab() {
               {mergedData.map((row) => {
                 const isExpanded = expandedSku === row.sku;
                 return (
-                  <>
+                  <Fragment key={row.sku}>
                     <tr
                       key={row.sku}
                       className="border-b border-border hover:bg-muted/10 transition-colors cursor-pointer"
@@ -546,7 +546,7 @@ export function CoberturaFullTab() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
