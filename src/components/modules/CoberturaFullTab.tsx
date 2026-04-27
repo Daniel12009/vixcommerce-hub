@@ -472,43 +472,108 @@ export function CoberturaFullTab() {
     toast.success('Template baixado');
   };
 
-  // Exporta o gráfico global (1 aba com vendas/dia por origem) e a tabela de cobertura (1 aba)
-  const handleExportarGlobal = () => {
+  // Exportação RESUMIDA — apenas a tabela de cobertura conforme listada
+  const handleExportarResumido = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const header = ['SKU', `VMD (${diasReais}d)`, 'Meta VMD', 'Estoque Full', 'Estoque Tiny', 'Estoque Total', 'Status'];
+      const linhas = mergedData.map(r => [
+        r.sku, r.vmdAtual, r.vmdMeta, r.estoqueFull, r.estoqueTiny, r.estoqueTotal, r.performance.toUpperCase(),
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([header, ...linhas]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Cobertura SKUs');
+      const sufixo = busca.trim() ? `_${busca.trim().toUpperCase()}` : '';
+      XLSX.writeFile(wb, `cobertura_resumida_${diasReais}d${sufixo}.xlsx`);
+      toast.success('Exportação resumida concluída');
+    } catch (err: any) {
+      toast.error('Erro ao exportar: ' + err.message);
+    }
+  };
+
+  // Exportação COMPLETA — vendas diárias por SKU + meta diária global por dia
+  const handleExportarCompleto = () => {
     try {
       const wb = XLSX.utils.book_new();
 
-      // Aba 1 — Vendas por dia x origem (segue o que está no gráfico)
+      // === Aba 1: Vendas por Dia (gráfico global, por origem) ===
       const origens = globalChartData.origens;
-      const headerGrafico = ['Data', ...origens, 'Total'];
-      const linhas = globalChartData.rows.map((r: any) => [
+      const h1 = ['Data', ...origens, 'Total', 'Meta Global Dia'];
+      const l1 = globalChartData.rows.map((r: any) => [
         r.dateLabel,
         ...origens.map(o => Number(r[o] || 0)),
         Number(r.total || 0),
+        Number(globalChartData.metaGlobal.toFixed(2)),
       ]);
       const totalRow = [
         'TOTAL',
         ...origens.map(o => globalChartData.rows.reduce((s: number, r: any) => s + Number(r[o] || 0), 0)),
         globalChartData.rows.reduce((s: number, r: any) => s + Number(r.total || 0), 0),
+        Number((globalChartData.metaGlobal * diasReais).toFixed(2)),
       ];
       const vmdRow = [
         `VMD (/${diasReais}d)`,
         ...origens.map(o => Number((globalChartData.vmdPorOrigem[o] || 0).toFixed(2))),
         Number(globalChartData.vmdTotal.toFixed(2)),
+        Number(globalChartData.metaGlobal.toFixed(2)),
       ];
-      const ws1 = XLSX.utils.aoa_to_sheet([headerGrafico, ...linhas, [], totalRow, vmdRow]);
+      const ws1 = XLSX.utils.aoa_to_sheet([h1, ...l1, [], totalRow, vmdRow]);
       XLSX.utils.book_append_sheet(wb, ws1, 'Vendas por Dia');
 
-      // Aba 2 — Tabela de cobertura
-      const headerTab = ['SKU', `VMD (${diasReais}d)`, 'Meta VMD', 'Estoque Full', 'Estoque Tiny', 'Estoque Total', 'Status'];
-      const linhasTab = mergedData.map(r => [
+      // === Aba 2: Vendas Diárias por SKU (matriz SKU x Data) ===
+      // Aplica os mesmos filtros (conta/origem/busca) usados no gráfico
+      let filtered = globalDaily;
+      if (filtroConta !== 'all') filtered = filtered.filter(r => r.conta === filtroConta);
+      if (filtroOrigem !== 'all') filtered = filtered.filter(r => r.origem === filtroOrigem);
+      const buscaUp = busca.trim().toUpperCase();
+      if (buscaUp) filtered = filtered.filter(r => r.sku.includes(buscaUp));
+
+      // Lista de dias do período
+      const dias: string[] = [];
+      const ini = new Date(dateIni);
+      const fim = new Date(dateFim);
+      for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+        dias.push(d.toISOString().split('T')[0]);
+      }
+      const diasLabel = dias.map(formatDateBR);
+
+      // SKU -> data -> qtd
+      const skuMap = new Map<string, Map<string, number>>();
+      filtered.forEach(r => {
+        if (!r.sku) return;
+        if (!skuMap.has(r.sku)) skuMap.set(r.sku, new Map());
+        const inner = skuMap.get(r.sku)!;
+        inner.set(r.date, (inner.get(r.date) || 0) + r.qtd);
+      });
+
+      const skusOrdenados = Array.from(skuMap.keys()).sort();
+      const h2 = ['SKU', 'Meta VMD', `VMD (${diasReais}d)`, ...diasLabel, 'Total Período'];
+      const l2 = skusOrdenados.map(sku => {
+        const inner = skuMap.get(sku)!;
+        const valores = dias.map(d => Number(inner.get(d) || 0));
+        const totalSku = valores.reduce((s, v) => s + v, 0);
+        const vmdSku = totalSku / diasReais;
+        const metaSku = metasVMD[sku] || 0;
+        return [sku, metaSku, Number(vmdSku.toFixed(2)), ...valores, totalSku];
+      });
+      // Linha TOTAL/dia + Meta Global/dia
+      const totalDia = dias.map(d => filtered.filter(r => r.date === d).reduce((s, r) => s + r.qtd, 0));
+      const grand = totalDia.reduce((s, v) => s + v, 0);
+      const linhaTotal = ['TOTAL DIA', '', '', ...totalDia, grand];
+      const linhaMeta = ['META GLOBAL DIA', '', '', ...dias.map(() => Number(globalChartData.metaGlobal.toFixed(2))), Number((globalChartData.metaGlobal * diasReais).toFixed(2))];
+      const ws2 = XLSX.utils.aoa_to_sheet([h2, ...l2, [], linhaTotal, linhaMeta]);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Vendas Diárias por SKU');
+
+      // === Aba 3: Cobertura SKUs (tabela completa) ===
+      const h3 = ['SKU', `VMD (${diasReais}d)`, 'Meta VMD', 'Estoque Full', 'Estoque Tiny', 'Estoque Total', 'Status'];
+      const l3 = mergedData.map(r => [
         r.sku, r.vmdAtual, r.vmdMeta, r.estoqueFull, r.estoqueTiny, r.estoqueTotal, r.performance.toUpperCase(),
       ]);
-      const ws2 = XLSX.utils.aoa_to_sheet([headerTab, ...linhasTab]);
-      XLSX.utils.book_append_sheet(wb, ws2, 'Cobertura SKUs');
+      const ws3 = XLSX.utils.aoa_to_sheet([h3, ...l3]);
+      XLSX.utils.book_append_sheet(wb, ws3, 'Cobertura SKUs');
 
       const sufixo = busca.trim() ? `_${busca.trim().toUpperCase()}` : '';
-      XLSX.writeFile(wb, `cobertura_vendas_${diasReais}d${sufixo}.xlsx`);
-      toast.success('Exportação concluída');
+      XLSX.writeFile(wb, `cobertura_completa_${diasReais}d${sufixo}.xlsx`);
+      toast.success('Exportação completa concluída');
     } catch (err: any) {
       toast.error('Erro ao exportar: ' + err.message);
     }
@@ -620,13 +685,22 @@ export function CoberturaFullTab() {
             <h3 className="font-semibold text-foreground">
               Vendas Globais — {diasReais} dias {busca.trim() ? `(SKU: ${busca.trim().toUpperCase()})` : '(todos SKUs)'}
             </h3>
-            <button
-              onClick={handleExportarGlobal}
-              className="ml-2 flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-border rounded-md hover:bg-muted transition-colors"
-              title="Exportar dados do gráfico e tabela"
-            >
-              <Download className="w-3.5 h-3.5" /> Exportar
-            </button>
+            <div className="ml-2 flex items-center gap-1">
+              <button
+                onClick={handleExportarResumido}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-border rounded-md hover:bg-muted transition-colors"
+                title="Exporta apenas a tabela de cobertura listada"
+              >
+                <Download className="w-3.5 h-3.5" /> Exportar Resumido
+              </button>
+              <button
+                onClick={handleExportarCompleto}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                title="Exporta vendas diárias por SKU + meta diária global"
+              >
+                <Download className="w-3.5 h-3.5" /> Exportar Completo
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap text-xs">
             <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
