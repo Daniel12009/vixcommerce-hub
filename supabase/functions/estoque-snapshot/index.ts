@@ -118,8 +118,8 @@ Deno.serve(async (req) => {
     const BATCH_SIZE = 500;
     let totalInserted = 0;
     let totalErrors = 0;
-    for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
-      const batch = snapshots.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < dedupedSnapshots.length; i += BATCH_SIZE) {
+      const batch = dedupedSnapshots.slice(i, i + BATCH_SIZE);
       const upsertRes = await supabaseFetch('/estoque_snapshots?on_conflict=data_ref,sku,conta', {
         method: 'POST',
         headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
