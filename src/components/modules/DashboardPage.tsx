@@ -544,7 +544,7 @@ export function DashboardPage() {
         if (full <= 0 && tiny <= 0) {
           status = 'sem_estoque'; statusLabel = 'Sem estoque (Full + Tiny)'; cor = '#dc2626'; // vermelho forte
         } else if (full <= 0 && tiny > 0) {
-          status = 'sem_full'; statusLabel = 'Rompido no Full (tem no Tiny)'; cor = '#7c3aed'; // roxo
+          status = 'sem_full'; statusLabel = 'Rompido no Full (tem no Tiny)'; cor = '#f97316'; // laranja
         } else {
           status = 'com_estoque'; statusLabel = 'Com estoque, sem venda'; cor = '#facc15'; // amarelo
         }
