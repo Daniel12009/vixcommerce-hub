@@ -553,9 +553,8 @@ export function DashboardPage() {
         });
       }
     });
-    // Ordena por gravidade (vermelho primeiro) e depois por VMD
-    const prio = { sem_estoque: 0, sem_full: 1, com_estoque: 2 };
-    return lista.sort((a, b) => prio[a.status] - prio[b.status] || b.vmd - a.vmd).slice(0, 15);
+    // Ordena por VMD (mais vende → menos vende). Cor só indica o motivo.
+    return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
   }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku]);
 
   // Todos os pedidos do dia
