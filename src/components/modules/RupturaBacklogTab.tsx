@@ -13,12 +13,11 @@ export function RupturaBacklogTab() {
 
   useEffect(() => {
     async function fetchHistory() {
-      // Get last 30 days of snapshots
-      const { data, error } = await (supabase as any).from('estoque_snapshots')
-        .select('*')
-        .order('data_ref', { ascending: true });
-      
-      if (!error) setSnapshots(data || []);
+      // Lê snapshots do banco externo via edge function
+      const { data, error } = await supabase.functions.invoke('read-external-snapshots');
+      if (!error && data?.snapshots) {
+        setSnapshots(data.snapshots);
+      }
       setLoading(false);
     }
     fetchHistory();
