@@ -532,6 +532,56 @@ export function CoberturaFullTab() {
         </div>
       </div>
 
+      {/* Gráfico Global */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold text-foreground">Vendas Globais — {diasReais} dias (todos SKUs)</h3>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap text-xs">
+            <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
+              VMD TOTAL: {globalChartData.vmdTotal.toFixed(1)}/dia
+            </span>
+            {globalChartData.contas.map((c, idx) => (
+              <span key={c} className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: colorForConta(c, idx) }} />
+                <span className="font-mono">{c}: {(globalChartData.vmdPorConta[c] || 0).toFixed(1)}/dia</span>
+              </span>
+            ))}
+            {globalChartData.metaGlobal > 0 && (
+              <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-mono">
+                Meta Global: {globalChartData.metaGlobal.toFixed(0)}/dia
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="p-4">
+          {loadingGlobal ? (
+            <div className="text-center text-sm text-muted-foreground py-12">Carregando vendas globais...</div>
+          ) : globalChartData.rows.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-12">Sem vendas no período</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={globalChartData.rows} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="dateLabel" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {globalChartData.metaGlobal > 0 && (
+                  <ReferenceLine y={globalChartData.metaGlobal} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `Meta ${globalChartData.metaGlobal.toFixed(0)}`, fontSize: 10, fill: 'hsl(var(--primary))' }} />
+                )}
+                <Line type="monotone" dataKey="total" name="Total" stroke="hsl(var(--foreground))" strokeWidth={2.5} dot={false} />
+                {globalChartData.contas.map((c, idx) => (
+                  <Line key={c} type="monotone" dataKey={c} name={c} stroke={colorForConta(c, idx)} strokeWidth={1.5} dot={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
       {/* Tabela */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
