@@ -757,7 +757,10 @@ export function CoberturaFullTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="dateLabel" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                <Tooltip
+                  wrapperStyle={{ pointerEvents: 'auto', zIndex: 50 }}
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, maxHeight: 280, overflowY: 'auto', overflowX: 'hidden' }}
+                />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {globalChartData.metaGlobal > 0 && (
                   <ReferenceLine y={globalChartData.metaGlobal} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `Meta ${globalChartData.metaGlobal.toFixed(0)}`, fontSize: 10, fill: 'hsl(var(--primary))' }} />
