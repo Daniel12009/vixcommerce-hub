@@ -685,13 +685,22 @@ export function CoberturaFullTab() {
             <h3 className="font-semibold text-foreground">
               Vendas Globais — {diasReais} dias {busca.trim() ? `(SKU: ${busca.trim().toUpperCase()})` : '(todos SKUs)'}
             </h3>
-            <button
-              onClick={handleExportarGlobal}
-              className="ml-2 flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-border rounded-md hover:bg-muted transition-colors"
-              title="Exportar dados do gráfico e tabela"
-            >
-              <Download className="w-3.5 h-3.5" /> Exportar
-            </button>
+            <div className="ml-2 flex items-center gap-1">
+              <button
+                onClick={handleExportarResumido}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-border rounded-md hover:bg-muted transition-colors"
+                title="Exporta apenas a tabela de cobertura listada"
+              >
+                <Download className="w-3.5 h-3.5" /> Exportar Resumido
+              </button>
+              <button
+                onClick={handleExportarCompleto}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                title="Exporta vendas diárias por SKU + meta diária global"
+              >
+                <Download className="w-3.5 h-3.5" /> Exportar Completo
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap text-xs">
             <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
