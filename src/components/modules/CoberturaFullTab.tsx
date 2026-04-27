@@ -255,6 +255,13 @@ export function CoberturaFullTab() {
   }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca]);
 
   const sortedData = useMemo(() => {
+    if (sortAcum !== 'none') {
+      return [...mergedData].sort((a, b) => {
+        const da = a.vmdMeta > 0 ? (a.vmdAtual - a.vmdMeta) * diasReais : -Infinity;
+        const db = b.vmdMeta > 0 ? (b.vmdAtual - b.vmdMeta) * diasReais : -Infinity;
+        return sortAcum === 'desc' ? db - da : da - db;
+      });
+    }
     if (sortPerf === 'none') return mergedData;
     const rank = sortPerf === 'over'
       ? { oversales: 0, undersales: 1, ok: 2 }
@@ -265,7 +272,7 @@ export function CoberturaFullTab() {
       if (ra !== rb) return ra - rb;
       return b.vmdAtual - a.vmdAtual;
     });
-  }, [mergedData, sortPerf]);
+  }, [mergedData, sortPerf, sortAcum, diasReais]);
 
   const kpis = useMemo(() => {
     const totalVmd = mergedData.reduce((acc, curr) => acc + curr.vmdAtual, 0);
