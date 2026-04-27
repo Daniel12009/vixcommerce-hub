@@ -13,15 +13,18 @@ async function getSupabaseClient() {
 
 async function supabaseFetch(path: string, options: any = {}) {
   const { url, key } = await getSupabaseClient();
+  const { headers: extraHeaders, ...rest } = options;
+  const baseHeaders: Record<string, string> = {
+    'apikey': key,
+    'Authorization': `Bearer ${key}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation',
+  };
+  // extraHeaders sobrescrevem baseHeaders (pra permitir Prefer customizado)
+  const finalHeaders = { ...baseHeaders, ...(extraHeaders || {}) };
   const res = await fetch(`${url}/rest/v1${path}`, {
-    ...options,
-    headers: {
-      'apikey': key,
-      'Authorization': `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation',
-      ...options.headers,
-    },
+    ...rest,
+    headers: finalHeaders,
   });
   return res;
 }
