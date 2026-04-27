@@ -331,11 +331,13 @@ export function CoberturaFullTab() {
     return Array.from(set).sort();
   }, [globalDaily]);
 
-  // ===== Dados do gráfico GLOBAL (todos SKUs) — agrupado por ORIGEM =====
+  // ===== Dados do gráfico GLOBAL — agrupado por ORIGEM, respeita busca =====
   const globalChartData = useMemo(() => {
     let filtered = globalDaily;
     if (filtroConta !== 'all') filtered = filtered.filter(r => r.conta === filtroConta);
     if (filtroOrigem !== 'all') filtered = filtered.filter(r => r.origem === filtroOrigem);
+    const buscaUp = busca.trim().toUpperCase();
+    if (buscaUp) filtered = filtered.filter(r => r.sku.includes(buscaUp));
 
     const dias: string[] = [];
     const ini = new Date(dateIni);
@@ -360,6 +362,7 @@ export function CoberturaFullTab() {
       row.total = (row.total || 0) + r.qtd;
     });
 
+    // Meta global: se busca ativa, soma só a meta dos SKUs visíveis na tabela (que já estão filtrados por busca)
     const metaGlobal = mergedData.reduce((s, r) => s + (r.vmdMeta || 0), 0);
 
     const vmdPorOrigem: Record<string, number> = {};
@@ -371,7 +374,7 @@ export function CoberturaFullTab() {
     const vmdTotal = totalGeral / diasReais;
 
     return { rows: Array.from(map.values()), origens, metaGlobal, vmdPorOrigem, vmdTotal };
-  }, [globalDaily, filtroConta, filtroOrigem, dateIni, dateFim, diasReais, mergedData]);
+  }, [globalDaily, filtroConta, filtroOrigem, busca, dateIni, dateFim, diasReais, mergedData]);
 
   const chartData = useMemo(() => {
     if (!expandedSku) return { rows: [], contas: [] as string[], vmdPorConta: {} as Record<string, number> };
