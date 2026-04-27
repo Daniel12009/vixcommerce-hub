@@ -417,7 +417,7 @@ export function EstoquePage() {
           <TabsTrigger value="em-transito">✈️ Em Trânsito (API)</TabsTrigger>
           <TabsTrigger value="envios">🚚 Envios (Planilha ML)</TabsTrigger>
           <TabsTrigger value="importar-full">📤 Importar Full</TabsTrigger>
-          <TabsTrigger value="cobertura">📊 Cobertura de Vendas ML</TabsTrigger>
+          <TabsTrigger value="cobertura">📊 Cobertura de Vendas</TabsTrigger>
           <TabsTrigger value="rupturas">⚠️ Backlogs de Ruptura</TabsTrigger>
         </TabsList>
 
