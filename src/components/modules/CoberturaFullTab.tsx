@@ -100,6 +100,7 @@ export function CoberturaFullTab() {
   // ===== Sanfona expandida =====
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [sortPerf, setSortPerf] = useState<'none' | 'over' | 'under'>('none');
+  const [sortAcum, setSortAcum] = useState<'none' | 'desc' | 'asc'>('none');
   const [salesBySku, setSalesBySku] = useState<Map<string, { date: string; conta: string; qtd: number }[]>>(new Map());
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
 
@@ -254,6 +255,13 @@ export function CoberturaFullTab() {
   }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca]);
 
   const sortedData = useMemo(() => {
+    if (sortAcum !== 'none') {
+      return [...mergedData].sort((a, b) => {
+        const da = a.vmdMeta > 0 ? (a.vmdAtual - a.vmdMeta) * diasReais : -Infinity;
+        const db = b.vmdMeta > 0 ? (b.vmdAtual - b.vmdMeta) * diasReais : -Infinity;
+        return sortAcum === 'desc' ? db - da : da - db;
+      });
+    }
     if (sortPerf === 'none') return mergedData;
     const rank = sortPerf === 'over'
       ? { oversales: 0, undersales: 1, ok: 2 }
@@ -264,7 +272,7 @@ export function CoberturaFullTab() {
       if (ra !== rb) return ra - rb;
       return b.vmdAtual - a.vmdAtual;
     });
-  }, [mergedData, sortPerf]);
+  }, [mergedData, sortPerf, sortAcum, diasReais]);
 
   const kpis = useMemo(() => {
     const totalVmd = mergedData.reduce((acc, curr) => acc + curr.vmdAtual, 0);
@@ -877,12 +885,21 @@ export function CoberturaFullTab() {
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground" title={`(Meta VMD × ${diasReais}) − (VMD × ${diasReais}). Negativo = acima da meta, Positivo = abaixo.`}>
-                  Acumulado vs Meta ({diasReais}d)
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground" title={`(VMD × ${diasReais}) − (Meta VMD × ${diasReais}). Positivo = acima da meta, Negativo = abaixo.`}>
+                  <button
+                    onClick={() => { setSortAcum(p => p === 'none' ? 'desc' : p === 'desc' ? 'asc' : 'none'); setSortPerf('none'); }}
+                    className="inline-flex items-center gap-1 hover:text-primary transition-colors ml-auto"
+                    title="Clique para ordenar pelo acumulado vs meta"
+                  >
+                    Acumulado vs Meta ({diasReais}d)
+                    <span className="text-[10px] font-bold">
+                      {sortAcum === 'desc' ? '▼ ACIMA' : sortAcum === 'asc' ? '▲ ABAIXO' : '⇅'}
+                    </span>
+                  </button>
                 </th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">
                   <button
-                    onClick={() => setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none')}
+                    onClick={() => { setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none'); setSortAcum('none'); }}
                     className="inline-flex items-center gap-1 hover:text-primary transition-colors"
                     title="Clique para ordenar por Oversales / Undersales"
                   >
