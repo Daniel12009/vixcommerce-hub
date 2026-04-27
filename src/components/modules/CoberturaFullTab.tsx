@@ -71,11 +71,11 @@ export function CoberturaFullTab() {
   const [filtroOrigem, setFiltroOrigem] = useState<string>('all');
   const [busca, setBusca] = useState<string>('');
 
-  // Range de datas baseado no período selecionado
+  // Range de datas: termina ONTEM (D-1) — não conta o dia atual pois ainda não tem venda salva
   const { dateIni, dateFim, diasReais } = useMemo(() => {
     const dias = periodo;
-    const fim = new Date();
-    const ini = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+    const fim = new Date(Date.now() - 24 * 60 * 60 * 1000); // ontem
+    const ini = new Date(fim.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
     return {
       dateIni: ini.toISOString().split('T')[0],
       dateFim: fim.toISOString().split('T')[0],
