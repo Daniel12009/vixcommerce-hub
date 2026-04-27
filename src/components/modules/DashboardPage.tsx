@@ -506,29 +506,33 @@ export function DashboardPage() {
     (estoqueTinyItems || []).forEach((i: any) => {
       const sku = canonicalSku(i.sku);
       if (!sku) return;
+      // Tiny não tem campo `conta` confiável, então não filtra por conta aqui.
       tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
     });
 
+    // VMD: SOMENTE do SQL (vendas reais dos últimos 15 dias, respeitando filtro de conta).
+    // Não usamos `comprasItems`/`estoqueItems` aqui porque eles vêm de planilhas de
+    // estimativa que podem listar SKUs que há tempos não vendem (ex.: FC-08).
     const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
+
+    // Mapa auxiliar para enriquecer com nome/preço quando disponível
+    const metaBySku = new Map<string, { preco: number; nome: string }>();
     (comprasItems || []).forEach((item: any) => {
-      if (item.sku && item.mediaVendaDiaria) {
-        const sku = canonicalSku(item.sku);
-        vmdMap.set(sku, { vmd: item.mediaVendaDiaria, preco: item.preco || 0, nome: item.nome || sku });
-      }
+      if (!item.sku) return;
+      const sku = canonicalSku(item.sku);
+      metaBySku.set(sku, { preco: item.preco || 0, nome: item.nome || sku });
     });
     (estoqueItems || []).forEach((item: any) => {
-      if (item.skuPrincipal && item.vmd) {
-        const sku = canonicalSku(item.skuPrincipal);
-        const prev = vmdMap.get(sku);
-        vmdMap.set(sku, { vmd: item.vmd, preco: prev?.preco || 0, nome: item.nome || prev?.nome || sku });
-      }
+      if (!item.skuPrincipal) return;
+      const sku = canonicalSku(item.skuPrincipal);
+      const prev = metaBySku.get(sku);
+      metaBySku.set(sku, { preco: prev?.preco || 0, nome: item.nome || prev?.nome || sku });
     });
 
-    // Source 3 (prioritário): VMD do SQL filtrada por conta
     vmdSqlBySku.forEach((v, sku) => {
       if (v > 0) {
-        const prev = vmdMap.get(sku);
-        vmdMap.set(sku, { vmd: v, preco: prev?.preco || 0, nome: prev?.nome || sku });
+        const meta = metaBySku.get(sku);
+        vmdMap.set(sku, { vmd: v, preco: meta?.preco || 0, nome: meta?.nome || sku });
       }
     });
 
