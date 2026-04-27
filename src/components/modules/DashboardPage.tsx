@@ -544,7 +544,7 @@ export function DashboardPage() {
         if (full <= 0 && tiny <= 0) {
           status = 'sem_estoque'; statusLabel = 'Sem estoque (Full + Tiny)'; cor = '#dc2626'; // vermelho forte
         } else if (full <= 0 && tiny > 0) {
-          status = 'sem_full'; statusLabel = 'Rompido no Full (tem no Tiny)'; cor = '#7c3aed'; // roxo
+          status = 'sem_full'; statusLabel = 'Rompido no Full (tem no Tiny)'; cor = '#f97316'; // laranja
         } else {
           status = 'com_estoque'; statusLabel = 'Com estoque, sem venda'; cor = '#facc15'; // amarelo
         }
@@ -777,7 +777,7 @@ export function DashboardPage() {
                   <span className="text-muted-foreground">Sem estoque (Full + Tiny)</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#7c3aed' }} />
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#f97316' }} />
                   <span className="text-muted-foreground">Rompido no Full (tem no Tiny)</span>
                 </span>
                 <span className="flex items-center gap-1.5">
