@@ -556,7 +556,7 @@ export function DashboardPage() {
     });
     // Ordena por VMD (mais vende → menos vende). Cor só indica o motivo.
     return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
-  }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku]);
+  }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku, filterConta]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
