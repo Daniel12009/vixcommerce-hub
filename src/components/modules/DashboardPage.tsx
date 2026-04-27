@@ -491,11 +491,12 @@ export function DashboardPage() {
       vendidosHoje.add(sku);
     }));
 
-    // Mapas de estoque Full (ML) e Tiny (local)
+    // Mapas de estoque Full (ML) e Tiny (local) — Full respeita o filtro de conta
     const fullBySku = new Map<string, number>();
     (estoqueFullItems || []).forEach((i: any) => {
       const sku = canonicalSku(i.sku);
       if (!sku) return;
+      if (filterConta !== 'all' && normalizeConta(i.conta) !== normalizeConta(filterConta)) return;
       fullBySku.set(sku, (fullBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
     });
     const tinyBySku = new Map<string, number>();
