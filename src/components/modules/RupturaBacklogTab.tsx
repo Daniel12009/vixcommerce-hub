@@ -1,5 +1,4 @@
 import { useMemo, useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { Package, AlertTriangle, TrendingDown, DollarSign, Activity, History, Filter } from 'lucide-react';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
