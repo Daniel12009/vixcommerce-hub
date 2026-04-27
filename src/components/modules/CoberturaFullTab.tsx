@@ -593,8 +593,8 @@ export function CoberturaFullTab() {
                   <ReferenceLine y={globalChartData.metaGlobal} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `Meta ${globalChartData.metaGlobal.toFixed(0)}`, fontSize: 10, fill: 'hsl(var(--primary))' }} />
                 )}
                 <Line type="monotone" dataKey="total" name="Total" stroke="hsl(var(--foreground))" strokeWidth={2.5} dot={false} />
-                {globalChartData.contas.map((c, idx) => (
-                  <Line key={c} type="monotone" dataKey={c} name={c} stroke={colorForConta(c, idx)} strokeWidth={1.5} dot={false} />
+                {globalChartData.origens.map((o, idx) => (
+                  <Line key={o} type="monotone" dataKey={o} name={o} stroke={ORIGEM_COLORS[o] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length]} strokeWidth={1.5} dot={false} />
                 ))}
               </LineChart>
             </ResponsiveContainer>
