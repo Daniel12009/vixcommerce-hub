@@ -117,7 +117,7 @@ export function CoberturaFullTab() {
         for (let p = 0; p < 200; p++) {
           const { data: rows, error } = await (supabase as any)
             .from('vendas_items')
-            .select('conta, origem, quantidade, data')
+            .select('sku, conta, origem, quantidade, data')
             .gte('data', iniISO)
             .lte('data', fimISO + 'T23:59:59')
             .range(from, from + PAGE - 1);
@@ -132,7 +132,7 @@ export function CoberturaFullTab() {
           for (let p = 0; p < 200; p++) {
             const { data: rows, error } = await (supabase as any)
               .from('vendas_items')
-              .select('conta, origem, quantidade, data')
+              .select('sku, conta, origem, quantidade, data')
               .range(from, from + PAGE - 1);
             if (error) throw error;
             if (!rows || rows.length === 0) break;
@@ -160,12 +160,13 @@ export function CoberturaFullTab() {
             if (!dt || dt < iniDate || dt > fimDate) return null;
             return {
               date: dt.toISOString().split('T')[0],
+              sku: String(r.sku || '').trim().toUpperCase(),
               conta: normalizeConta(r.conta),
               origem: (r.origem || 'Mercado Livre').trim() || 'Mercado Livre',
               qtd: Number(r.quantidade) || 0,
             };
           })
-          .filter(Boolean) as { date: string; conta: string; origem: string; qtd: number }[];
+          .filter(Boolean) as { date: string; sku: string; conta: string; origem: string; qtd: number }[];
 
         if (active) setGlobalDaily(mapped);
       } catch (err: any) {
