@@ -97,6 +97,22 @@ Deno.serve(async (req) => {
       };
     }).filter(s => s.sku);
 
+    // Dedup: somar quantidades de duplicatas (mesmo data_ref+sku+conta)
+    const dedupMap = new Map<string, any>();
+    for (const s of snapshots) {
+      const k = `${s.data_ref}||${s.sku}||${s.conta}`;
+      const existing = dedupMap.get(k);
+      if (existing) {
+        existing.quantidade += s.quantidade;
+        existing.em_transferencia += s.em_transferencia;
+        existing.entrada_pendente += s.entrada_pendente;
+      } else {
+        dedupMap.set(k, { ...s });
+      }
+    }
+    const dedupedSnapshots = Array.from(dedupMap.values());
+    console.log(`[estoque-snapshot] Dedup: ${snapshots.length} -> ${dedupedSnapshots.length}`);
+
     // 4. Upsert no banco
     // Dividir em lotes para evitar estourar o limite de payload
     const BATCH_SIZE = 500;
