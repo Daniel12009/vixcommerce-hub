@@ -68,6 +68,7 @@ export function CoberturaFullTab() {
   const [periodo, setPeriodo] = useState<number>(15);
   const [periodoCustom, setPeriodoCustom] = useState<string>('');
   const [filtroConta, setFiltroConta] = useState<string>('all');
+  const [filtroOrigem, setFiltroOrigem] = useState<string>('all');
   const [busca, setBusca] = useState<string>('');
 
   // Range de datas baseado no período selecionado
