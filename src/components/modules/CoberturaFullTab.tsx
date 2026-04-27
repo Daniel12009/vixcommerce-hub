@@ -621,7 +621,7 @@ export function CoberturaFullTab() {
         <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Cobertura de Vendas ML — {diasReais} dias</h3>
+            <h3 className="font-semibold text-foreground">Cobertura de Vendas — {diasReais} dias</h3>
           </div>
           <div className="flex items-center gap-2">
             <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleUploadMetas} className="hidden" />
