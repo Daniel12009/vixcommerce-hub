@@ -100,21 +100,26 @@ Deno.serve(async (req) => {
     // 4. Upsert no banco
     // Dividir em lotes para evitar estourar o limite de payload
     const BATCH_SIZE = 500;
+    let totalInserted = 0;
+    let totalErrors = 0;
     for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
       const batch = snapshots.slice(i, i + BATCH_SIZE);
-      const upsertRes = await supabaseFetch('/estoque_snapshots', {
+      const upsertRes = await supabaseFetch('/estoque_snapshots?on_conflict=data_ref,sku,conta', {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(batch)
       });
       
       if (!upsertRes.ok) {
         const err = await upsertRes.text();
         console.error(`[estoque-snapshot] Erro ao inserir lote ${i}:`, err);
+        totalErrors += batch.length;
+      } else {
+        totalInserted += batch.length;
       }
     }
 
-    console.log(`[estoque-snapshot] Snapshot concluído com sucesso: ${snapshots.length} registros.`);
+    console.log(`[estoque-snapshot] Snapshot concluído: ${totalInserted} ok, ${totalErrors} erros de ${snapshots.length} totais.`);
 
     return new Response(JSON.stringify({ success: true, count: snapshots.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
