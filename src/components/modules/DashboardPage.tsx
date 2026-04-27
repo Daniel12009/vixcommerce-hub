@@ -706,7 +706,7 @@ export function DashboardPage() {
                 <TrendingUp className="w-4 h-4 text-primary" /> Faturamento por Hora
               </h3>
               <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={vendasPorHora}>
+                <ComposedChart data={vendasPorHora}>
                   <defs>
                     <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
@@ -717,9 +717,10 @@ export function DashboardPage() {
                   <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip formatter={(v: any, name: string) => name.includes('Faturamento') ? formatBRL(Number(v)) : v} />
-                  <Area type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" fill="transparent" strokeWidth={1} strokeDasharray="5 5" name="Faturamento (Ontem)" />
-                  <Area type="monotone" dataKey="faturamento" stroke="#6366f1" fill="url(#fatGrad)" strokeWidth={2} name="Faturamento (Hoje)" />
-                </AreaChart>
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="faturamento" stroke="#6366f1" fill="url(#fatGrad)" strokeWidth={2} name="Faturamento (Hoje)" connectNulls={false} />
+                  <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={false} name="Faturamento (Ontem)" />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
 
