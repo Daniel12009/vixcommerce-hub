@@ -202,14 +202,17 @@ export function DashboardPage() {
       });
       
       // Fetch yesterday's snapshot (or build from vendas_items as fallback)
-      if (!_cachedYesterday) {
-        // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
-        const todayBRTStr = getBRTDateStr();
-        const [yy, mm, dd] = todayBRTStr.split('-').map(Number);
-        const yesterday = new Date(Date.UTC(yy, mm - 1, dd));
-        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-        const dateStr = yesterday.toISOString().split('T')[0];
+      // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
+      const todayBRTStr = getBRTDateStr();
+      const [yy, mm, dd] = todayBRTStr.split('-').map(Number);
+      const yesterday = new Date(Date.UTC(yy, mm - 1, dd));
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      const dateStr = yesterday.toISOString().split('T')[0];
 
+      // Invalida cache se a data de "ontem" mudou (virou o dia)
+      const needsYesterdayFetch = !_cachedYesterday || _cachedYesterdayDate !== dateStr;
+
+      if (needsYesterdayFetch) {
         const { data: snap } = await (supabase as any)
           .from('daily_sales_snapshots')
           .select('*')
@@ -219,6 +222,7 @@ export function DashboardPage() {
         if (snap) {
           setYesterdaySnapshot(snap);
           _cachedYesterday = snap;
+          _cachedYesterdayDate = dateStr;
         } else {
           // Fallback: monta o snapshot a partir de vendas_items (planilha Vendas)
           try {
@@ -236,14 +240,12 @@ export function DashboardPage() {
               .limit(10000);
 
             if (vRows && vRows.length > 0) {
-              // Sem horário no campo `data` (só dd/MM/yyyy), distribui no total do dia em "TOTAL"
-              // mas o gráfico precisa de horas — então usa apenas o total do dia como linha plana.
               const totalDia = vRows.reduce((s: number, r: any) => s + (Number(r.valor_total) || 0), 0);
               const pedidosDia = new Set(vRows.map((r: any) => r.numero_pedido)).size;
 
               // Distribui o total uniformemente nas horas comerciais (8h-22h) para visualizar tendência
               const horas: any[] = [];
-              const horasComerciais = 15; // 8 às 22
+              const horasComerciais = 15;
               for (let h = 0; h <= 23; h++) {
                 const label = `${String(h).padStart(2, '0')}h`;
                 const fat = (h >= 8 && h <= 22) ? totalDia / horasComerciais : 0;
@@ -258,6 +260,12 @@ export function DashboardPage() {
               };
               setYesterdaySnapshot(synthetic);
               _cachedYesterday = synthetic;
+              _cachedYesterdayDate = dateStr;
+            } else {
+              // Não há dados — limpa para evitar segurar snapshot antigo
+              setYesterdaySnapshot(null);
+              _cachedYesterday = null;
+              _cachedYesterdayDate = dateStr;
             }
           } catch (e) {
             console.warn('Fallback yesterday from vendas_items failed:', e);
