@@ -840,7 +840,7 @@ export function CoberturaFullTab() {
               </tr>
             </thead>
             <tbody>
-              {mergedData.map((row) => {
+              {sortedData.map((row) => {
                 const isExpanded = expandedSku === row.sku;
                 return (
                   <Fragment key={row.sku}>
