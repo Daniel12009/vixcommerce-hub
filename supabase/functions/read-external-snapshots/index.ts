@@ -8,20 +8,17 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  const debug: any = {};
   try {
-    const extUrl = Deno.env.get('EXTERNAL_DB_URL');
-    const extKey = Deno.env.get('EXTERNAL_DB_SERVICE_KEY');
-    const url = (extUrl || Deno.env.get('SUPABASE_URL'))!;
-    const key = (extKey || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+    const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+    const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
 
-    debug.hasExtUrl = !!extUrl;
-    debug.hasExtKey = !!extKey;
-    debug.urlHost = url ? new URL(url).host : null;
+    // Últimos 30 dias
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    const sinceStr = since.toISOString().split('T')[0];
 
-    // Sem filtro, pega tudo
     const res = await fetch(
-      `${url}/rest/v1/estoque_snapshots?select=*&order=data_ref.desc&limit=200`,
+      `${url}/rest/v1/estoque_snapshots?data_ref=gte.${sinceStr}&select=*&order=data_ref.asc&limit=10000`,
       {
         headers: {
           'apikey': key,
@@ -30,21 +27,21 @@ Deno.serve(async (req) => {
       }
     );
 
-    debug.status = res.status;
-    const text = await res.text();
-    debug.bodyPreview = text.slice(0, 300);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Falha ao buscar snapshots: ${err}`);
+    }
 
-    let data: any[] = [];
-    try { data = JSON.parse(text); } catch {}
+    const data = await res.json();
+    const snapshots = Array.isArray(data) ? data : [];
 
-    debug.count = Array.isArray(data) ? data.length : 0;
-
-    return new Response(JSON.stringify({ snapshots: Array.isArray(data) ? data : [], debug }), {
+    return new Response(JSON.stringify({ snapshots, count: snapshots.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: msg, snapshots: [], debug }), {
+    console.error('[read-external-snapshots] Error:', msg);
+    return new Response(JSON.stringify({ error: msg, snapshots: [] }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
