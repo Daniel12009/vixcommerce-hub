@@ -541,11 +541,11 @@ export function DashboardPage() {
         let statusLabel: string;
         let cor: string;
         if (full <= 0 && tiny <= 0) {
-          status = 'sem_estoque'; statusLabel = 'Sem estoque (Full + Tiny)'; cor = '#dc2626'; // vermelho
+          status = 'sem_estoque'; statusLabel = 'Sem estoque (Full + Tiny)'; cor = '#dc2626'; // vermelho forte
         } else if (full <= 0 && tiny > 0) {
-          status = 'sem_full'; statusLabel = 'Rompido no Full'; cor = '#c2410c'; // laranja escuro
+          status = 'sem_full'; statusLabel = 'Rompido no Full (tem no Tiny)'; cor = '#7c3aed'; // roxo
         } else {
-          status = 'com_estoque'; statusLabel = 'Com estoque, sem venda'; cor = '#fbbf24'; // laranja claro
+          status = 'com_estoque'; statusLabel = 'Com estoque, sem venda'; cor = '#facc15'; // amarelo
         }
         lista.push({
           sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome,
