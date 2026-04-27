@@ -111,6 +111,7 @@ const getBRTHour = (iso: string) => {
 let _cachedOrders: DashOrder[] | null = null;
 let _cachedRefresh: string = '';
 let _cachedYesterday: any = null;
+let _cachedYesterdayDate: string = ''; // dateStr (YYYY-MM-DD) do snapshot cacheado — invalida ao virar o dia
 let _refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 export function DashboardPage() {
