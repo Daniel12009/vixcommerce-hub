@@ -21,13 +21,26 @@ interface CoberturaRow {
 
 const PERIODOS_PRESET = [7, 15, 30, 40, 60, 90, 120] as const;
 
-// Cores fixas para contas no gráfico
+// Cores fixas para contas no gráfico (por SKU)
 const CONTA_COLORS: Record<string, string> = {
   VIAFLIX: 'hsl(var(--primary))',
   GS: 'hsl(var(--vix-success))',
   MONACO: 'hsl(var(--vix-warning))',
 };
-const FALLBACK_COLORS = ['#8b5cf6', '#ec4899', '#06b6d4', '#f59e0b'];
+// Cores por origem (gráfico global)
+const ORIGEM_COLORS: Record<string, string> = {
+  'Mercado Livre': 'hsl(var(--primary))',
+  'Shopee': '#ee4d2d',
+  'Shein': '#000000',
+  'Amazon Seller': '#ff9900',
+  'TikTok Shop': '#25f4ee',
+  'Temu': '#fb7701',
+  'Atacado': 'hsl(var(--vix-success))',
+  'Atacado VF': '#16a34a',
+  'Loja Fisica VF': '#7c3aed',
+  'Showroom': '#a855f7',
+};
+const FALLBACK_COLORS = ['#8b5cf6', '#ec4899', '#06b6d4', '#f59e0b', '#84cc16', '#f43f5e'];
 
 function roundHalf(n: number): number {
   return Math.round(n * 2) / 2;
@@ -55,6 +68,7 @@ export function CoberturaFullTab() {
   const [periodo, setPeriodo] = useState<number>(15);
   const [periodoCustom, setPeriodoCustom] = useState<string>('');
   const [filtroConta, setFiltroConta] = useState<string>('all');
+  const [filtroOrigem, setFiltroOrigem] = useState<string>('all');
   const [busca, setBusca] = useState<string>('');
 
   // Range de datas baseado no período selecionado
@@ -87,7 +101,7 @@ export function CoberturaFullTab() {
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
 
   // ===== Vendas globais (todos SKUs) por dia =====
-  const [globalDaily, setGlobalDaily] = useState<{ date: string; conta: string; qtd: number }[]>([]);
+  const [globalDaily, setGlobalDaily] = useState<{ date: string; conta: string; origem: string; qtd: number }[]>([]);
   const [loadingGlobal, setLoadingGlobal] = useState(false);
 
   useEffect(() => {
@@ -95,7 +109,6 @@ export function CoberturaFullTab() {
     async function fetchGlobal() {
       setLoadingGlobal(true);
       try {
-        // converte dateIni/dateFim para os dois formatos possíveis no banco (ISO e BR)
         const iniISO = dateIni;
         const fimISO = dateFim;
         const PAGE = 1000;
@@ -104,7 +117,7 @@ export function CoberturaFullTab() {
         for (let p = 0; p < 200; p++) {
           const { data: rows, error } = await (supabase as any)
             .from('vendas_items')
-            .select('conta, quantidade, data')
+            .select('conta, origem, quantidade, data')
             .gte('data', iniISO)
             .lte('data', fimISO + 'T23:59:59')
             .range(from, from + PAGE - 1);
@@ -114,13 +127,12 @@ export function CoberturaFullTab() {
           if (rows.length < PAGE) break;
           from += PAGE;
         }
-        // fallback: se o filtro gte/lte não casou (datas em DD/MM/YYYY), busca tudo e filtra
         if (allRows.length === 0) {
           from = 0;
           for (let p = 0; p < 200; p++) {
             const { data: rows, error } = await (supabase as any)
               .from('vendas_items')
-              .select('conta, quantidade, data')
+              .select('conta, origem, quantidade, data')
               .range(from, from + PAGE - 1);
             if (error) throw error;
             if (!rows || rows.length === 0) break;
@@ -149,10 +161,11 @@ export function CoberturaFullTab() {
             return {
               date: dt.toISOString().split('T')[0],
               conta: normalizeConta(r.conta),
+              origem: (r.origem || 'Mercado Livre').trim() || 'Mercado Livre',
               qtd: Number(r.quantidade) || 0,
             };
           })
-          .filter(Boolean) as { date: string; conta: string; qtd: number }[];
+          .filter(Boolean) as { date: string; conta: string; origem: string; qtd: number }[];
 
         if (active) setGlobalDaily(mapped);
       } catch (err: any) {
@@ -310,9 +323,18 @@ export function CoberturaFullTab() {
   }
 
   // ===== Dados do gráfico para SKU expandido =====
-  // ===== Dados do gráfico GLOBAL (todos SKUs) =====
+  // Origens disponíveis (para o filtro)
+  const origensDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    globalDaily.forEach(r => set.add(r.origem));
+    return Array.from(set).sort();
+  }, [globalDaily]);
+
+  // ===== Dados do gráfico GLOBAL (todos SKUs) — agrupado por ORIGEM =====
   const globalChartData = useMemo(() => {
-    const filtered = filtroConta === 'all' ? globalDaily : globalDaily.filter(r => r.conta === filtroConta);
+    let filtered = globalDaily;
+    if (filtroConta !== 'all') filtered = filtered.filter(r => r.conta === filtroConta);
+    if (filtroOrigem !== 'all') filtered = filtered.filter(r => r.origem === filtroOrigem);
 
     const dias: string[] = [];
     const ini = new Date(dateIni);
@@ -320,37 +342,35 @@ export function CoberturaFullTab() {
     for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
       dias.push(d.toISOString().split('T')[0]);
     }
-    const contasSet = new Set<string>();
-    filtered.forEach(r => contasSet.add(r.conta));
-    const contas = Array.from(contasSet).sort();
+    const origensSet = new Set<string>();
+    filtered.forEach(r => origensSet.add(r.origem));
+    const origens = Array.from(origensSet).sort();
 
     const map = new Map<string, any>();
     dias.forEach(d => {
       const obj: any = { date: d, dateLabel: formatDateBR(d), total: 0 };
-      contas.forEach(c => { obj[c] = 0; });
+      origens.forEach(o => { obj[o] = 0; });
       map.set(d, obj);
     });
     filtered.forEach(r => {
       const row = map.get(r.date);
       if (!row) return;
-      row[r.conta] = (row[r.conta] || 0) + r.qtd;
+      row[r.origem] = (row[r.origem] || 0) + r.qtd;
       row.total = (row.total || 0) + r.qtd;
     });
 
-    // Meta global = soma das metas de todos os SKUs visíveis na tabela
     const metaGlobal = mergedData.reduce((s, r) => s + (r.vmdMeta || 0), 0);
 
-    // VMD média por conta no período
-    const vmdPorConta: Record<string, number> = {};
-    contas.forEach(c => {
-      const total = filtered.filter(r => r.conta === c).reduce((s, r) => s + r.qtd, 0);
-      vmdPorConta[c] = total / diasReais;
+    const vmdPorOrigem: Record<string, number> = {};
+    origens.forEach(o => {
+      const total = filtered.filter(r => r.origem === o).reduce((s, r) => s + r.qtd, 0);
+      vmdPorOrigem[o] = total / diasReais;
     });
     const totalGeral = filtered.reduce((s, r) => s + r.qtd, 0);
     const vmdTotal = totalGeral / diasReais;
 
-    return { rows: Array.from(map.values()), contas, metaGlobal, vmdPorConta, vmdTotal };
-  }, [globalDaily, filtroConta, dateIni, dateFim, diasReais, mergedData]);
+    return { rows: Array.from(map.values()), origens, metaGlobal, vmdPorOrigem, vmdTotal };
+  }, [globalDaily, filtroConta, filtroOrigem, dateIni, dateFim, diasReais, mergedData]);
 
   const chartData = useMemo(() => {
     if (!expandedSku) return { rows: [], contas: [] as string[], vmdPorConta: {} as Record<string, number> };
@@ -520,6 +540,20 @@ export function CoberturaFullTab() {
 
         <div className="h-6 w-px bg-border" />
 
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Origem:</span>
+          <select
+            value={filtroOrigem}
+            onChange={e => setFiltroOrigem(e.target.value)}
+            className="h-7 text-xs px-2 bg-muted border border-border rounded-md"
+          >
+            <option value="all">Todas</option>
+            {origensDisponiveis.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
         <div className="flex items-center gap-1.5 flex-1 min-w-[180px]">
           <Search className="w-3.5 h-3.5 text-muted-foreground" />
           <input
@@ -543,10 +577,10 @@ export function CoberturaFullTab() {
             <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
               VMD TOTAL: {globalChartData.vmdTotal.toFixed(1)}/dia
             </span>
-            {globalChartData.contas.map((c, idx) => (
-              <span key={c} className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: colorForConta(c, idx) }} />
-                <span className="font-mono">{c}: {(globalChartData.vmdPorConta[c] || 0).toFixed(1)}/dia</span>
+            {globalChartData.origens.map((o, idx) => (
+              <span key={o} className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: ORIGEM_COLORS[o] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length] }} />
+                <span className="font-mono">{o}: {(globalChartData.vmdPorOrigem[o] || 0).toFixed(1)}/dia</span>
               </span>
             ))}
             {globalChartData.metaGlobal > 0 && (
@@ -573,8 +607,8 @@ export function CoberturaFullTab() {
                   <ReferenceLine y={globalChartData.metaGlobal} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `Meta ${globalChartData.metaGlobal.toFixed(0)}`, fontSize: 10, fill: 'hsl(var(--primary))' }} />
                 )}
                 <Line type="monotone" dataKey="total" name="Total" stroke="hsl(var(--foreground))" strokeWidth={2.5} dot={false} />
-                {globalChartData.contas.map((c, idx) => (
-                  <Line key={c} type="monotone" dataKey={c} name={c} stroke={colorForConta(c, idx)} strokeWidth={1.5} dot={false} />
+                {globalChartData.origens.map((o, idx) => (
+                  <Line key={o} type="monotone" dataKey={o} name={o} stroke={ORIGEM_COLORS[o] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length]} strokeWidth={1.5} dot={false} />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -587,7 +621,7 @@ export function CoberturaFullTab() {
         <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Cobertura de Vendas ML — {diasReais} dias</h3>
+            <h3 className="font-semibold text-foreground">Cobertura de Vendas — {diasReais} dias</h3>
           </div>
           <div className="flex items-center gap-2">
             <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleUploadMetas} className="hidden" />
