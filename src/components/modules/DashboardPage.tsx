@@ -202,8 +202,11 @@ export function DashboardPage() {
       
       // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       if (!_cachedYesterday) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
+        // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
+        const todayBRTStr = getBRTDateStr();
+        const [yy, mm, dd] = todayBRTStr.split('-').map(Number);
+        const yesterday = new Date(Date.UTC(yy, mm - 1, dd));
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
         const dateStr = yesterday.toISOString().split('T')[0];
 
         const { data: snap } = await (supabase as any)
