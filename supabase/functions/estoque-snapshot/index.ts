@@ -13,15 +13,18 @@ async function getSupabaseClient() {
 
 async function supabaseFetch(path: string, options: any = {}) {
   const { url, key } = await getSupabaseClient();
+  const { headers: extraHeaders, ...rest } = options;
+  const baseHeaders: Record<string, string> = {
+    'apikey': key,
+    'Authorization': `Bearer ${key}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation',
+  };
+  // extraHeaders sobrescrevem baseHeaders (pra permitir Prefer customizado)
+  const finalHeaders = { ...baseHeaders, ...(extraHeaders || {}) };
   const res = await fetch(`${url}/rest/v1${path}`, {
-    ...options,
-    headers: {
-      'apikey': key,
-      'Authorization': `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation',
-      ...options.headers,
-    },
+    ...rest,
+    headers: finalHeaders,
   });
   return res;
 }
@@ -94,24 +97,45 @@ Deno.serve(async (req) => {
       };
     }).filter(s => s.sku);
 
+    // Dedup: somar quantidades de duplicatas (mesmo data_ref+sku+conta)
+    const dedupMap = new Map<string, any>();
+    for (const s of snapshots) {
+      const k = `${s.data_ref}||${s.sku}||${s.conta}`;
+      const existing = dedupMap.get(k);
+      if (existing) {
+        existing.quantidade += s.quantidade;
+        existing.em_transferencia += s.em_transferencia;
+        existing.entrada_pendente += s.entrada_pendente;
+      } else {
+        dedupMap.set(k, { ...s });
+      }
+    }
+    const dedupedSnapshots = Array.from(dedupMap.values());
+    console.log(`[estoque-snapshot] Dedup: ${snapshots.length} -> ${dedupedSnapshots.length}`);
+
     // 4. Upsert no banco
     // Dividir em lotes para evitar estourar o limite de payload
     const BATCH_SIZE = 500;
-    for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
-      const batch = snapshots.slice(i, i + BATCH_SIZE);
-      const upsertRes = await supabaseFetch('/estoque_snapshots', {
+    let totalInserted = 0;
+    let totalErrors = 0;
+    for (let i = 0; i < dedupedSnapshots.length; i += BATCH_SIZE) {
+      const batch = dedupedSnapshots.slice(i, i + BATCH_SIZE);
+      const upsertRes = await supabaseFetch('/estoque_snapshots?on_conflict=data_ref,sku,conta', {
         method: 'POST',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(batch)
       });
       
       if (!upsertRes.ok) {
         const err = await upsertRes.text();
         console.error(`[estoque-snapshot] Erro ao inserir lote ${i}:`, err);
+        totalErrors += batch.length;
+      } else {
+        totalInserted += batch.length;
       }
     }
 
-    console.log(`[estoque-snapshot] Snapshot concluído com sucesso: ${snapshots.length} registros.`);
+    console.log(`[estoque-snapshot] Snapshot concluído: ${totalInserted} ok, ${totalErrors} erros de ${snapshots.length} totais.`);
 
     return new Response(JSON.stringify({ success: true, count: snapshots.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

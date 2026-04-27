@@ -12,13 +12,13 @@ Deno.serve(async (req) => {
     const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
     const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
 
-    // Pega últimos 30 dias
+    // Últimos 30 dias
     const since = new Date();
     since.setDate(since.getDate() - 30);
     const sinceStr = since.toISOString().split('T')[0];
 
     const res = await fetch(
-      `${url}/rest/v1/estoque_snapshots?data_ref=gte.${sinceStr}&select=*&order=data_ref.asc`,
+      `${url}/rest/v1/estoque_snapshots?data_ref=gte.${sinceStr}&select=*&order=data_ref.asc&limit=10000`,
       {
         headers: {
           'apikey': key,
@@ -33,8 +33,9 @@ Deno.serve(async (req) => {
     }
 
     const data = await res.json();
+    const snapshots = Array.isArray(data) ? data : [];
 
-    return new Response(JSON.stringify({ snapshots: data }), {
+    return new Response(JSON.stringify({ snapshots, count: snapshots.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
