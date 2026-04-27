@@ -69,6 +69,7 @@ export function CoberturaFullTab() {
   const [periodoCustom, setPeriodoCustom] = useState<string>('');
   const [filtroConta, setFiltroConta] = useState<string>('all');
   const [filtroOrigem, setFiltroOrigem] = useState<string>('all');
+  const [origensOcultas, setOrigensOcultas] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState<string>('');
 
   // Range de datas: termina ONTEM (D-1) — não conta o dia atual pois ainda não tem venda salva
