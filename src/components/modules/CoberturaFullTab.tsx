@@ -323,9 +323,18 @@ export function CoberturaFullTab() {
   }
 
   // ===== Dados do gráfico para SKU expandido =====
-  // ===== Dados do gráfico GLOBAL (todos SKUs) =====
+  // Origens disponíveis (para o filtro)
+  const origensDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    globalDaily.forEach(r => set.add(r.origem));
+    return Array.from(set).sort();
+  }, [globalDaily]);
+
+  // ===== Dados do gráfico GLOBAL (todos SKUs) — agrupado por ORIGEM =====
   const globalChartData = useMemo(() => {
-    const filtered = filtroConta === 'all' ? globalDaily : globalDaily.filter(r => r.conta === filtroConta);
+    let filtered = globalDaily;
+    if (filtroConta !== 'all') filtered = filtered.filter(r => r.conta === filtroConta);
+    if (filtroOrigem !== 'all') filtered = filtered.filter(r => r.origem === filtroOrigem);
 
     const dias: string[] = [];
     const ini = new Date(dateIni);
@@ -333,37 +342,35 @@ export function CoberturaFullTab() {
     for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
       dias.push(d.toISOString().split('T')[0]);
     }
-    const contasSet = new Set<string>();
-    filtered.forEach(r => contasSet.add(r.conta));
-    const contas = Array.from(contasSet).sort();
+    const origensSet = new Set<string>();
+    filtered.forEach(r => origensSet.add(r.origem));
+    const origens = Array.from(origensSet).sort();
 
     const map = new Map<string, any>();
     dias.forEach(d => {
       const obj: any = { date: d, dateLabel: formatDateBR(d), total: 0 };
-      contas.forEach(c => { obj[c] = 0; });
+      origens.forEach(o => { obj[o] = 0; });
       map.set(d, obj);
     });
     filtered.forEach(r => {
       const row = map.get(r.date);
       if (!row) return;
-      row[r.conta] = (row[r.conta] || 0) + r.qtd;
+      row[r.origem] = (row[r.origem] || 0) + r.qtd;
       row.total = (row.total || 0) + r.qtd;
     });
 
-    // Meta global = soma das metas de todos os SKUs visíveis na tabela
     const metaGlobal = mergedData.reduce((s, r) => s + (r.vmdMeta || 0), 0);
 
-    // VMD média por conta no período
-    const vmdPorConta: Record<string, number> = {};
-    contas.forEach(c => {
-      const total = filtered.filter(r => r.conta === c).reduce((s, r) => s + r.qtd, 0);
-      vmdPorConta[c] = total / diasReais;
+    const vmdPorOrigem: Record<string, number> = {};
+    origens.forEach(o => {
+      const total = filtered.filter(r => r.origem === o).reduce((s, r) => s + r.qtd, 0);
+      vmdPorOrigem[o] = total / diasReais;
     });
     const totalGeral = filtered.reduce((s, r) => s + r.qtd, 0);
     const vmdTotal = totalGeral / diasReais;
 
-    return { rows: Array.from(map.values()), contas, metaGlobal, vmdPorConta, vmdTotal };
-  }, [globalDaily, filtroConta, dateIni, dateFim, diasReais, mergedData]);
+    return { rows: Array.from(map.values()), origens, metaGlobal, vmdPorOrigem, vmdTotal };
+  }, [globalDaily, filtroConta, filtroOrigem, dateIni, dateFim, diasReais, mergedData]);
 
   const chartData = useMemo(() => {
     if (!expandedSku) return { rows: [], contas: [] as string[], vmdPorConta: {} as Record<string, number> };
