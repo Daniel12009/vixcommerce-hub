@@ -124,7 +124,7 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
 
         if (active) {
           const items = (rpcData as any[]) || [];
-          // Aplica alias de SKU e agrega duplicatas (ex: FC-04M -> FC-04)
+          // Aplica alias de SKU e agrega duplicatas (ex: FC-04 -> FC-04M)
           const aggMap = new Map<string, any>();
           for (const item of items) {
             const sku = canonicalSku(item.sku);
