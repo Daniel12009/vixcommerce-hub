@@ -98,6 +98,7 @@ export function CoberturaFullTab() {
 
   // ===== Sanfona expandida =====
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
+  const [sortPerf, setSortPerf] = useState<'none' | 'over' | 'under'>('none');
   const [salesBySku, setSalesBySku] = useState<Map<string, { date: string; conta: string; qtd: number }[]>>(new Map());
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
 
@@ -250,6 +251,19 @@ export function CoberturaFullTab() {
       .filter(r => !busca || r.sku.toLowerCase().includes(busca.toLowerCase()))
       .sort((a, b) => b.vmdAtual - a.vmdAtual);
   }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca]);
+
+  const sortedData = useMemo(() => {
+    if (sortPerf === 'none') return mergedData;
+    const rank = sortPerf === 'over'
+      ? { oversales: 0, undersales: 1, ok: 2 }
+      : { undersales: 0, oversales: 1, ok: 2 };
+    return [...mergedData].sort((a, b) => {
+      const ra = rank[a.performance] ?? 3;
+      const rb = rank[b.performance] ?? 3;
+      if (ra !== rb) return ra - rb;
+      return b.vmdAtual - a.vmdAtual;
+    });
+  }, [mergedData, sortPerf]);
 
   const kpis = useMemo(() => {
     const totalVmd = mergedData.reduce((acc, curr) => acc + curr.vmdAtual, 0);
@@ -811,11 +825,22 @@ export function CoberturaFullTab() {
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground">Status Performance</th>
+                <th className="text-center px-4 py-3 font-medium text-muted-foreground">
+                  <button
+                    onClick={() => setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none')}
+                    className="inline-flex items-center gap-1 hover:text-primary transition-colors"
+                    title="Clique para ordenar por Oversales / Undersales"
+                  >
+                    Status Performance
+                    <span className="text-[10px] font-bold">
+                      {sortPerf === 'over' ? '▼ OVER' : sortPerf === 'under' ? '▼ UNDER' : '⇅'}
+                    </span>
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {mergedData.map((row) => {
+              {sortedData.map((row) => {
                 const isExpanded = expandedSku === row.sku;
                 return (
                   <Fragment key={row.sku}>
