@@ -899,7 +899,7 @@ export function CoberturaFullTab() {
                 </th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">
                   <button
-                    onClick={() => setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none')}
+                    onClick={() => { setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none'); setSortAcum('none'); }}
                     className="inline-flex items-center gap-1 hover:text-primary transition-colors"
                     title="Clique para ordenar por Oversales / Undersales"
                   >
