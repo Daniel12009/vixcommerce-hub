@@ -777,7 +777,7 @@ export function DashboardPage() {
                   <span className="text-muted-foreground">Sem estoque (Full + Tiny)</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#7c3aed' }} />
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#f97316' }} />
                   <span className="text-muted-foreground">Rompido no Full (tem no Tiny)</span>
                 </span>
                 <span className="flex items-center gap-1.5">
