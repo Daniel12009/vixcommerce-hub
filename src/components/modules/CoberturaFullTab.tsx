@@ -709,12 +709,36 @@ export function CoberturaFullTab() {
             <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
               VMD TOTAL: {globalChartData.vmdTotal.toFixed(1)}/dia
             </span>
-            {globalChartData.origens.map((o, idx) => (
-              <span key={o} className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: ORIGEM_COLORS[o] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length] }} />
-                <span className="font-mono">{o}: {(globalChartData.vmdPorOrigem[o] || 0).toFixed(1)}/dia</span>
-              </span>
-            ))}
+            {origensDisponiveis.map((o, idx) => {
+              const oculta = origensOcultas.has(o);
+              const cor = ORIGEM_COLORS[o] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => {
+                    setOrigensOcultas(prev => {
+                      const next = new Set(prev);
+                      if (next.has(o)) next.delete(o); else next.add(o);
+                      return next;
+                    });
+                  }}
+                  title={oculta ? `Mostrar ${o}` : `Ocultar ${o} do gráfico`}
+                  className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-muted transition-colors ${oculta ? 'opacity-40 line-through' : ''}`}
+                >
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: cor }} />
+                  <span className="font-mono">{o}: {(globalChartData.vmdPorOrigem[o] || 0).toFixed(1)}/dia</span>
+                </button>
+              );
+            })}
+            {origensOcultas.size > 0 && (
+              <button
+                onClick={() => setOrigensOcultas(new Set())}
+                className="px-2 py-0.5 rounded bg-muted text-muted-foreground hover:bg-muted/70 text-[10px]"
+              >
+                Mostrar todas
+              </button>
+            )}
             {globalChartData.metaGlobal > 0 && (
               <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-mono">
                 Meta Global: {globalChartData.metaGlobal.toFixed(0)}/dia
