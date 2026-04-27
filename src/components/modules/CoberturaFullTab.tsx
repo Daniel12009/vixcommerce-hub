@@ -768,13 +768,64 @@ export function CoberturaFullTab() {
             <div className="text-center text-sm text-muted-foreground py-12">Sem vendas no período</div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={globalChartData.rows} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <LineChart
+                data={globalChartData.rows}
+                margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                onClick={(e: any) => {
+                  const lbl = e?.activeLabel;
+                  if (!lbl) return;
+                  setPinnedDay(prev => prev === lbl ? null : lbl);
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="dateLabel" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
                 <Tooltip
                   wrapperStyle={{ pointerEvents: 'auto', zIndex: 50 }}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, maxHeight: 280, overflowY: 'auto', overflowX: 'hidden' }}
+                  active={pinnedDay ? true : undefined}
+                  payload={pinnedDay ? (() => {
+                    const row: any = globalChartData.rows.find((r: any) => r.dateLabel === pinnedDay);
+                    if (!row) return [];
+                    const items = [
+                      { name: 'Total', value: row.total, color: 'hsl(var(--foreground))', dataKey: 'total' },
+                      ...globalChartData.origens.map((o, idx) => ({
+                        name: o,
+                        value: row[o] ?? 0,
+                        color: ORIGEM_COLORS[o] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length],
+                        dataKey: o,
+                      })),
+                    ];
+                    return items as any;
+                  })() : undefined}
+                  label={pinnedDay || undefined}
+                  content={(props: any) => {
+                    const { active, payload, label } = props;
+                    if (!active || !payload || !payload.length) return null;
+                    const isPinned = pinnedDay === label;
+                    return (
+                      <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, maxHeight: 280, overflowY: 'auto', overflowX: 'hidden', padding: 8, minWidth: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
+                          <strong>{label}{isPinned ? ' 📌' : ''}</strong>
+                          {isPinned && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setPinnedDay(null); }}
+                              style={{ fontSize: 10, padding: '2px 6px', border: '1px solid hsl(var(--border))', borderRadius: 4, background: 'hsl(var(--muted))', cursor: 'pointer' }}
+                            >Fechar</button>
+                          )}
+                        </div>
+                        {payload.map((p: any) => (
+                          <div key={p.dataKey} style={{ color: p.color, padding: '1px 0' }}>
+                            {p.name}: {Number(p.value || 0)}
+                          </div>
+                        ))}
+                        {!isPinned && (
+                          <div style={{ marginTop: 4, fontSize: 10, color: 'hsl(var(--muted-foreground))', borderTop: '1px solid hsl(var(--border))', paddingTop: 4 }}>
+                            Clique no gráfico para fixar
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {globalChartData.metaGlobal > 0 && (
