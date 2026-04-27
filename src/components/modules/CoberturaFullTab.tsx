@@ -86,6 +86,85 @@ export function CoberturaFullTab() {
   const [salesBySku, setSalesBySku] = useState<Map<string, { date: string; conta: string; qtd: number }[]>>(new Map());
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
 
+  // ===== Vendas globais (todos SKUs) por dia =====
+  const [globalDaily, setGlobalDaily] = useState<{ date: string; conta: string; qtd: number }[]>([]);
+  const [loadingGlobal, setLoadingGlobal] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function fetchGlobal() {
+      setLoadingGlobal(true);
+      try {
+        // converte dateIni/dateFim para os dois formatos possíveis no banco (ISO e BR)
+        const iniISO = dateIni;
+        const fimISO = dateFim;
+        const PAGE = 1000;
+        let from = 0;
+        let allRows: any[] = [];
+        for (let p = 0; p < 200; p++) {
+          const { data: rows, error } = await (supabase as any)
+            .from('vendas_items')
+            .select('conta, quantidade, data')
+            .gte('data', iniISO)
+            .lte('data', fimISO + 'T23:59:59')
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          if (!rows || rows.length === 0) break;
+          allRows = allRows.concat(rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
+        // fallback: se o filtro gte/lte não casou (datas em DD/MM/YYYY), busca tudo e filtra
+        if (allRows.length === 0) {
+          from = 0;
+          for (let p = 0; p < 200; p++) {
+            const { data: rows, error } = await (supabase as any)
+              .from('vendas_items')
+              .select('conta, quantidade, data')
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (!rows || rows.length === 0) break;
+            allRows = allRows.concat(rows);
+            if (rows.length < PAGE) break;
+            from += PAGE;
+          }
+        }
+
+        const iniDate = new Date(dateIni);
+        const fimDate = new Date(dateFim);
+        const parseData = (d: string): Date | null => {
+          if (!d) return null;
+          if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
+            const [dd, mm, yy] = d.split(/[\/\s]/);
+            return new Date(`${yy}-${mm}-${dd}`);
+          }
+          if (/^\d{4}-\d{2}-\d{2}/.test(d)) return new Date(d.split('T')[0]);
+          return null;
+        };
+
+        const mapped = allRows
+          .map((r: any) => {
+            const dt = parseData(r.data);
+            if (!dt || dt < iniDate || dt > fimDate) return null;
+            return {
+              date: dt.toISOString().split('T')[0],
+              conta: normalizeConta(r.conta),
+              qtd: Number(r.quantidade) || 0,
+            };
+          })
+          .filter(Boolean) as { date: string; conta: string; qtd: number }[];
+
+        if (active) setGlobalDaily(mapped);
+      } catch (err: any) {
+        console.error('[GlobalDaily] erro:', err);
+      } finally {
+        if (active) setLoadingGlobal(false);
+      }
+    }
+    fetchGlobal();
+    return () => { active = false; };
+  }, [dateIni, dateFim]);
+
   // ===== VMD por SKU/Conta no período selecionado =====
   const vmdBySkuConta = useMemo(() => {
     const map = new Map<string, Map<string, number>>(); // sku -> conta -> vmd
