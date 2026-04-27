@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, Fragment } from 'react';
 import { Package, TrendingUp, TrendingDown, Target, Shield, Info, Pencil, Check, Upload, Download, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasSKUEstoqueFromDB } from '@/hooks/useVendasFromDB';
