@@ -13,9 +13,18 @@ export function RupturaBacklogTab() {
 
   useEffect(() => {
     async function fetchHistory() {
-      // Lê snapshots do banco externo via edge function
-      const { data, error } = await supabase.functions.invoke('read-external-snapshots');
-      if (!error && data?.snapshots) {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/read-external-snapshots`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+      if (response.ok && data?.snapshots) {
         setSnapshots(data.snapshots);
       }
       setLoading(false);
