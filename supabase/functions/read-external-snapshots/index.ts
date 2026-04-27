@@ -11,6 +11,8 @@ Deno.serve(async (req) => {
   try {
     const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
     const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+    const usingExternal = !!Deno.env.get('EXTERNAL_DB_URL') && !!Deno.env.get('EXTERNAL_DB_SERVICE_KEY');
+    console.log(`[read-external-snapshots] usingExternal=${usingExternal} url=${url}`);
 
     // Pega últimos 30 dias
     const since = new Date();
