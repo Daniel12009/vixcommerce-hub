@@ -30,3 +30,6 @@ verify_jwt = false
 [functions.save-daily-snapshot]
 enabled = true
 verify_jwt = true
+
+[functions.read-external-snapshots]
+verify_jwt = false
