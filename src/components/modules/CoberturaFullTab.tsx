@@ -86,6 +86,85 @@ export function CoberturaFullTab() {
   const [salesBySku, setSalesBySku] = useState<Map<string, { date: string; conta: string; qtd: number }[]>>(new Map());
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
 
+  // ===== Vendas globais (todos SKUs) por dia =====
+  const [globalDaily, setGlobalDaily] = useState<{ date: string; conta: string; qtd: number }[]>([]);
+  const [loadingGlobal, setLoadingGlobal] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function fetchGlobal() {
+      setLoadingGlobal(true);
+      try {
+        // converte dateIni/dateFim para os dois formatos possíveis no banco (ISO e BR)
+        const iniISO = dateIni;
+        const fimISO = dateFim;
+        const PAGE = 1000;
+        let from = 0;
+        let allRows: any[] = [];
+        for (let p = 0; p < 200; p++) {
+          const { data: rows, error } = await (supabase as any)
+            .from('vendas_items')
+            .select('conta, quantidade, data')
+            .gte('data', iniISO)
+            .lte('data', fimISO + 'T23:59:59')
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          if (!rows || rows.length === 0) break;
+          allRows = allRows.concat(rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
+        // fallback: se o filtro gte/lte não casou (datas em DD/MM/YYYY), busca tudo e filtra
+        if (allRows.length === 0) {
+          from = 0;
+          for (let p = 0; p < 200; p++) {
+            const { data: rows, error } = await (supabase as any)
+              .from('vendas_items')
+              .select('conta, quantidade, data')
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (!rows || rows.length === 0) break;
+            allRows = allRows.concat(rows);
+            if (rows.length < PAGE) break;
+            from += PAGE;
+          }
+        }
+
+        const iniDate = new Date(dateIni);
+        const fimDate = new Date(dateFim);
+        const parseData = (d: string): Date | null => {
+          if (!d) return null;
+          if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
+            const [dd, mm, yy] = d.split(/[\/\s]/);
+            return new Date(`${yy}-${mm}-${dd}`);
+          }
+          if (/^\d{4}-\d{2}-\d{2}/.test(d)) return new Date(d.split('T')[0]);
+          return null;
+        };
+
+        const mapped = allRows
+          .map((r: any) => {
+            const dt = parseData(r.data);
+            if (!dt || dt < iniDate || dt > fimDate) return null;
+            return {
+              date: dt.toISOString().split('T')[0],
+              conta: normalizeConta(r.conta),
+              qtd: Number(r.quantidade) || 0,
+            };
+          })
+          .filter(Boolean) as { date: string; conta: string; qtd: number }[];
+
+        if (active) setGlobalDaily(mapped);
+      } catch (err: any) {
+        console.error('[GlobalDaily] erro:', err);
+      } finally {
+        if (active) setLoadingGlobal(false);
+      }
+    }
+    fetchGlobal();
+    return () => { active = false; };
+  }, [dateIni, dateFim]);
+
   // ===== VMD por SKU/Conta no período selecionado =====
   const vmdBySkuConta = useMemo(() => {
     const map = new Map<string, Map<string, number>>(); // sku -> conta -> vmd
@@ -231,6 +310,48 @@ export function CoberturaFullTab() {
   }
 
   // ===== Dados do gráfico para SKU expandido =====
+  // ===== Dados do gráfico GLOBAL (todos SKUs) =====
+  const globalChartData = useMemo(() => {
+    const filtered = filtroConta === 'all' ? globalDaily : globalDaily.filter(r => r.conta === filtroConta);
+
+    const dias: string[] = [];
+    const ini = new Date(dateIni);
+    const fim = new Date(dateFim);
+    for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+      dias.push(d.toISOString().split('T')[0]);
+    }
+    const contasSet = new Set<string>();
+    filtered.forEach(r => contasSet.add(r.conta));
+    const contas = Array.from(contasSet).sort();
+
+    const map = new Map<string, any>();
+    dias.forEach(d => {
+      const obj: any = { date: d, dateLabel: formatDateBR(d), total: 0 };
+      contas.forEach(c => { obj[c] = 0; });
+      map.set(d, obj);
+    });
+    filtered.forEach(r => {
+      const row = map.get(r.date);
+      if (!row) return;
+      row[r.conta] = (row[r.conta] || 0) + r.qtd;
+      row.total = (row.total || 0) + r.qtd;
+    });
+
+    // Meta global = soma das metas de todos os SKUs visíveis na tabela
+    const metaGlobal = mergedData.reduce((s, r) => s + (r.vmdMeta || 0), 0);
+
+    // VMD média por conta no período
+    const vmdPorConta: Record<string, number> = {};
+    contas.forEach(c => {
+      const total = filtered.filter(r => r.conta === c).reduce((s, r) => s + r.qtd, 0);
+      vmdPorConta[c] = total / diasReais;
+    });
+    const totalGeral = filtered.reduce((s, r) => s + r.qtd, 0);
+    const vmdTotal = totalGeral / diasReais;
+
+    return { rows: Array.from(map.values()), contas, metaGlobal, vmdPorConta, vmdTotal };
+  }, [globalDaily, filtroConta, dateIni, dateFim, diasReais, mergedData]);
+
   const chartData = useMemo(() => {
     if (!expandedSku) return { rows: [], contas: [] as string[], vmdPorConta: {} as Record<string, number> };
     const key = `${expandedSku}|${dateIni}|${dateFim}`;
@@ -408,6 +529,56 @@ export function CoberturaFullTab() {
             onChange={e => setBusca(e.target.value)}
             className="flex-1 h-7 text-xs px-2 bg-muted border border-border rounded-md"
           />
+        </div>
+      </div>
+
+      {/* Gráfico Global */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold text-foreground">Vendas Globais — {diasReais} dias (todos SKUs)</h3>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap text-xs">
+            <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
+              VMD TOTAL: {globalChartData.vmdTotal.toFixed(1)}/dia
+            </span>
+            {globalChartData.contas.map((c, idx) => (
+              <span key={c} className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: colorForConta(c, idx) }} />
+                <span className="font-mono">{c}: {(globalChartData.vmdPorConta[c] || 0).toFixed(1)}/dia</span>
+              </span>
+            ))}
+            {globalChartData.metaGlobal > 0 && (
+              <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-mono">
+                Meta Global: {globalChartData.metaGlobal.toFixed(0)}/dia
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="p-4">
+          {loadingGlobal ? (
+            <div className="text-center text-sm text-muted-foreground py-12">Carregando vendas globais...</div>
+          ) : globalChartData.rows.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-12">Sem vendas no período</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={globalChartData.rows} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="dateLabel" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {globalChartData.metaGlobal > 0 && (
+                  <ReferenceLine y={globalChartData.metaGlobal} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `Meta ${globalChartData.metaGlobal.toFixed(0)}`, fontSize: 10, fill: 'hsl(var(--primary))' }} />
+                )}
+                <Line type="monotone" dataKey="total" name="Total" stroke="hsl(var(--foreground))" strokeWidth={2.5} dot={false} />
+                {globalChartData.contas.map((c, idx) => (
+                  <Line key={c} type="monotone" dataKey={c} name={c} stroke={colorForConta(c, idx)} strokeWidth={1.5} dot={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
