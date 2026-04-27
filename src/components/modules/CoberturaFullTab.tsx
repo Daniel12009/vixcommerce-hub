@@ -376,7 +376,7 @@ export function CoberturaFullTab() {
     const vmdTotal = totalGeral / diasReais;
 
     return { rows: Array.from(map.values()), origens, metaGlobal, vmdPorOrigem, vmdTotal };
-  }, [globalDaily, filtroConta, filtroOrigem, busca, dateIni, dateFim, diasReais, mergedData]);
+  }, [globalDaily, filtroConta, filtroOrigem, origensOcultas, busca, dateIni, dateFim, diasReais, mergedData]);
 
   const chartData = useMemo(() => {
     if (!expandedSku) return { rows: [], contas: [] as string[], vmdPorConta: {} as Record<string, number> };
