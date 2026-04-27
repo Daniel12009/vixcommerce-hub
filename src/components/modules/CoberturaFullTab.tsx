@@ -877,6 +877,9 @@ export function CoberturaFullTab() {
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground" title={`(Meta VMD × ${diasReais}) − (VMD × ${diasReais}). Negativo = acima da meta, Positivo = abaixo.`}>
+                  Acumulado vs Meta ({diasReais}d)
+                </th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">
                   <button
                     onClick={() => setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none')}
