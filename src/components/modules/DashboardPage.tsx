@@ -555,8 +555,17 @@ export function DashboardPage() {
       }
     });
     // Ordena por VMD (mais vende → menos vende). Cor só indica o motivo.
-    return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
+    return lista.sort((a, b) => b.vmd - a.vmd);
   }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku, filterConta]);
+
+  // Filtro do gráfico "SKUs com VMD > 0 sem venda hoje" — clique nas legendas
+  const [skusSemVendaFilter, setSkusSemVendaFilter] = useState<'all' | 'sem_estoque' | 'sem_full' | 'com_estoque'>('all');
+  const skusSemVendaHojeFiltrado = useMemo(() => {
+    const base = skusSemVendaFilter === 'all'
+      ? skusSemVendaHoje
+      : skusSemVendaHoje.filter(s => s.status === skusSemVendaFilter);
+    return base.slice(0, 15);
+  }, [skusSemVendaHoje, skusSemVendaFilter]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
@@ -764,29 +773,41 @@ export function DashboardPage() {
               <h3 className="text-foreground font-semibold mb-1 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" /> SKUs com VMD &gt; 0 sem venda hoje
                 <span className="text-xs bg-amber-500/15 text-amber-600 px-2 py-0.5 rounded-full ml-2">
-                  {skusSemVendaHoje.length}
+                  {skusSemVendaHojeFiltrado.length}{skusSemVendaFilter !== 'all' ? ` / ${skusSemVendaHoje.length}` : ''}
                 </span>
               </h3>
               <p className="text-xs text-muted-foreground mb-2">
-                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje.
+                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje. Clique nas legendas para filtrar.
               </p>
-              {/* Legenda de status */}
-              <div className="flex flex-wrap items-center gap-3 mb-4 text-xs">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#dc2626' }} />
-                  <span className="text-muted-foreground">Sem estoque (Full + Tiny)</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#f97316' }} />
-                  <span className="text-muted-foreground">Rompido no Full (tem no Tiny)</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#facc15' }} />
-                  <span className="text-muted-foreground">Com estoque, sem venda</span>
-                </span>
+              {/* Legenda de status — clicável (filtra o gráfico) */}
+              <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
+                {([
+                  { key: 'all', label: 'Todos', color: 'hsl(var(--muted-foreground))' },
+                  { key: 'sem_estoque', label: 'Sem estoque (Full + Tiny)', color: '#dc2626' },
+                  { key: 'sem_full', label: 'Rompido no Full (tem no Tiny)', color: '#f97316' },
+                  { key: 'com_estoque', label: 'Com estoque, sem venda', color: '#facc15' },
+                ] as const).map(opt => {
+                  const active = skusSemVendaFilter === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => setSkusSemVendaFilter(opt.key as any)}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all ${
+                        active
+                          ? 'border-foreground/40 bg-muted'
+                          : 'border-border hover:border-foreground/20 hover:bg-muted/50 opacity-70'
+                      }`}
+                    >
+                      <span className="inline-block w-3 h-3 rounded-sm" style={{ background: opt.color }} />
+                      <span className={active ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+                        {opt.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <ResponsiveContainer width="100%" height={320}>
-                <ComposedChart data={skusSemVendaHoje}>
+                <ComposedChart data={skusSemVendaHojeFiltrado}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
                   <YAxis tick={{ fontSize: 10 }} />
@@ -806,7 +827,7 @@ export function DashboardPage() {
                     }}
                   />
                   <Bar dataKey="vmd" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30}>
-                    {skusSemVendaHoje.map((entry, i) => (
+                    {skusSemVendaHojeFiltrado.map((entry, i) => (
                       <Cell key={i} fill={entry.cor} />
                     ))}
                   </Bar>
