@@ -221,11 +221,11 @@ export function DashboardPage() {
         } else {
           // Fallback: monta o snapshot a partir de vendas_items (planilha Vendas)
           try {
-            const dd = String(yesterday.getDate()).padStart(2, '0');
-            const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
-            const yyyy = yesterday.getFullYear();
-            const dataBR = `${dd}/${mm}/${yyyy}`;
-            const dataISO = `${yyyy}-${mm}-${dd}`;
+            const yDD = String(yesterday.getUTCDate()).padStart(2, '0');
+            const yMM = String(yesterday.getUTCMonth() + 1).padStart(2, '0');
+            const yYYYY = yesterday.getUTCFullYear();
+            const dataBR = `${yDD}/${yMM}/${yYYYY}`;
+            const dataISO = `${yYYYY}-${yMM}-${yDD}`;
 
             // Tenta ambos formatos (banco pode ter coluna date OU text)
             const { data: vRows } = await (supabase as any)
