@@ -491,11 +491,12 @@ export function DashboardPage() {
       vendidosHoje.add(sku);
     }));
 
-    // Mapas de estoque Full (ML) e Tiny (local)
+    // Mapas de estoque Full (ML) e Tiny (local) — Full respeita o filtro de conta
     const fullBySku = new Map<string, number>();
     (estoqueFullItems || []).forEach((i: any) => {
       const sku = canonicalSku(i.sku);
       if (!sku) return;
+      if (filterConta !== 'all' && normalizeConta(i.conta) !== normalizeConta(filterConta)) return;
       fullBySku.set(sku, (fullBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
     });
     const tinyBySku = new Map<string, number>();
@@ -555,7 +556,7 @@ export function DashboardPage() {
     });
     // Ordena por VMD (mais vende → menos vende). Cor só indica o motivo.
     return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
-  }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku]);
+  }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku, filterConta]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
