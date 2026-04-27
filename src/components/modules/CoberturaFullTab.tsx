@@ -563,10 +563,10 @@ export function CoberturaFullTab() {
             <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
               VMD TOTAL: {globalChartData.vmdTotal.toFixed(1)}/dia
             </span>
-            {globalChartData.contas.map((c, idx) => (
-              <span key={c} className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: colorForConta(c, idx) }} />
-                <span className="font-mono">{c}: {(globalChartData.vmdPorConta[c] || 0).toFixed(1)}/dia</span>
+            {globalChartData.origens.map((o, idx) => (
+              <span key={o} className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: ORIGEM_COLORS[o] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length] }} />
+                <span className="font-mono">{o}: {(globalChartData.vmdPorOrigem[o] || 0).toFixed(1)}/dia</span>
               </span>
             ))}
             {globalChartData.metaGlobal > 0 && (
