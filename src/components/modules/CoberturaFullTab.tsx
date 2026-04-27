@@ -71,6 +71,7 @@ export function CoberturaFullTab() {
   const [filtroOrigem, setFiltroOrigem] = useState<string>('all');
   const [origensOcultas, setOrigensOcultas] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState<string>('');
+  const [pinnedDay, setPinnedDay] = useState<string | null>(null);
 
   // Range de datas: termina ONTEM (D-1) — não conta o dia atual pois ainda não tem venda salva
   const { dateIni, dateFim, diasReais } = useMemo(() => {
