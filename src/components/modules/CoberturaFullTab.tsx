@@ -885,8 +885,17 @@ export function CoberturaFullTab() {
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground" title={`(Meta VMD × ${diasReais}) − (VMD × ${diasReais}). Negativo = acima da meta, Positivo = abaixo.`}>
-                  Acumulado vs Meta ({diasReais}d)
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground" title={`(VMD × ${diasReais}) − (Meta VMD × ${diasReais}). Positivo = acima da meta, Negativo = abaixo.`}>
+                  <button
+                    onClick={() => { setSortAcum(p => p === 'none' ? 'desc' : p === 'desc' ? 'asc' : 'none'); setSortPerf('none'); }}
+                    className="inline-flex items-center gap-1 hover:text-primary transition-colors ml-auto"
+                    title="Clique para ordenar pelo acumulado vs meta"
+                  >
+                    Acumulado vs Meta ({diasReais}d)
+                    <span className="text-[10px] font-bold">
+                      {sortAcum === 'desc' ? '▼ ACIMA' : sortAcum === 'asc' ? '▲ ABAIXO' : '⇅'}
+                    </span>
+                  </button>
                 </th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">
                   <button
