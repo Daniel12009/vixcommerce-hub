@@ -877,6 +877,9 @@ export function CoberturaFullTab() {
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground" title={`(Meta VMD × ${diasReais}) − (VMD × ${diasReais}). Negativo = acima da meta, Positivo = abaixo.`}>
+                  Acumulado vs Meta ({diasReais}d)
+                </th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">
                   <button
                     onClick={() => setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none')}
@@ -932,6 +935,21 @@ export function CoberturaFullTab() {
                       <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueFull)}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueTiny)}</td>
                       <td className="px-4 py-3 text-right font-bold text-foreground">{formatNumber(row.estoqueTotal)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-xs">
+                        {row.vmdMeta > 0 ? (() => {
+                          const metaAcum = row.vmdMeta * diasReais;
+                          const vendasAcum = row.vmdAtual * diasReais;
+                          const delta = vendasAcum - metaAcum;
+                          const cor = delta >= 0 ? 'hsl(var(--vix-success))' : 'hsl(var(--vix-danger))';
+                          const sinal = delta >= 0 ? '+' : '';
+                          return (
+                            <div className="flex flex-col items-end leading-tight">
+                              <span style={{ color: cor }} className="font-bold">{sinal}{delta.toFixed(0)}</span>
+                              <span className="text-[10px] text-muted-foreground">{vendasAcum.toFixed(0)} / {metaAcum.toFixed(0)}</span>
+                            </div>
+                          );
+                        })() : <span className="text-muted-foreground">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         {row.performance === 'oversales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-danger)/0.1)] text-[hsl(var(--vix-danger))] text-[10px] font-bold">OVERSALES</span>}
                         {row.performance === 'undersales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))] text-[10px] font-bold">UNDERSALES</span>}
@@ -940,7 +958,7 @@ export function CoberturaFullTab() {
                     </tr>
                     {isExpanded && (
                       <tr key={`${row.sku}-expand`} className="border-b border-border bg-muted/5">
-                        <td colSpan={8} className="px-6 py-4">
+                        <td colSpan={9} className="px-6 py-4">
                           {loadingSku === row.sku ? (
                             <div className="text-center text-sm text-muted-foreground py-8">Carregando vendas...</div>
                           ) : (
