@@ -555,8 +555,17 @@ export function DashboardPage() {
       }
     });
     // Ordena por VMD (mais vende → menos vende). Cor só indica o motivo.
-    return lista.sort((a, b) => b.vmd - a.vmd).slice(0, 15);
+    return lista.sort((a, b) => b.vmd - a.vmd);
   }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku, filterConta]);
+
+  // Filtro do gráfico "SKUs com VMD > 0 sem venda hoje" — clique nas legendas
+  const [skusSemVendaFilter, setSkusSemVendaFilter] = useState<'all' | 'sem_estoque' | 'sem_full' | 'com_estoque'>('all');
+  const skusSemVendaHojeFiltrado = useMemo(() => {
+    const base = skusSemVendaFilter === 'all'
+      ? skusSemVendaHoje
+      : skusSemVendaHoje.filter(s => s.status === skusSemVendaFilter);
+    return base.slice(0, 15);
+  }, [skusSemVendaHoje, skusSemVendaFilter]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
