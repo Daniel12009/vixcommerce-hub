@@ -472,6 +472,48 @@ export function CoberturaFullTab() {
     toast.success('Template baixado');
   };
 
+  // Exporta o gráfico global (1 aba com vendas/dia por origem) e a tabela de cobertura (1 aba)
+  const handleExportarGlobal = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Aba 1 — Vendas por dia x origem (segue o que está no gráfico)
+      const origens = globalChartData.origens;
+      const headerGrafico = ['Data', ...origens, 'Total'];
+      const linhas = globalChartData.rows.map((r: any) => [
+        r.dateLabel,
+        ...origens.map(o => Number(r[o] || 0)),
+        Number(r.total || 0),
+      ]);
+      const totalRow = [
+        'TOTAL',
+        ...origens.map(o => globalChartData.rows.reduce((s: number, r: any) => s + Number(r[o] || 0), 0)),
+        globalChartData.rows.reduce((s: number, r: any) => s + Number(r.total || 0), 0),
+      ];
+      const vmdRow = [
+        `VMD (/${diasReais}d)`,
+        ...origens.map(o => Number((globalChartData.vmdPorOrigem[o] || 0).toFixed(2))),
+        Number(globalChartData.vmdTotal.toFixed(2)),
+      ];
+      const ws1 = XLSX.utils.aoa_to_sheet([headerGrafico, ...linhas, [], totalRow, vmdRow]);
+      XLSX.utils.book_append_sheet(wb, ws1, 'Vendas por Dia');
+
+      // Aba 2 — Tabela de cobertura
+      const headerTab = ['SKU', `VMD (${diasReais}d)`, 'Meta VMD', 'Estoque Full', 'Estoque Tiny', 'Estoque Total', 'Status'];
+      const linhasTab = mergedData.map(r => [
+        r.sku, r.vmdAtual, r.vmdMeta, r.estoqueFull, r.estoqueTiny, r.estoqueTotal, r.performance.toUpperCase(),
+      ]);
+      const ws2 = XLSX.utils.aoa_to_sheet([headerTab, ...linhasTab]);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Cobertura SKUs');
+
+      const sufixo = busca.trim() ? `_${busca.trim().toUpperCase()}` : '';
+      XLSX.writeFile(wb, `cobertura_vendas_${diasReais}d${sufixo}.xlsx`);
+      toast.success('Exportação concluída');
+    } catch (err: any) {
+      toast.error('Erro ao exportar: ' + err.message);
+    }
+  };
+
   const aplicarPeriodoCustom = () => {
     const v = parseInt(periodoCustom, 10);
     if (isNaN(v) || v < 1 || v > 365) { toast.error('Período entre 1 e 365 dias'); return; }
