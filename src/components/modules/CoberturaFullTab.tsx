@@ -958,7 +958,7 @@ export function CoberturaFullTab() {
                     </tr>
                     {isExpanded && (
                       <tr key={`${row.sku}-expand`} className="border-b border-border bg-muted/5">
-                        <td colSpan={8} className="px-6 py-4">
+                        <td colSpan={9} className="px-6 py-4">
                           {loadingSku === row.sku ? (
                             <div className="text-center text-sm text-muted-foreground py-8">Carregando vendas...</div>
                           ) : (
