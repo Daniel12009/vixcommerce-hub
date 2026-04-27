@@ -170,12 +170,22 @@ export function CoberturaFullTab() {
     if (salesBySku.has(`${sku}|${dateIni}|${dateFim}`)) return;
     setLoadingSku(sku);
     try {
-      const { data: rows, error } = await (supabase as any)
-        .from('vendas_items')
-        .select('sku, conta, quantidade, data')
-        .ilike('sku', sku)
-        .limit(20000);
-      if (error) throw error;
+      // Pagina manualmente — o Supabase limita a 1000 rows por request mesmo com .limit() maior
+      const PAGE = 1000;
+      let from = 0;
+      let allRows: any[] = [];
+      for (let p = 0; p < 50; p++) {
+        const { data: rows, error } = await (supabase as any)
+          .from('vendas_items')
+          .select('sku, conta, quantidade, data')
+          .ilike('sku', sku)
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        if (!rows || rows.length === 0) break;
+        allRows = allRows.concat(rows);
+        if (rows.length < PAGE) break;
+        from += PAGE;
+      }
 
       // Filtra pelo range de datas (data pode estar em DD/MM/YYYY ou ISO)
       const iniDate = new Date(dateIni);
@@ -190,7 +200,7 @@ export function CoberturaFullTab() {
         return null;
       };
 
-      const filtered = (rows || [])
+      const filtered = allRows
         .map((r: any) => {
           const dt = parseData(r.data);
           if (!dt || dt < iniDate || dt > fimDate) return null;
@@ -202,6 +212,7 @@ export function CoberturaFullTab() {
         })
         .filter(Boolean) as { date: string; conta: string; qtd: number }[];
 
+      console.log(`[Trajetoria] ${sku}: ${allRows.length} linhas brutas → ${filtered.length} no período ${dateIni}→${dateFim}`);
       setSalesBySku(prev => new Map(prev).set(`${sku}|${dateIni}|${dateFim}`, filtered));
     } catch (err: any) {
       toast.error('Erro ao carregar vendas: ' + err.message);
