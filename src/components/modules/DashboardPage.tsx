@@ -202,8 +202,11 @@ export function DashboardPage() {
       
       // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       if (!_cachedYesterday) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
+        // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
+        const todayBRTStr = getBRTDateStr();
+        const [yy, mm, dd] = todayBRTStr.split('-').map(Number);
+        const yesterday = new Date(Date.UTC(yy, mm - 1, dd));
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
         const dateStr = yesterday.toISOString().split('T')[0];
 
         const { data: snap } = await (supabase as any)
@@ -218,11 +221,11 @@ export function DashboardPage() {
         } else {
           // Fallback: monta o snapshot a partir de vendas_items (planilha Vendas)
           try {
-            const dd = String(yesterday.getDate()).padStart(2, '0');
-            const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
-            const yyyy = yesterday.getFullYear();
-            const dataBR = `${dd}/${mm}/${yyyy}`;
-            const dataISO = `${yyyy}-${mm}-${dd}`;
+            const yDD = String(yesterday.getUTCDate()).padStart(2, '0');
+            const yMM = String(yesterday.getUTCMonth() + 1).padStart(2, '0');
+            const yYYYY = yesterday.getUTCFullYear();
+            const dataBR = `${yDD}/${yMM}/${yYYYY}`;
+            const dataISO = `${yYYYY}-${yMM}-${yDD}`;
 
             // Tenta ambos formatos (banco pode ter coluna date OU text)
             const { data: vRows } = await (supabase as any)
