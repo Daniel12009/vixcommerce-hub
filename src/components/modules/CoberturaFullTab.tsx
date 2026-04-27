@@ -100,6 +100,7 @@ export function CoberturaFullTab() {
   // ===== Sanfona expandida =====
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [sortPerf, setSortPerf] = useState<'none' | 'over' | 'under'>('none');
+  const [sortAcum, setSortAcum] = useState<'none' | 'desc' | 'asc'>('none');
   const [salesBySku, setSalesBySku] = useState<Map<string, { date: string; conta: string; qtd: number }[]>>(new Map());
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
 
