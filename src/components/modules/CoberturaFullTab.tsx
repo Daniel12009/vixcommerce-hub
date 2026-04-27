@@ -101,7 +101,7 @@ export function CoberturaFullTab() {
   const [loadingSku, setLoadingSku] = useState<string | null>(null);
 
   // ===== Vendas globais (todos SKUs) por dia =====
-  const [globalDaily, setGlobalDaily] = useState<{ date: string; conta: string; origem: string; qtd: number }[]>([]);
+  const [globalDaily, setGlobalDaily] = useState<{ date: string; sku: string; conta: string; origem: string; qtd: number }[]>([]);
   const [loadingGlobal, setLoadingGlobal] = useState(false);
 
   useEffect(() => {
