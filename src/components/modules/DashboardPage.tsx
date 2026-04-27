@@ -776,11 +776,11 @@ export function DashboardPage() {
                   <span className="text-muted-foreground">Sem estoque (Full + Tiny)</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#c2410c' }} />
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#7c3aed' }} />
                   <span className="text-muted-foreground">Rompido no Full (tem no Tiny)</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#fbbf24' }} />
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#facc15' }} />
                   <span className="text-muted-foreground">Com estoque, sem venda</span>
                 </span>
               </div>
