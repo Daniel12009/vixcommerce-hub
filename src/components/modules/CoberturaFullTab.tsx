@@ -1,11 +1,13 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Package, TrendingUp, TrendingDown, Target, Shield, Info, Pencil, Check, Upload, Download } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Target, Shield, Info, Pencil, Check, Upload, Download, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { useVendasSKUEstoqueFromDB } from '@/hooks/useVendasFromDB';
 import { formatNumber } from '@/lib/utils-vix';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/integrations/supabase/client';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 
 interface CoberturaRow {
   sku: string;
@@ -14,73 +16,119 @@ interface CoberturaRow {
   estoqueFull: number;
   estoqueTiny: number;
   estoqueTotal: number;
-  estoqueSeguranca: number;
-  coberturaAlvo: number;
   performance: 'oversales' | 'undersales' | 'ok';
-  compraSugerida: number;
 }
 
-// Arredonda VMD para inteiro ou meio (.5) — evita 32.3333
+const PERIODOS_PRESET = [7, 15, 30, 40, 60, 90, 120] as const;
+
+// Cores fixas para contas no gráfico
+const CONTA_COLORS: Record<string, string> = {
+  VIAFLIX: 'hsl(var(--primary))',
+  GS: 'hsl(var(--vix-success))',
+  MONACO: 'hsl(var(--vix-warning))',
+};
+const FALLBACK_COLORS = ['#8b5cf6', '#ec4899', '#06b6d4', '#f59e0b'];
+
 function roundHalf(n: number): number {
   return Math.round(n * 2) / 2;
 }
 
-// Normaliza nomes de conta para casar entre vendas (DB) e estoque Full
-// Estoque Full usa: (VIAFLIX), (GS), (MONACO)
-// Vendas DB usa: "Via Flix", "VIA FLIX", "Via Fix", "Via Flix - A Casa...", "GS TORNEIRAS", "DECARION TORNEIRAS", "Monaco Metais"
 function normalizeConta(c: string): string {
   if (!c) return '';
-  // remove parênteses, espaços, hífens, pontuação; uppercase
   const u = c.trim().toUpperCase().replace(/[()\-\s.,]/g, '');
-  // VIAFLIX, VIAFIX (typo), VIAFLIXACASADASTORNEIRAS -> VIAFLIX
   if (u.startsWith('VIAFLIX') || u.startsWith('VIAFIX')) return 'VIAFLIX';
-  // GS, GSTORNEIRAS -> GS
   if (u === 'GS' || u.startsWith('GSTORNEIRAS') || u.startsWith('GS')) return 'GS';
-  // DECARION..., MONACO... -> MONACO (estoque Full mapeia DECARION como MONACO)
   if (u.startsWith('DECARION') || u.startsWith('MONACO')) return 'MONACO';
   return u;
+}
+
+function formatDateBR(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}`;
 }
 
 export function CoberturaFullTab() {
   const { estoqueFullItems, estoqueTinyItems } = useSheetsData();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // VMD baseada nos últimos 15 dias
-  const VMD_DIAS = 15;
-  const dateFim = new Date().toISOString().split('T')[0];
-  const dateIni = new Date(Date.now() - VMD_DIAS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  // ===== Filtros =====
+  const [periodo, setPeriodo] = useState<number>(15);
+  const [periodoCustom, setPeriodoCustom] = useState<string>('');
+  const [filtroConta, setFiltroConta] = useState<string>('all');
+  const [busca, setBusca] = useState<string>('');
+
+  // Range de datas baseado no período selecionado
+  const { dateIni, dateFim, diasReais } = useMemo(() => {
+    const dias = periodo;
+    const fim = new Date();
+    const ini = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+    return {
+      dateIni: ini.toISOString().split('T')[0],
+      dateFim: fim.toISOString().split('T')[0],
+      diasReais: dias,
+    };
+  }, [periodo]);
+
   const { data: vmdSalesData } = useVendasSKUEstoqueFromDB(dateIni, dateFim);
 
+  // ===== Metas (localStorage) =====
   const [metasVMD, setMetasVMD] = useState<Record<string, number>>(() => {
     try { return JSON.parse(localStorage.getItem('vix_vmd_metas') || '{}'); } catch { return {}; }
   });
   const [editingSku, setEditingSku] = useState<string | null>(null);
   const [tempMeta, setTempMeta] = useState('');
-
   useEffect(() => {
     localStorage.setItem('vix_vmd_metas', JSON.stringify(metasVMD));
   }, [metasVMD]);
 
+  // ===== Sanfona expandida =====
+  const [expandedSku, setExpandedSku] = useState<string | null>(null);
+  const [salesBySku, setSalesBySku] = useState<Map<string, { date: string; conta: string; qtd: number }[]>>(new Map());
+  const [loadingSku, setLoadingSku] = useState<string | null>(null);
+
+  // ===== VMD por SKU/Conta no período selecionado =====
+  const vmdBySkuConta = useMemo(() => {
+    const map = new Map<string, Map<string, number>>(); // sku -> conta -> vmd
+    vmdSalesData.forEach(s => {
+      const sku = s.sku.trim().toUpperCase();
+      const conta = normalizeConta(s.conta);
+      const vmd = (Number(s.quantidade) || 0) / diasReais;
+      if (!map.has(sku)) map.set(sku, new Map());
+      const inner = map.get(sku)!;
+      inner.set(conta, (inner.get(conta) || 0) + vmd);
+    });
+    return map;
+  }, [vmdSalesData, diasReais]);
+
+  // Lista de contas disponíveis (das vendas do período)
+  const contasDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    vmdBySkuConta.forEach(inner => inner.forEach((_, conta) => set.add(conta)));
+    return Array.from(set).sort();
+  }, [vmdBySkuConta]);
+
+  // ===== Tabela principal =====
   const mergedData = useMemo<CoberturaRow[]>(() => {
     if (!estoqueFullItems) return [];
 
-    // VMD agregada por SKU (soma de TODAS as contas) — últimos 15 dias
+    // Soma VMD por SKU (todas as contas) — ou filtra por conta selecionada
     const sqlVmdBySku = new Map<string, number>();
-    vmdSalesData.forEach(s => {
-      const sku = s.sku.trim().toUpperCase();
-      const vmd = (Number(s.quantidade) || 0) / VMD_DIAS;
-      sqlVmdBySku.set(sku, (sqlVmdBySku.get(sku) || 0) + vmd);
+    vmdBySkuConta.forEach((contasMap, sku) => {
+      let total = 0;
+      contasMap.forEach((vmd, conta) => {
+        if (filtroConta === 'all' || conta === filtroConta) total += vmd;
+      });
+      if (total > 0) sqlVmdBySku.set(sku, total);
     });
-    console.log('[CoberturaFull] VMD 15d:', sqlVmdBySku.size, 'SKUs');
 
-    // Estoque Full agregado por SKU (soma de todas as contas)
+    // Estoque Full por SKU
     const fullBySku = new Map<string, number>();
     estoqueFullItems.forEach(i => {
       const sku = i.sku.trim().toUpperCase();
       fullBySku.set(sku, (fullBySku.get(sku) || 0) + Number(i.aptasParaVenda || 0));
     });
 
-    // Estoque Tiny (CD) agregado por SKU
+    // Estoque Tiny por SKU
     const tinyBySku = new Map<string, number>();
     (estoqueTinyItems || []).forEach(i => {
       const sku = (i.sku || '').trim().toUpperCase();
@@ -88,8 +136,7 @@ export function CoberturaFullTab() {
       tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + Number(i.quantidade || 0));
     });
 
-    // União dos SKUs do Full + Tiny
-    const allSkus = new Set<string>([...fullBySku.keys(), ...tinyBySku.keys()]);
+    const allSkus = new Set<string>([...fullBySku.keys(), ...tinyBySku.keys(), ...sqlVmdBySku.keys()]);
 
     return Array.from(allSkus).map((sku) => {
       const full = fullBySku.get(sku) || 0;
@@ -98,35 +145,130 @@ export function CoberturaFullTab() {
       const vmdAtual = roundHalf(sqlVmdBySku.get(sku) ?? 0);
       const vmdMeta = metasVMD[sku] || 0;
 
-      const coberturaAlvo = 30;
-      const estoqueSeguranca = Math.ceil(vmdAtual * 7);
-
       let performance: 'oversales' | 'undersales' | 'ok' = 'ok';
       if (vmdMeta > 0) {
         if (vmdAtual > vmdMeta * 1.2) performance = 'oversales';
         else if (vmdAtual < vmdMeta * 0.8) performance = 'undersales';
       }
 
-      // Sugestão de compra considera estoque TOTAL (Full + Tiny)
-      const compraSugerida = Math.max(0, Math.ceil((vmdAtual * 60) - total));
-
-      return {
-        sku, vmdAtual, vmdMeta,
-        estoqueFull: full, estoqueTiny: tiny, estoqueTotal: total,
-        estoqueSeguranca, coberturaAlvo,
-        performance, compraSugerida,
-      };
-    }).sort((a, b) => b.vmdAtual - a.vmdAtual);
-  }, [estoqueFullItems, estoqueTinyItems, vmdSalesData, metasVMD]);
+      return { sku, vmdAtual, vmdMeta, estoqueFull: full, estoqueTiny: tiny, estoqueTotal: total, performance };
+    })
+      .filter(r => !busca || r.sku.toLowerCase().includes(busca.toLowerCase()))
+      .sort((a, b) => b.vmdAtual - a.vmdAtual);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca]);
 
   const kpis = useMemo(() => {
     const totalVmd = mergedData.reduce((acc, curr) => acc + curr.vmdAtual, 0);
     const oversales = mergedData.filter(m => m.performance === 'oversales').length;
     const undersales = mergedData.filter(m => m.performance === 'undersales').length;
-    const totalSugerido = mergedData.reduce((acc, curr) => acc + curr.compraSugerida, 0);
-    return { totalVmd, oversales, undersales, totalSugerido };
+    const skusAtivos = mergedData.filter(m => m.vmdAtual > 0).length;
+    return { totalVmd, oversales, undersales, skusAtivos };
   }, [mergedData]);
 
+  // ===== Carrega vendas detalhadas ao expandir =====
+  async function carregarVendasSku(sku: string) {
+    if (salesBySku.has(`${sku}|${dateIni}|${dateFim}`)) return;
+    setLoadingSku(sku);
+    try {
+      const { data: rows, error } = await (supabase as any)
+        .from('vendas_items')
+        .select('sku, conta, quantidade, data')
+        .ilike('sku', sku)
+        .limit(20000);
+      if (error) throw error;
+
+      // Filtra pelo range de datas (data pode estar em DD/MM/YYYY ou ISO)
+      const iniDate = new Date(dateIni);
+      const fimDate = new Date(dateFim);
+      const parseData = (d: string): Date | null => {
+        if (!d) return null;
+        if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
+          const [dd, mm, yy] = d.split(/[\/\s]/);
+          return new Date(`${yy}-${mm}-${dd}`);
+        }
+        if (/^\d{4}-\d{2}-\d{2}/.test(d)) return new Date(d.split('T')[0]);
+        return null;
+      };
+
+      const filtered = (rows || [])
+        .map((r: any) => {
+          const dt = parseData(r.data);
+          if (!dt || dt < iniDate || dt > fimDate) return null;
+          return {
+            date: dt.toISOString().split('T')[0],
+            conta: normalizeConta(r.conta),
+            qtd: Number(r.quantidade) || 0,
+          };
+        })
+        .filter(Boolean) as { date: string; conta: string; qtd: number }[];
+
+      setSalesBySku(prev => new Map(prev).set(`${sku}|${dateIni}|${dateFim}`, filtered));
+    } catch (err: any) {
+      toast.error('Erro ao carregar vendas: ' + err.message);
+    } finally {
+      setLoadingSku(null);
+    }
+  }
+
+  function toggleExpand(sku: string) {
+    if (expandedSku === sku) {
+      setExpandedSku(null);
+    } else {
+      setExpandedSku(sku);
+      carregarVendasSku(sku);
+    }
+  }
+
+  // ===== Dados do gráfico para SKU expandido =====
+  const chartData = useMemo(() => {
+    if (!expandedSku) return { rows: [], contas: [] as string[], vmdPorConta: {} as Record<string, number> };
+    const key = `${expandedSku}|${dateIni}|${dateFim}`;
+    const raw = salesBySku.get(key);
+    if (!raw) return { rows: [], contas: [], vmdPorConta: {} };
+
+    // Filtra por conta se aplicável
+    const filteredRaw = filtroConta === 'all' ? raw : raw.filter(r => r.conta === filtroConta);
+
+    // Set de datas (todos os dias do período)
+    const dias: string[] = [];
+    const ini = new Date(dateIni);
+    const fim = new Date(dateFim);
+    for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+      dias.push(d.toISOString().split('T')[0]);
+    }
+
+    // Set de contas presentes
+    const contasSet = new Set<string>();
+    filteredRaw.forEach(r => contasSet.add(r.conta));
+    const contas = Array.from(contasSet).sort();
+
+    // Agrega: dia x conta -> qtd
+    const map = new Map<string, Record<string, number>>();
+    dias.forEach(d => {
+      const obj: Record<string, number> = { date: d as any, dateLabel: formatDateBR(d) as any };
+      contas.forEach(c => { obj[c] = 0; });
+      obj.total = 0;
+      map.set(d, obj);
+    });
+    filteredRaw.forEach(r => {
+      const row = map.get(r.date);
+      if (!row) return;
+      row[r.conta] = (row[r.conta] || 0) + r.qtd;
+      row.total = (row.total || 0) + r.qtd;
+    });
+
+    // VMD média por conta no período
+    const vmdPorConta: Record<string, number> = {};
+    contas.forEach(c => {
+      const total = filteredRaw.filter(r => r.conta === c).reduce((s, r) => s + r.qtd, 0);
+      vmdPorConta[c] = total / diasReais;
+    });
+    vmdPorConta.__total__ = filteredRaw.reduce((s, r) => s + r.qtd, 0) / diasReais;
+
+    return { rows: Array.from(map.values()), contas, vmdPorConta };
+  }, [expandedSku, salesBySku, dateIni, dateFim, diasReais, filtroConta]);
+
+  // ===== Handlers =====
   const handleSaveMeta = (sku: string) => {
     const val = parseFloat(tempMeta);
     if (isNaN(val)) { toast.error('Valor inválido'); return; }
@@ -143,17 +285,10 @@ export function CoberturaFullTab() {
       const wb = XLSX.read(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any>(ws, { header: 1, defval: '' });
-      
       const novasMetas: Record<string, number> = { ...metasVMD };
-      let importados = 0;
-      let ignorados = 0;
-      
-      // Detecta header (linha com "SKU" ou "VMD")
-      const startRow = rows.findIndex((r: any[]) => 
-        r.some(c => String(c).toUpperCase().includes('SKU'))
-      );
+      let importados = 0, ignorados = 0;
+      const startRow = rows.findIndex((r: any[]) => r.some(c => String(c).toUpperCase().includes('SKU')));
       const dataRows = startRow >= 0 ? rows.slice(startRow + 1) : rows;
-      
       dataRows.forEach((row: any[]) => {
         const sku = String(row[0] || '').trim().toUpperCase();
         const vmdRaw = String(row[1] || '').trim().replace(',', '.');
@@ -162,7 +297,6 @@ export function CoberturaFullTab() {
         novasMetas[sku] = vmd;
         importados++;
       });
-      
       setMetasVMD(novasMetas);
       toast.success(`${importados} metas importadas${ignorados > 0 ? ` (${ignorados} ignoradas)` : ''}`);
     } catch (err: any) {
@@ -174,10 +308,7 @@ export function CoberturaFullTab() {
 
   const handleDownloadTemplate = () => {
     const skusUnicos = Array.from(new Set(mergedData.map(r => r.sku)));
-    const data = [
-      ['SKU', 'VMD'],
-      ...skusUnicos.map(sku => [sku, metasVMD[sku] || ''])
-    ];
+    const data = [['SKU', 'VMD'], ...skusUnicos.map(sku => [sku, metasVMD[sku] || ''])];
     const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Metas VMD');
@@ -185,39 +316,103 @@ export function CoberturaFullTab() {
     toast.success('Template baixado');
   };
 
+  const aplicarPeriodoCustom = () => {
+    const v = parseInt(periodoCustom, 10);
+    if (isNaN(v) || v < 1 || v > 365) { toast.error('Período entre 1 e 365 dias'); return; }
+    setPeriodo(v);
+  };
+
+  const colorForConta = (conta: string, idx: number) =>
+    CONTA_COLORS[conta] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KpiCard title="VMD Total (15d SQL)" value={kpis.totalVmd.toFixed(1)} icon={Package} delay={0} />
+        <KpiCard title={`VMD Total (${diasReais}d SQL)`} value={kpis.totalVmd.toFixed(1)} icon={Package} delay={0} />
         <KpiCard title="Oversales" value={String(kpis.oversales)} icon={TrendingUp} valueColor="text-[hsl(var(--vix-danger))]" delay={100} />
         <KpiCard title="Undersales" value={String(kpis.undersales)} icon={TrendingDown} valueColor="text-[hsl(var(--vix-warning))]" delay={200} />
-        <KpiCard title="Objetivo Compra (60d)" value={formatNumber(kpis.totalSugerido)} icon={Target} delay={300} />
+        <KpiCard title="SKUs Ativos" value={formatNumber(kpis.skusAtivos)} icon={Target} delay={300} />
       </div>
 
+      {/* Filtros */}
+      <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Período:</span>
+          {PERIODOS_PRESET.map(d => (
+            <button
+              key={d}
+              onClick={() => setPeriodo(d)}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                periodo === d
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/70'
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+          <div className="flex items-center gap-1 ml-1">
+            <input
+              type="number"
+              min={1}
+              max={365}
+              placeholder="Custom"
+              value={periodoCustom}
+              onChange={e => setPeriodoCustom(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && aplicarPeriodoCustom()}
+              className="w-20 h-7 text-xs px-2 bg-muted border border-border rounded-md"
+            />
+            <button
+              onClick={aplicarPeriodoCustom}
+              className="px-2 py-1 text-xs font-medium rounded-md bg-muted hover:bg-muted/70"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Conta:</span>
+          <select
+            value={filtroConta}
+            onChange={e => setFiltroConta(e.target.value)}
+            className="h-7 text-xs px-2 bg-muted border border-border rounded-md"
+          >
+            <option value="all">Todas</option>
+            {contasDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        <div className="flex items-center gap-1.5 flex-1 min-w-[180px]">
+          <Search className="w-3.5 h-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Buscar SKU..."
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            className="flex-1 h-7 text-xs px-2 bg-muted border border-border rounded-md"
+          />
+        </div>
+      </div>
+
+      {/* Tabela */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Planejamento de Cobertura & Metas</h3>
+            <h3 className="font-semibold text-foreground">Cobertura de Vendas ML — {diasReais} dias</h3>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".xlsx,.xls,.csv"
-              onChange={handleUploadMetas}
-              className="hidden"
-            />
-            <button
-              onClick={handleDownloadTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors"
-            >
+            <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleUploadMetas} className="hidden" />
+            <button onClick={handleDownloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">
               <Download className="w-3.5 h-3.5" /> Baixar Template
             </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
+            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
               <Upload className="w-3.5 h-3.5" /> Importar Metas VMD (.xlsx)
             </button>
           </div>
@@ -225,68 +420,142 @@ export function CoberturaFullTab() {
         <div className="px-4 py-2 border-b border-border bg-muted/10 flex items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[hsl(var(--vix-danger))]" /> Oversales (+20% meta)</span>
           <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[hsl(var(--vix-warning))]" /> Undersales (-20% meta)</span>
-          <span className="ml-auto italic">Planilha: 2 colunas — A=SKU, B=VMD (decimal com . ou ,)</span>
+          <span className="ml-auto italic">Clique no SKU para ver a trajetória de vendas no período</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/20">
+                <th className="w-8 px-2 py-3"></th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">SKU</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">VMD Atual (SQL)</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">VMD ({diasReais}d)</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">
                   Meta VMD <Info className="inline w-3 h-3 ml-1 opacity-50 cursor-help" />
                 </th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Est. Segurança</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Sugestão Compra (60d)</th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">Status Performance</th>
               </tr>
             </thead>
             <tbody>
-              {mergedData.map((row) => (
-                <tr key={row.sku} className="border-b border-border hover:bg-muted/10 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">{row.sku}</td>
-                  <td className="px-4 py-3 text-right font-medium text-foreground">{row.vmdAtual % 1 === 0 ? row.vmdAtual : row.vmdAtual.toFixed(1)}</td>
-                  <td className="px-4 py-3 text-right">
-                    {editingSku === row.sku ? (
-                      <div className="flex items-center justify-end gap-1">
-                        <input
-                          type="number" step="0.1"
-                          value={tempMeta}
-                          onChange={e => setTempMeta(e.target.value)}
-                          className="w-16 h-7 text-right text-xs bg-muted border border-primary rounded px-1"
-                          autoFocus
-                          onKeyDown={e => e.key === 'Enter' && handleSaveMeta(row.sku)}
-                        />
-                        <button onClick={() => handleSaveMeta(row.sku)} className="p-1 hover:bg-primary/10 rounded"><Check className="w-3 h-3 text-[hsl(var(--vix-success))]" /></button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => { setEditingSku(row.sku); setTempMeta(String(row.vmdMeta)); }}
-                        className="group flex items-center justify-end gap-1 ml-auto text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        {row.vmdMeta > 0 ? row.vmdMeta : 'Definir'}
-                        <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100" />
-                      </button>
+              {mergedData.map((row) => {
+                const isExpanded = expandedSku === row.sku;
+                return (
+                  <>
+                    <tr
+                      key={row.sku}
+                      className="border-b border-border hover:bg-muted/10 transition-colors cursor-pointer"
+                      onClick={() => toggleExpand(row.sku)}
+                    >
+                      <td className="px-2 py-3 text-center text-muted-foreground">
+                        {isExpanded ? <ChevronDown className="w-4 h-4 inline" /> : <ChevronRight className="w-4 h-4 inline" />}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">{row.sku}</td>
+                      <td className="px-4 py-3 text-right font-medium text-foreground">{row.vmdAtual % 1 === 0 ? row.vmdAtual : row.vmdAtual.toFixed(1)}</td>
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                        {editingSku === row.sku ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <input
+                              type="number" step="0.1"
+                              value={tempMeta}
+                              onChange={e => setTempMeta(e.target.value)}
+                              className="w-16 h-7 text-right text-xs bg-muted border border-primary rounded px-1"
+                              autoFocus
+                              onKeyDown={e => e.key === 'Enter' && handleSaveMeta(row.sku)}
+                            />
+                            <button onClick={() => handleSaveMeta(row.sku)} className="p-1 hover:bg-primary/10 rounded"><Check className="w-3 h-3 text-[hsl(var(--vix-success))]" /></button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditingSku(row.sku); setTempMeta(String(row.vmdMeta)); }}
+                            className="group flex items-center justify-end gap-1 ml-auto text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            {row.vmdMeta > 0 ? row.vmdMeta : 'Definir'}
+                            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueFull)}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueTiny)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-foreground">{formatNumber(row.estoqueTotal)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {row.performance === 'oversales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-danger)/0.1)] text-[hsl(var(--vix-danger))] text-[10px] font-bold">OVERSALES</span>}
+                        {row.performance === 'undersales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))] text-[10px] font-bold">UNDERSALES</span>}
+                        {row.performance === 'ok' && <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">BALANCEADO</span>}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${row.sku}-expand`} className="border-b border-border bg-muted/5">
+                        <td colSpan={8} className="px-6 py-4">
+                          {loadingSku === row.sku ? (
+                            <div className="text-center text-sm text-muted-foreground py-8">Carregando vendas...</div>
+                          ) : (
+                            <div>
+                              {/* Legenda VMD por conta */}
+                              <div className="flex items-center gap-3 flex-wrap mb-3 text-xs">
+                                <span className="font-semibold text-foreground">VMD média no período:</span>
+                                <span className="px-2 py-0.5 rounded bg-foreground/10 font-mono">
+                                  TOTAL: {(chartData.vmdPorConta.__total__ || 0).toFixed(2)}/dia
+                                </span>
+                                {chartData.contas.map((c, idx) => (
+                                  <span key={c} className="flex items-center gap-1.5">
+                                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: colorForConta(c, idx) }} />
+                                    <span className="font-mono">{c}: {(chartData.vmdPorConta[c] || 0).toFixed(2)}/dia</span>
+                                  </span>
+                                ))}
+                                {row.vmdMeta > 0 && (
+                                  <span className="ml-auto px-2 py-0.5 rounded bg-primary/10 text-primary font-mono">
+                                    Meta: {row.vmdMeta}/dia
+                                  </span>
+                                )}
+                              </div>
+                              {chartData.rows.length === 0 ? (
+                                <div className="text-center text-sm text-muted-foreground py-8">Sem vendas no período</div>
+                              ) : (
+                                <ResponsiveContainer width="100%" height={280}>
+                                  <LineChart data={chartData.rows} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                    <XAxis dataKey="dateLabel" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                                    <Tooltip
+                                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                                    />
+                                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                                    {row.vmdMeta > 0 && (
+                                      <ReferenceLine y={row.vmdMeta} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `Meta ${row.vmdMeta}`, fontSize: 10, fill: 'hsl(var(--primary))' }} />
+                                    )}
+                                    <Line type="monotone" dataKey="total" name="Total" stroke="hsl(var(--foreground))" strokeWidth={2} dot={false} />
+                                    {chartData.contas.map((c, idx) => (
+                                      <Line
+                                        key={c}
+                                        type="monotone"
+                                        dataKey={c}
+                                        name={c}
+                                        stroke={colorForConta(c, idx)}
+                                        strokeWidth={1.5}
+                                        dot={false}
+                                      />
+                                    ))}
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueFull)}</td>
-                  <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueTiny)}</td>
-                  <td className="px-4 py-3 text-right font-bold text-foreground">{formatNumber(row.estoqueTotal)}</td>
-                  <td className="px-4 py-3 text-right text-muted-foreground">{row.estoqueSeguranca}</td>
-                  <td className="px-4 py-3 text-right font-bold text-[hsl(var(--vix-success))]">{row.compraSugerida > 0 ? formatNumber(row.compraSugerida) : '—'}</td>
-                  <td className="px-4 py-3 text-center">
-                    {row.performance === 'oversales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-danger)/0.1)] text-[hsl(var(--vix-danger))] text-[10px] font-bold">OVERSALES</span>}
-                    {row.performance === 'undersales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))] text-[10px] font-bold">UNDERSALES</span>}
-                    {row.performance === 'ok' && <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">BALANCEADO</span>}
-                  </td>
-                </tr>
-              ))}
+                  </>
+                );
+              })}
             </tbody>
           </table>
+          {mergedData.length === 0 && (
+            <div className="text-center text-sm text-muted-foreground py-12">
+              Nenhum SKU encontrado com os filtros atuais.
+            </div>
+          )}
         </div>
       </div>
     </div>
