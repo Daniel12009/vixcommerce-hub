@@ -935,6 +935,21 @@ export function CoberturaFullTab() {
                       <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueFull)}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatNumber(row.estoqueTiny)}</td>
                       <td className="px-4 py-3 text-right font-bold text-foreground">{formatNumber(row.estoqueTotal)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-xs">
+                        {row.vmdMeta > 0 ? (() => {
+                          const metaAcum = row.vmdMeta * diasReais;
+                          const vendasAcum = row.vmdAtual * diasReais;
+                          const delta = vendasAcum - metaAcum;
+                          const cor = delta >= 0 ? 'hsl(var(--vix-success))' : 'hsl(var(--vix-danger))';
+                          const sinal = delta >= 0 ? '+' : '';
+                          return (
+                            <div className="flex flex-col items-end leading-tight">
+                              <span style={{ color: cor }} className="font-bold">{sinal}{delta.toFixed(0)}</span>
+                              <span className="text-[10px] text-muted-foreground">{vendasAcum.toFixed(0)} / {metaAcum.toFixed(0)}</span>
+                            </div>
+                          );
+                        })() : <span className="text-muted-foreground">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         {row.performance === 'oversales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-danger)/0.1)] text-[hsl(var(--vix-danger))] text-[10px] font-bold">OVERSALES</span>}
                         {row.performance === 'undersales' && <span className="px-2 py-1 rounded-full bg-[hsl(var(--vix-warning)/0.1)] text-[hsl(var(--vix-warning))] text-[10px] font-bold">UNDERSALES</span>}
