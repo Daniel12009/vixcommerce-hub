@@ -825,7 +825,18 @@ export function CoberturaFullTab() {
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Full</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Tiny</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque Total</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground">Status Performance</th>
+                <th className="text-center px-4 py-3 font-medium text-muted-foreground">
+                  <button
+                    onClick={() => setSortPerf(p => p === 'none' ? 'over' : p === 'over' ? 'under' : 'none')}
+                    className="inline-flex items-center gap-1 hover:text-primary transition-colors"
+                    title="Clique para ordenar por Oversales / Undersales"
+                  >
+                    Status Performance
+                    <span className="text-[10px] font-bold">
+                      {sortPerf === 'over' ? '▼ OVER' : sortPerf === 'under' ? '▼ UNDER' : '⇅'}
+                    </span>
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
