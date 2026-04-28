@@ -693,6 +693,22 @@ export function CoberturaFullTab() {
 
         <div className="h-6 w-px bg-border" />
 
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Status:</span>
+          <select
+            value={filtroPerformance}
+            onChange={e => setFiltroPerformance(e.target.value as any)}
+            className="h-7 text-xs px-2 bg-muted border border-border rounded-md"
+          >
+            <option value="all">Todos</option>
+            <option value="oversales">Oversales</option>
+            <option value="undersales">Undersales</option>
+            <option value="ok">Balanceado</option>
+          </select>
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
         <div className="flex items-center gap-1.5 flex-1 min-w-[180px]">
           <Search className="w-3.5 h-3.5 text-muted-foreground" />
           <input
