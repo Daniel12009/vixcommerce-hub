@@ -809,6 +809,7 @@ export function DashboardPage() {
                     <Tooltip formatter={(v: any) => formatBRL(Number(v))} />
                     <Legend />
                     <Bar dataKey="faturamento" fill="#6366f1" name="Faturamento Hoje" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Faturamento Ontem" />
                     <Line type="monotone" dataKey="vmdFaturamento" stroke="#ef4444" name="Fat. Médio 15d/dia" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
