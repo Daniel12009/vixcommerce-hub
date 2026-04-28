@@ -20,7 +20,6 @@ async function supabaseFetch(path: string, options: any = {}) {
     'Content-Type': 'application/json',
     'Prefer': 'return=representation',
   };
-  // extraHeaders sobrescrevem baseHeaders (pra permitir Prefer customizado)
   const finalHeaders = { ...baseHeaders, ...(extraHeaders || {}) };
   const res = await fetch(`${url}/rest/v1${path}`, {
     ...rest,
@@ -35,7 +34,7 @@ Deno.serve(async (req) => {
   try {
     console.log('[estoque-snapshot] Iniciando snapshot diário...');
     
-    // 1. Buscar estoque atual do cache (app_data)
+    // 1. Buscar estoque FULL atual do cache
     const appDataRes = await supabaseFetch(`/app_data?data_key=eq.estoque_full_data&select=data_value`);
     const appData = await appDataRes.json();
     
@@ -46,9 +45,19 @@ Deno.serve(async (req) => {
     const items = appData[0].data_value as any[];
     console.log(`[estoque-snapshot] Processando ${items.length} itens do cache.`);
 
-    // 2. Buscar VMD calculado do banco (RPC get_marketplace_sku para os últimos 30 dias)
-    // Nota: Como não podemos chamar RPC via REST facilmente com agrupamento complexo de fora, 
-    // vamos buscar as vendas por SKU dos últimos 30 dias
+    // 1b. Buscar estoque LOCAL (Tiny) atual do cache para detectar ruptura
+    const tinyRes = await supabaseFetch(`/app_data?data_key=eq.estoque_tiny_data&select=data_value`);
+    const tinyData = await tinyRes.json();
+    const tinyItems: any[] = Array.isArray(tinyData) && tinyData[0]?.data_value ? tinyData[0].data_value : [];
+    const tinyMap = new Map<string, number>();
+    for (const t of tinyItems) {
+      const sku = (t.sku || '').trim().toUpperCase();
+      if (!sku) continue;
+      tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(t.quantidade || 0));
+    }
+    console.log(`[estoque-snapshot] Estoque Tiny: ${tinyMap.size} SKUs únicos.`);
+
+    // 2. Vendas dos últimos 30 dias
     const date30DaysAgo = new Date();
     date30DaysAgo.setDate(date30DaysAgo.getDate() - 30);
     const dateIni = date30DaysAgo.toISOString().split('T')[0];
@@ -70,20 +79,52 @@ Deno.serve(async (req) => {
     });
     
     const vmdData = await rpcRes.json();
-    const vmdMap = new Map<string, number>();
+    // Mapa: sku||conta -> qtd vendida nos últimos 30 dias
+    const vendasMap = new Map<string, number>();
     if (Array.isArray(vmdData)) {
       vmdData.forEach(v => {
         const k = `${v.sku?.trim().toUpperCase()}||${v.conta?.trim()}`;
-        vmdMap.set(k, (v.quantidade || 0) / 30);
+        vendasMap.set(k, Number(v.quantidade || 0));
       });
     }
+
+    // 2b. Buscar histórico de snapshots (30d) p/ contar dias COM ruptura no Tiny por SKU
+    const histRes = await supabaseFetch(
+      `/estoque_snapshots?data_ref=gte.${dateIni}&select=data_ref,sku,tiny_quantidade&limit=50000`
+    );
+    const histData = histRes.ok ? await histRes.json() : [];
+    // Mapa: sku -> Set<dias com ruptura local (tiny_quantidade <= 0)>
+    const rupturaDiasPorSku = new Map<string, Set<string>>();
+    if (Array.isArray(histData)) {
+      for (const h of histData) {
+        const sku = (h.sku || '').trim().toUpperCase();
+        if (!sku) continue;
+        // tiny_quantidade pode ser null em snapshots antigos -> ignora
+        if (h.tiny_quantidade === null || h.tiny_quantidade === undefined) continue;
+        if (Number(h.tiny_quantidade) <= 0) {
+          if (!rupturaDiasPorSku.has(sku)) rupturaDiasPorSku.set(sku, new Set());
+          rupturaDiasPorSku.get(sku)!.add(h.data_ref);
+        }
+      }
+    }
+    console.log(`[estoque-snapshot] SKUs com histórico de ruptura: ${rupturaDiasPorSku.size}`);
 
     // 3. Preparar Snapshots
     const today = new Date().toISOString().split('T')[0];
     const snapshots = items.map(item => {
       const sku = (item.sku || '').trim().toUpperCase();
       const conta = (item.conta || '').trim();
-      const vmd = vmdMap.get(`${sku}||${conta}`) || 0;
+      const vendas30d = vendasMap.get(`${sku}||${conta}`) || 0;
+
+      // Dias úteis = 30 - dias em ruptura local (Tiny = 0)
+      const diasRuptura = rupturaDiasPorSku.get(sku)?.size || 0;
+      const tinyAtual = tinyMap.get(sku) ?? null;
+      // Se Tiny atual está zerado, conta o dia de hoje também
+      const diasRupturaAjustado = (tinyAtual !== null && tinyAtual <= 0)
+        ? diasRuptura + (rupturaDiasPorSku.get(sku)?.has(today) ? 0 : 1)
+        : diasRuptura;
+      const diasComEstoque = Math.max(1, 30 - diasRupturaAjustado);
+      const vmd = vendas30d / diasComEstoque;
       
       return {
         data_ref: today,
@@ -92,12 +133,14 @@ Deno.serve(async (req) => {
         quantidade: Number(item.aptasParaVenda || 0),
         em_transferencia: Number(item.emTransferencia || 0),
         entrada_pendente: Number(item.entradaPendente || 0),
+        tiny_quantidade: tinyAtual,
+        dias_ruptura_30d: diasRupturaAjustado,
         vmd_calculado: Number(vmd.toFixed(2)),
         synced_at: new Date().toISOString()
       };
     }).filter(s => s.sku);
 
-    // Dedup: somar quantidades de duplicatas (mesmo data_ref+sku+conta)
+    // Dedup
     const dedupMap = new Map<string, any>();
     for (const s of snapshots) {
       const k = `${s.data_ref}||${s.sku}||${s.conta}`;
@@ -113,8 +156,7 @@ Deno.serve(async (req) => {
     const dedupedSnapshots = Array.from(dedupMap.values());
     console.log(`[estoque-snapshot] Dedup: ${snapshots.length} -> ${dedupedSnapshots.length}`);
 
-    // 4. Upsert no banco
-    // Dividir em lotes para evitar estourar o limite de payload
+    // 4. Upsert
     const BATCH_SIZE = 500;
     let totalInserted = 0;
     let totalErrors = 0;
@@ -135,9 +177,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[estoque-snapshot] Snapshot concluído: ${totalInserted} ok, ${totalErrors} erros de ${snapshots.length} totais.`);
+    console.log(`[estoque-snapshot] Snapshot concluído: ${totalInserted} ok, ${totalErrors} erros.`);
 
-    return new Response(JSON.stringify({ success: true, count: snapshots.length }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      count: snapshots.length,
+      skus_com_ruptura_historica: rupturaDiasPorSku.size 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
