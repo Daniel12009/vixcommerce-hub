@@ -429,6 +429,46 @@ export function DashboardPage() {
     return [...map.values()].sort((a, b) => b.value - a.value);
   }, [paidOrders]);
 
+  // Snapshot de ontem com filtros aplicados (plataforma + canal + conta)
+  // Usa `vendas_detalhadas` (gravado pela edge function save-daily-snapshot a partir de 28/04/2026).
+  // Para snapshots antigos sem esse campo, cai no agregado total (comportamento legado).
+  const filteredYesterday = useMemo(() => {
+    const snap = yesterdaySnapshot;
+    if (!snap) return null;
+    const detalhe: any[] = Array.isArray(snap.vendas_detalhadas) ? snap.vendas_detalhadas : [];
+    const hasDetail = detalhe.length > 0;
+
+    if (!hasDetail) {
+      // Sem detalhe — só dá pra usar agregados se nenhum filtro estiver ativo
+      const semFiltro = filterPlataforma === 'all' && filterCanal === 'all' && filterConta === 'all';
+      return {
+        vendas_por_hora: semFiltro ? (snap.vendas_por_hora || []) : [],
+        por_conta: semFiltro ? (snap.por_conta || {}) : {},
+        sem_detalhe: !semFiltro,
+      };
+    }
+
+    // Aplica filtros
+    const filt = detalhe.filter(d => {
+      if (filterPlataforma !== 'all' && (d.plataforma || '') !== filterPlataforma) return false;
+      if (filterCanal !== 'all' && (d.canal || '') !== filterCanal) return false;
+      if (filterConta !== 'all' && (d.conta || '') !== filterConta) return false;
+      return true;
+    });
+
+    // Reagrega por hora
+    const horaMap = new Map<string, number>();
+    for (let h = 0; h <= 23; h++) horaMap.set(`${String(h).padStart(2, '0')}h`, 0);
+    const porConta: Record<string, number> = {};
+    filt.forEach(d => {
+      horaMap.set(d.hora, (horaMap.get(d.hora) || 0) + (Number(d.faturamento) || 0));
+      const c = d.conta || 'Outros';
+      porConta[c] = (porConta[c] || 0) + (Number(d.faturamento) || 0);
+    });
+    const vendas_por_hora = Array.from(horaMap.entries()).map(([hora, faturamento]) => ({ hora, faturamento }));
+    return { vendas_por_hora, por_conta: porConta, sem_detalhe: false };
+  }, [yesterdaySnapshot, filterPlataforma, filterCanal, filterConta]);
+
   // Faturamento por Conta (Bar) — inclui comparativo com ontem
   const fatPorConta = useMemo(() => {
     const map = new Map<string, { conta: string; faturamento: number; faturamentoOntem: number; pedidos: number }>();
@@ -439,15 +479,15 @@ export function DashboardPage() {
       cur.pedidos += 1;
       map.set(c, cur);
     });
-    // Mescla contas que existiram ontem (mesmo sem venda hoje)
-    const ontem: Record<string, number> = yesterdaySnapshot?.por_conta || {};
+    // Mescla contas que existiram ontem (mesmo sem venda hoje) — já filtrado
+    const ontem: Record<string, number> = filteredYesterday?.por_conta || {};
     Object.entries(ontem).forEach(([c, v]) => {
       const cur = map.get(c) || { conta: c, faturamento: 0, faturamentoOntem: 0, pedidos: 0 };
       cur.faturamentoOntem = Number(v) || 0;
       map.set(c, cur);
     });
     return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
-  }, [paidOrders, yesterdaySnapshot]);
+  }, [paidOrders, filteredYesterday]);
 
   // Vendas por Hora (Area) com comparativo de ontem — sempre em America/Sao_Paulo (BRT)
   const vendasPorHora = useMemo(() => {
