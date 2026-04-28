@@ -58,7 +58,7 @@ function AppContent() {
 
   const checkAccess = (modId: string) => {
     if (user?.role === 'admin') return true;
-    if (['dashboard', 'configuracoes', 'usuarios'].includes(modId)) return true;
+    if (['dashboard', 'configuracoes', 'usuarios', 'tarefas', 'performance', 'metas'].includes(modId)) return true;
     const allowed = user?.allowed_modules || [];
     return allowed.includes(modId);
   };
