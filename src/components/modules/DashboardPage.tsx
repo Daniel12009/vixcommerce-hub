@@ -544,7 +544,7 @@ export function DashboardPage() {
       });
     }
     return hours;
-  }, [paidOrders, yesterdaySnapshot]);
+  }, [paidOrders, filteredYesterday]);
 
   const { comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems } = useSheetsData();
 
