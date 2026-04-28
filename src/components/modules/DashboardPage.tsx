@@ -494,8 +494,8 @@ export function DashboardPage() {
     const hours: any[] = [];
     const yesterdayMap = new Map<string, number>();
 
-    if (yesterdaySnapshot?.vendas_por_hora) {
-      yesterdaySnapshot.vendas_por_hora.forEach((h: any) => {
+    if (filteredYesterday?.vendas_por_hora) {
+      filteredYesterday.vendas_por_hora.forEach((h: any) => {
         yesterdayMap.set(h.hora, h.faturamento);
       });
     }
