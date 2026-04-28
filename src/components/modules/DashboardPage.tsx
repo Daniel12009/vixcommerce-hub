@@ -407,18 +407,25 @@ export function DashboardPage() {
     return [...map.values()].sort((a, b) => b.value - a.value);
   }, [paidOrders]);
 
-  // Faturamento por Conta (Bar)
+  // Faturamento por Conta (Bar) — inclui comparativo com ontem
   const fatPorConta = useMemo(() => {
-    const map = new Map<string, { conta: string; faturamento: number; pedidos: number }>();
+    const map = new Map<string, { conta: string; faturamento: number; faturamentoOntem: number; pedidos: number }>();
     paidOrders.forEach(o => {
       const c = o.conta || 'Outros';
-      const cur = map.get(c) || { conta: c, faturamento: 0, pedidos: 0 };
+      const cur = map.get(c) || { conta: c, faturamento: 0, faturamentoOntem: 0, pedidos: 0 };
       cur.faturamento += o.total_amount;
       cur.pedidos += 1;
       map.set(c, cur);
     });
+    // Mescla contas que existiram ontem (mesmo sem venda hoje)
+    const ontem: Record<string, number> = yesterdaySnapshot?.por_conta || {};
+    Object.entries(ontem).forEach(([c, v]) => {
+      const cur = map.get(c) || { conta: c, faturamento: 0, faturamentoOntem: 0, pedidos: 0 };
+      cur.faturamentoOntem = Number(v) || 0;
+      map.set(c, cur);
+    });
     return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
-  }, [paidOrders]);
+  }, [paidOrders, yesterdaySnapshot]);
 
   // Vendas por Hora (Area) com comparativo de ontem — sempre em America/Sao_Paulo (BRT)
   const vendasPorHora = useMemo(() => {
