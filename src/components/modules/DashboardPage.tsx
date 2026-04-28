@@ -227,8 +227,12 @@ export function DashboardPage() {
       yesterday.setUTCDate(yesterday.getUTCDate() - 1);
       const dateStr = yesterday.toISOString().split('T')[0];
 
-      // Invalida cache se a data de "ontem" mudou (virou o dia)
-      const needsYesterdayFetch = !_cachedYesterday || _cachedYesterdayDate !== dateStr;
+      // Invalida cache se a data de "ontem" mudou (virou o dia) OU se o cache está incompleto
+      const cacheIncompleto = _cachedYesterday && (
+        !_cachedYesterday.por_conta ||
+        Object.keys(_cachedYesterday.por_conta || {}).length === 0
+      );
+      const needsYesterdayFetch = !_cachedYesterday || _cachedYesterdayDate !== dateStr || cacheIncompleto;
 
       if (needsYesterdayFetch) {
         const { data: snap } = await (supabase as any)
