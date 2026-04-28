@@ -185,18 +185,36 @@ export function DashboardPage() {
         const label = `${String(h).padStart(2, '0')}h`;
         horaMap.set(label, { hora: label, faturamento: 0, pedidos: 0 });
       }
+      const porContaSnap: Record<string, number> = {};
+      const porSkuVendasSnap: Record<string, number> = {};
+      const porSkuFatSnap: Record<string, number> = {};
       paidForSnapshot.forEach(o => {
         const label = `${String(getBRTHour(o.date_created)).padStart(2, '0')}h`;
         const cur = horaMap.get(label);
-        if (!cur) return;
-        cur.faturamento += o.total_amount || 0;
-        cur.pedidos += 1;
+        if (cur) {
+          cur.faturamento += o.total_amount || 0;
+          cur.pedidos += 1;
+        }
+        const c = (o.conta || 'Outros').toString();
+        porContaSnap[c] = (porContaSnap[c] || 0) + (Number(o.total_amount) || 0);
+        (o.items || []).forEach((it: any) => {
+          const skuRaw = it.sku || '';
+          if (!skuRaw) return;
+          const sk = canonicalSku(skuRaw);
+          const qty = Number(it.quantity) || 0;
+          const fat = qty * (Number(it.unit_price) || 0);
+          porSkuVendasSnap[sk] = (porSkuVendasSnap[sk] || 0) + qty;
+          porSkuFatSnap[sk] = (porSkuFatSnap[sk] || 0) + fat;
+        });
       });
       (supabase as any).from('daily_sales_snapshots').upsert({
         data_referencia: getBRTDateStr(),
         vendas_por_hora: Array.from(horaMap.values()),
         total_faturamento: paidForSnapshot.reduce((s, o) => s + (o.total_amount || 0), 0),
         total_pedidos: paidForSnapshot.length,
+        por_conta: porContaSnap,
+        por_sku_vendas: porSkuVendasSnap,
+        por_sku_faturamento: porSkuFatSnap,
       }, { onConflict: 'data_referencia' }).then(({ error }: any) => {
         if (error) console.warn('Erro ao salvar snapshot do dashboard:', error);
       });
