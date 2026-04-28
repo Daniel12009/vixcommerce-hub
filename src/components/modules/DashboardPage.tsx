@@ -235,7 +235,7 @@ export function DashboardPage() {
             // Tenta ambos formatos (banco pode ter coluna date OU text)
             const { data: vRows } = await (supabase as any)
               .from('vendas_items')
-              .select('data, valor_total, numero_pedido')
+              .select('data, valor_total, numero_pedido, conta, sku, sku_produto, quantidade')
               .or(`data.eq.${dataBR},data.eq.${dataISO}`)
               .limit(10000);
 
@@ -252,11 +252,29 @@ export function DashboardPage() {
                 horas.push({ hora: label, faturamento: fat, pedidos: 0 });
               }
 
+              // Agrega ontem por conta e por SKU (para comparativos nos gráficos)
+              const porConta: Record<string, number> = {};
+              const porSkuVendas: Record<string, number> = {};
+              const porSkuFat: Record<string, number> = {};
+              vRows.forEach((r: any) => {
+                const c = (r.conta || 'Outros').toString();
+                porConta[c] = (porConta[c] || 0) + (Number(r.valor_total) || 0);
+                const skuRaw = r.sku || r.sku_produto || '';
+                if (skuRaw) {
+                  const sk = canonicalSku(skuRaw);
+                  porSkuVendas[sk] = (porSkuVendas[sk] || 0) + (Number(r.quantidade) || 0);
+                  porSkuFat[sk] = (porSkuFat[sk] || 0) + (Number(r.valor_total) || 0);
+                }
+              });
+
               const synthetic = {
                 data_referencia: dateStr,
                 vendas_por_hora: horas,
                 total_faturamento: totalDia,
                 total_pedidos: pedidosDia,
+                por_conta: porConta,
+                por_sku_vendas: porSkuVendas,
+                por_sku_faturamento: porSkuFat,
               };
               setYesterdaySnapshot(synthetic);
               _cachedYesterday = synthetic;
