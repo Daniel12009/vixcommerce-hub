@@ -560,7 +560,9 @@ export function DashboardPage() {
       const sku = canonicalSku(i.sku);
       if (!sku) return;
       if (filterConta !== 'all' && normalizeConta(i.conta) !== normalizeConta(filterConta)) return;
-      fullBySku.set(sku, (fullBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
+      // Estoque "disponível" no Full = aptasParaVenda (mesmo critério da aba Cobertura)
+      const qtd = Number(i.aptasParaVenda ?? i.quantidade ?? 0) || 0;
+      fullBySku.set(sku, (fullBySku.get(sku) || 0) + qtd);
     });
     const tinyBySku = new Map<string, number>();
     (estoqueTinyItems || []).forEach((i: any) => {
