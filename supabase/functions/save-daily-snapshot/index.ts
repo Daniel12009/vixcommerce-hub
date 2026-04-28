@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
         por_conta: porConta,
         por_sku_vendas: porSkuVendas,
         por_sku_faturamento: porSkuFat,
+        vendas_detalhadas: vendasDetalhadas,
       }, { onConflict: 'data_referencia' });
 
     if (error) throw error;
