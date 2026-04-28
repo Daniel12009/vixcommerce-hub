@@ -313,6 +313,181 @@ export type Database = {
         }
         Relationships: []
       }
+      kanban_card_comments: {
+        Row: {
+          author_email: string
+          body: string
+          card_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          author_email?: string
+          body?: string
+          card_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          author_email?: string
+          body?: string
+          card_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kanban_card_comments_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "kanban_cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kanban_cards: {
+        Row: {
+          assigned_to_email: string | null
+          checklist: Json
+          column_id: string
+          completed: boolean
+          created_at: string
+          created_by_email: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          labels: Json
+          points: number
+          position: number
+          project_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to_email?: string | null
+          checklist?: Json
+          column_id: string
+          completed?: boolean
+          created_at?: string
+          created_by_email?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          labels?: Json
+          points?: number
+          position?: number
+          project_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to_email?: string | null
+          checklist?: Json
+          column_id?: string
+          completed?: boolean
+          created_at?: string
+          created_by_email?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          labels?: Json
+          points?: number
+          position?: number
+          project_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kanban_cards_column_id_fkey"
+            columns: ["column_id"]
+            isOneToOne: false
+            referencedRelation: "kanban_columns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kanban_cards_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "kanban_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kanban_columns: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+          project_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          project_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kanban_columns_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "kanban_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kanban_projects: {
+        Row: {
+          archived: boolean
+          color: string
+          created_at: string
+          created_by_email: string | null
+          description: string | null
+          icon: string
+          id: string
+          name: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          archived?: boolean
+          color?: string
+          created_at?: string
+          created_by_email?: string | null
+          description?: string | null
+          icon?: string
+          id?: string
+          name: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          archived?: boolean
+          color?: string
+          created_at?: string
+          created_by_email?: string | null
+          description?: string | null
+          icon?: string
+          id?: string
+          name?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ml_account_tax_config: {
         Row: {
           conta_id: string | null

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { TeamTask } from '@/lib/types';
-import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, Clock4, CheckSquare, Users, LayoutDashboard, AlertCircle, Info } from 'lucide-react';
+import { Plus, Check, Clock, Trophy, Target, Star, Trash2, ArrowRight, X, Play, Clock4, CheckSquare, Users, LayoutDashboard, AlertCircle, Info, Kanban } from 'lucide-react';
+import { KanbanProjectsTab } from './kanban/KanbanProjectsTab';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
@@ -274,8 +275,13 @@ export function TarefasPage() {
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
         <TabsList className="bg-card border border-border">
           <TabsTrigger value="minhas"><Target className="w-4 h-4 mr-1.5" /> Minhas Atividades</TabsTrigger>
+          <TabsTrigger value="projetos"><Kanban className="w-4 h-4 mr-1.5" /> Projetos</TabsTrigger>
           {canManage && <TabsTrigger value="equipe"><LayoutDashboard className="w-4 h-4 mr-1.5" /> Gestão de Produtividade</TabsTrigger>}
         </TabsList>
+
+        <TabsContent value="projetos" className="mt-0 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <KanbanProjectsTab />
+        </TabsContent>
 
         <TabsContent value="minhas" className="mt-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
