@@ -486,9 +486,11 @@ export function DashboardPage() {
 
   const { comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems } = useSheetsData();
 
-  // Top SKUs do dia com média real dos últimos 15 dias do SQL
+  // Top SKUs do dia com média real dos últimos 15 dias do SQL + comparativo de ontem
   const topSkus = useMemo(() => {
-    const map = new Map<string, { sku: string; vendas: number; faturamento: number; vmd: number; vmdFaturamento: number }>();
+    const map = new Map<string, { sku: string; vendas: number; faturamento: number; vendasOntem: number; faturamentoOntem: number; vmd: number; vmdFaturamento: number }>();
+    const ontemVendas: Record<string, number> = yesterdaySnapshot?.por_sku_vendas || {};
+    const ontemFat: Record<string, number> = yesterdaySnapshot?.por_sku_faturamento || {};
 
     paidOrders.forEach(o => {
       o.items.forEach(item => {
@@ -500,6 +502,8 @@ export function DashboardPage() {
           sku,
           vendas: 0,
           faturamento: 0,
+          vendasOntem: Number(ontemVendas[sku]) || 0,
+          faturamentoOntem: Number(ontemFat[sku]) || 0,
           vmd: vmdUnits,
           vmdFaturamento: vmdFat,
         };
@@ -509,7 +513,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, vmdSqlBySku, vmdFatBySku]);
+  }, [paidOrders, vmdSqlBySku, vmdFatBySku, yesterdaySnapshot]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
