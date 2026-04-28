@@ -54,6 +54,10 @@ Deno.serve(async (req) => {
     }
 
     let totalFat = 0;
+    const porConta: Record<string, number> = {};
+    const porSkuVendas: Record<string, number> = {};
+    const porSkuFat: Record<string, number> = {};
+
     allOrders.forEach(o => {
       const d = new Date(o.date_created);
       d.setHours(d.getHours() - 3);
@@ -64,6 +68,17 @@ Deno.serve(async (req) => {
         cur.pedidos += 1;
         totalFat += o.total_amount;
       }
+      const c = (o.conta || 'Outros').toString();
+      porConta[c] = (porConta[c] || 0) + (Number(o.total_amount) || 0);
+      (o.items || []).forEach((it: any) => {
+        const skuRaw = it.sku || '';
+        if (!skuRaw) return;
+        const sk = String(skuRaw).trim().toUpperCase();
+        const qty = Number(it.quantity) || 0;
+        const fat = qty * (Number(it.unit_price) || 0);
+        porSkuVendas[sk] = (porSkuVendas[sk] || 0) + qty;
+        porSkuFat[sk] = (porSkuFat[sk] || 0) + fat;
+      });
     });
 
     const vendasPorHora = Array.from(horaMap.values());
@@ -82,6 +97,9 @@ Deno.serve(async (req) => {
         vendas_por_hora: vendasPorHora,
         total_faturamento: totalFat,
         total_pedidos: allOrders.length,
+        por_conta: porConta,
+        por_sku_vendas: porSkuVendas,
+        por_sku_faturamento: porSkuFat,
       }, { onConflict: 'data_referencia' });
 
     if (error) throw error;
