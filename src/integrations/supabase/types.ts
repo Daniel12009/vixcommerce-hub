@@ -112,6 +112,7 @@ export type Database = {
           total_faturamento: number
           total_pedidos: number
           updated_at: string
+          vendas_detalhadas: Json
           vendas_por_hora: Json
         }
         Insert: {
@@ -124,6 +125,7 @@ export type Database = {
           total_faturamento?: number
           total_pedidos?: number
           updated_at?: string
+          vendas_detalhadas?: Json
           vendas_por_hora?: Json
         }
         Update: {
@@ -136,6 +138,7 @@ export type Database = {
           total_faturamento?: number
           total_pedidos?: number
           updated_at?: string
+          vendas_detalhadas?: Json
           vendas_por_hora?: Json
         }
         Relationships: []

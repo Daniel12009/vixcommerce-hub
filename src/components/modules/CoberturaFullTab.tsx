@@ -504,7 +504,7 @@ export function CoberturaFullTab() {
     try {
       const wb = XLSX.utils.book_new();
       const header = ['SKU', `VMD (${diasReais}d)`, 'Meta VMD', 'Estoque Full', 'Estoque Tiny', 'Estoque Total', 'Status'];
-      const linhas = mergedData.map(r => [
+      const linhas = sortedData.map(r => [
         r.sku, r.vmdAtual, r.vmdMeta, r.estoqueFull, r.estoqueTiny, r.estoqueTotal, r.performance.toUpperCase(),
       ]);
       const ws = XLSX.utils.aoa_to_sheet([header, ...linhas]);
@@ -593,7 +593,7 @@ export function CoberturaFullTab() {
 
       // === Aba 3: Cobertura SKUs (tabela completa) ===
       const h3 = ['SKU', `VMD (${diasReais}d)`, 'Meta VMD', 'Estoque Full', 'Estoque Tiny', 'Estoque Total', 'Status'];
-      const l3 = mergedData.map(r => [
+      const l3 = sortedData.map(r => [
         r.sku, r.vmdAtual, r.vmdMeta, r.estoqueFull, r.estoqueTiny, r.estoqueTotal, r.performance.toUpperCase(),
       ]);
       const ws3 = XLSX.utils.aoa_to_sheet([h3, ...l3]);
