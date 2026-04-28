@@ -623,6 +623,8 @@ export function CoberturaFullTab() {
   const aplicarPeriodoCustom = () => {
     const v = parseInt(periodoCustom, 10);
     if (isNaN(v) || v < 1 || v > 365) { toast.error('Período entre 1 e 365 dias'); return; }
+    setCustomDateIni('');
+    setCustomDateFim('');
     setPeriodo(v);
   };
 
