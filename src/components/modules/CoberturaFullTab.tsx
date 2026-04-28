@@ -69,6 +69,7 @@ export function CoberturaFullTab() {
   const [periodoCustom, setPeriodoCustom] = useState<string>('');
   const [filtroConta, setFiltroConta] = useState<string>('all');
   const [filtroOrigem, setFiltroOrigem] = useState<string>('all');
+  const [filtroPerformance, setFiltroPerformance] = useState<'all' | 'oversales' | 'undersales' | 'ok'>('all');
   const [origensOcultas, setOrigensOcultas] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState<string>('');
   const [pinnedDay, setPinnedDay] = useState<string | null>(null);
