@@ -106,6 +106,9 @@ export type Database = {
           created_at: string
           data_referencia: string
           id: string
+          por_conta: Json
+          por_sku_faturamento: Json
+          por_sku_vendas: Json
           total_faturamento: number
           total_pedidos: number
           updated_at: string
@@ -115,6 +118,9 @@ export type Database = {
           created_at?: string
           data_referencia: string
           id?: string
+          por_conta?: Json
+          por_sku_faturamento?: Json
+          por_sku_vendas?: Json
           total_faturamento?: number
           total_pedidos?: number
           updated_at?: string
@@ -124,6 +130,9 @@ export type Database = {
           created_at?: string
           data_referencia?: string
           id?: string
+          por_conta?: Json
+          por_sku_faturamento?: Json
+          por_sku_vendas?: Json
           total_faturamento?: number
           total_pedidos?: number
           updated_at?: string
