@@ -760,15 +760,17 @@ export function DashboardPage() {
                   <DollarSign className="w-4 h-4 text-green-500" /> Faturamento por Conta
                 </h3>
                 <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={fatPorConta}>
+                  <ComposedChart data={fatPorConta}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="conta" tick={{ fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v: number) => formatBRL(v)} />
-                    <Bar dataKey="faturamento" fill="#22c55e" name="Faturamento" radius={[6, 6, 0, 0]}>
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="faturamento" fill="#22c55e" name="Faturamento (Hoje)" radius={[6, 6, 0, 0]}>
                       {fatPorConta.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Bar>
-                  </BarChart>
+                    <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Faturamento (Ontem)" />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             )}
