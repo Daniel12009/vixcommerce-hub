@@ -235,7 +235,7 @@ export function DashboardPage() {
             // Tenta ambos formatos (banco pode ter coluna date OU text)
             const { data: vRows } = await (supabase as any)
               .from('vendas_items')
-              .select('data, valor_total, numero_pedido')
+              .select('data, valor_total, numero_pedido, conta, sku, sku_produto, quantidade')
               .or(`data.eq.${dataBR},data.eq.${dataISO}`)
               .limit(10000);
 
@@ -252,11 +252,29 @@ export function DashboardPage() {
                 horas.push({ hora: label, faturamento: fat, pedidos: 0 });
               }
 
+              // Agrega ontem por conta e por SKU (para comparativos nos gráficos)
+              const porConta: Record<string, number> = {};
+              const porSkuVendas: Record<string, number> = {};
+              const porSkuFat: Record<string, number> = {};
+              vRows.forEach((r: any) => {
+                const c = (r.conta || 'Outros').toString();
+                porConta[c] = (porConta[c] || 0) + (Number(r.valor_total) || 0);
+                const skuRaw = r.sku || r.sku_produto || '';
+                if (skuRaw) {
+                  const sk = canonicalSku(skuRaw);
+                  porSkuVendas[sk] = (porSkuVendas[sk] || 0) + (Number(r.quantidade) || 0);
+                  porSkuFat[sk] = (porSkuFat[sk] || 0) + (Number(r.valor_total) || 0);
+                }
+              });
+
               const synthetic = {
                 data_referencia: dateStr,
                 vendas_por_hora: horas,
                 total_faturamento: totalDia,
                 total_pedidos: pedidosDia,
+                por_conta: porConta,
+                por_sku_vendas: porSkuVendas,
+                por_sku_faturamento: porSkuFat,
               };
               setYesterdaySnapshot(synthetic);
               _cachedYesterday = synthetic;
@@ -389,18 +407,25 @@ export function DashboardPage() {
     return [...map.values()].sort((a, b) => b.value - a.value);
   }, [paidOrders]);
 
-  // Faturamento por Conta (Bar)
+  // Faturamento por Conta (Bar) — inclui comparativo com ontem
   const fatPorConta = useMemo(() => {
-    const map = new Map<string, { conta: string; faturamento: number; pedidos: number }>();
+    const map = new Map<string, { conta: string; faturamento: number; faturamentoOntem: number; pedidos: number }>();
     paidOrders.forEach(o => {
       const c = o.conta || 'Outros';
-      const cur = map.get(c) || { conta: c, faturamento: 0, pedidos: 0 };
+      const cur = map.get(c) || { conta: c, faturamento: 0, faturamentoOntem: 0, pedidos: 0 };
       cur.faturamento += o.total_amount;
       cur.pedidos += 1;
       map.set(c, cur);
     });
+    // Mescla contas que existiram ontem (mesmo sem venda hoje)
+    const ontem: Record<string, number> = yesterdaySnapshot?.por_conta || {};
+    Object.entries(ontem).forEach(([c, v]) => {
+      const cur = map.get(c) || { conta: c, faturamento: 0, faturamentoOntem: 0, pedidos: 0 };
+      cur.faturamentoOntem = Number(v) || 0;
+      map.set(c, cur);
+    });
     return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
-  }, [paidOrders]);
+  }, [paidOrders, yesterdaySnapshot]);
 
   // Vendas por Hora (Area) com comparativo de ontem — sempre em America/Sao_Paulo (BRT)
   const vendasPorHora = useMemo(() => {
@@ -461,9 +486,11 @@ export function DashboardPage() {
 
   const { comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems } = useSheetsData();
 
-  // Top SKUs do dia com média real dos últimos 15 dias do SQL
+  // Top SKUs do dia com média real dos últimos 15 dias do SQL + comparativo de ontem
   const topSkus = useMemo(() => {
-    const map = new Map<string, { sku: string; vendas: number; faturamento: number; vmd: number; vmdFaturamento: number }>();
+    const map = new Map<string, { sku: string; vendas: number; faturamento: number; vendasOntem: number; faturamentoOntem: number; vmd: number; vmdFaturamento: number }>();
+    const ontemVendas: Record<string, number> = yesterdaySnapshot?.por_sku_vendas || {};
+    const ontemFat: Record<string, number> = yesterdaySnapshot?.por_sku_faturamento || {};
 
     paidOrders.forEach(o => {
       o.items.forEach(item => {
@@ -475,6 +502,8 @@ export function DashboardPage() {
           sku,
           vendas: 0,
           faturamento: 0,
+          vendasOntem: Number(ontemVendas[sku]) || 0,
+          faturamentoOntem: Number(ontemFat[sku]) || 0,
           vmd: vmdUnits,
           vmdFaturamento: vmdFat,
         };
@@ -484,7 +513,7 @@ export function DashboardPage() {
       });
     });
     return [...map.values()];
-  }, [paidOrders, vmdSqlBySku, vmdFatBySku]);
+  }, [paidOrders, vmdSqlBySku, vmdFatBySku, yesterdaySnapshot]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
@@ -731,15 +760,17 @@ export function DashboardPage() {
                   <DollarSign className="w-4 h-4 text-green-500" /> Faturamento por Conta
                 </h3>
                 <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={fatPorConta}>
+                  <ComposedChart data={fatPorConta}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="conta" tick={{ fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v: number) => formatBRL(v)} />
-                    <Bar dataKey="faturamento" fill="#22c55e" name="Faturamento" radius={[6, 6, 0, 0]}>
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="faturamento" fill="#22c55e" name="Faturamento (Hoje)" radius={[6, 6, 0, 0]}>
                       {fatPorConta.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Bar>
-                  </BarChart>
+                    <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Faturamento (Ontem)" />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             )}
@@ -760,6 +791,7 @@ export function DashboardPage() {
                     <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
                     <Legend />
                     <Bar dataKey="vendas" fill="#22c55e" name="Vendas Hoje" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Line type="monotone" dataKey="vendasOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Vendas Ontem" />
                     <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="Média 15d (Unid./dia)" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -777,6 +809,7 @@ export function DashboardPage() {
                     <Tooltip formatter={(v: any) => formatBRL(Number(v))} />
                     <Legend />
                     <Bar dataKey="faturamento" fill="#6366f1" name="Faturamento Hoje" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Faturamento Ontem" />
                     <Line type="monotone" dataKey="vmdFaturamento" stroke="#ef4444" name="Fat. Médio 15d/dia" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
