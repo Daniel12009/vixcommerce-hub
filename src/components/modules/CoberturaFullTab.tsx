@@ -252,8 +252,9 @@ export function CoberturaFullTab() {
       return { sku, vmdAtual, vmdMeta, estoqueFull: full, estoqueTiny: tiny, estoqueTotal: total, performance };
     })
       .filter(r => !busca || r.sku.toLowerCase().includes(busca.toLowerCase()))
+      .filter(r => filtroPerformance === 'all' || r.performance === filtroPerformance)
       .sort((a, b) => b.vmdAtual - a.vmdAtual);
-  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca, filtroPerformance]);
 
   const sortedData = useMemo(() => {
     if (sortAcum !== 'none') {
