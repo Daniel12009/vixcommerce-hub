@@ -69,6 +69,7 @@ export function CoberturaFullTab() {
   const [periodoCustom, setPeriodoCustom] = useState<string>('');
   const [filtroConta, setFiltroConta] = useState<string>('all');
   const [filtroOrigem, setFiltroOrigem] = useState<string>('all');
+  const [filtroPerformance, setFiltroPerformance] = useState<'all' | 'oversales' | 'undersales' | 'ok'>('all');
   const [origensOcultas, setOrigensOcultas] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState<string>('');
   const [pinnedDay, setPinnedDay] = useState<string | null>(null);
@@ -251,8 +252,9 @@ export function CoberturaFullTab() {
       return { sku, vmdAtual, vmdMeta, estoqueFull: full, estoqueTiny: tiny, estoqueTotal: total, performance };
     })
       .filter(r => !busca || r.sku.toLowerCase().includes(busca.toLowerCase()))
+      .filter(r => filtroPerformance === 'all' || r.performance === filtroPerformance)
       .sort((a, b) => b.vmdAtual - a.vmdAtual);
-  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuConta, metasVMD, filtroConta, busca, filtroPerformance]);
 
   const sortedData = useMemo(() => {
     if (sortAcum !== 'none') {
@@ -686,6 +688,22 @@ export function CoberturaFullTab() {
           >
             <option value="all">Todas</option>
             {origensDisponiveis.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Status:</span>
+          <select
+            value={filtroPerformance}
+            onChange={e => setFiltroPerformance(e.target.value as any)}
+            className="h-7 text-xs px-2 bg-muted border border-border rounded-md"
+          >
+            <option value="all">Todos</option>
+            <option value="oversales">Oversales</option>
+            <option value="undersales">Undersales</option>
+            <option value="ok">Balanceado</option>
           </select>
         </div>
 
