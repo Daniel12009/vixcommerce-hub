@@ -643,19 +643,22 @@ export function CoberturaFullTab() {
       <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold text-muted-foreground">Período:</span>
-          {PERIODOS_PRESET.map(d => (
-            <button
-              key={d}
-              onClick={() => setPeriodo(d)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                periodo === d
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/70'
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
+          {PERIODOS_PRESET.map(d => {
+            const ativo = periodo === d && !customDateIni && !customDateFim;
+            return (
+              <button
+                key={d}
+                onClick={() => { setPeriodo(d); setCustomDateIni(''); setCustomDateFim(''); }}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  ativo
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                }`}
+              >
+                {d}d
+              </button>
+            );
+          })}
           <div className="flex items-center gap-1 ml-1">
             <input
               type="number"
@@ -674,6 +677,39 @@ export function CoberturaFullTab() {
               OK
             </button>
           </div>
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        {/* Range de datas personalizado */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Datas:</span>
+          <input
+            type="date"
+            value={customDateIni}
+            onChange={e => setCustomDateIni(e.target.value)}
+            max={customDateFim || undefined}
+            className="h-7 text-xs px-2 bg-muted border border-border rounded-md"
+            title="Data inicial"
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <input
+            type="date"
+            value={customDateFim}
+            onChange={e => setCustomDateFim(e.target.value)}
+            min={customDateIni || undefined}
+            className="h-7 text-xs px-2 bg-muted border border-border rounded-md"
+            title="Data final"
+          />
+          {(customDateIni || customDateFim) && (
+            <button
+              onClick={() => { setCustomDateIni(''); setCustomDateFim(''); }}
+              className="px-2 py-1 text-xs font-medium rounded-md bg-muted hover:bg-muted/70"
+              title="Limpar range customizado"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         <div className="h-6 w-px bg-border" />
