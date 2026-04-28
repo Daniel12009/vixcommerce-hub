@@ -791,6 +791,7 @@ export function DashboardPage() {
                     <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
                     <Legend />
                     <Bar dataKey="vendas" fill="#22c55e" name="Vendas Hoje" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Line type="monotone" dataKey="vendasOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Vendas Ontem" />
                     <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="Média 15d (Unid./dia)" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
