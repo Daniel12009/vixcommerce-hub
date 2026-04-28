@@ -58,6 +58,19 @@ Deno.serve(async (req) => {
     const porSkuVendas: Record<string, number> = {};
     const porSkuFat: Record<string, number> = {};
 
+    // Detalhamento por hora + plataforma + canal + conta (para filtros retroativos no dashboard)
+    // chave: `${hora}||${plataforma}||${canal}||${conta}`
+    const detalhadoMap = new Map<string, { hora: string; plataforma: string; canal: string; conta: string; faturamento: number; pedidos: number }>();
+
+    // Replica classifyCanal do front (simplificado): drop = drop_shipping/dropshipping; full = fulfillment; outros default
+    const classifyCanal = (o: any): string => {
+      const tipo = String(o.logistic_type || o.shipping?.logistic?.type || '').toLowerCase();
+      if (tipo.includes('drop')) return 'drop';
+      if (tipo.includes('fulfillment')) return 'full';
+      if (tipo.includes('cross_docking') || tipo.includes('xd_drop_off')) return 'flex';
+      return 'outros';
+    };
+
     allOrders.forEach(o => {
       const d = new Date(o.date_created);
       d.setHours(d.getHours() - 3);
@@ -70,6 +83,26 @@ Deno.serve(async (req) => {
       }
       const c = (o.conta || 'Outros').toString();
       porConta[c] = (porConta[c] || 0) + (Number(o.total_amount) || 0);
+
+      // Agrega detalhado
+      const plataforma = String(o.plataforma || '').toLowerCase() || 'outros';
+      const canal = classifyCanal(o);
+      const dkey = `${h}||${plataforma}||${canal}||${c}`;
+      const existing = detalhadoMap.get(dkey);
+      if (existing) {
+        existing.faturamento += Number(o.total_amount) || 0;
+        existing.pedidos += 1;
+      } else {
+        detalhadoMap.set(dkey, {
+          hora: h,
+          plataforma,
+          canal,
+          conta: c,
+          faturamento: Number(o.total_amount) || 0,
+          pedidos: 1,
+        });
+      }
+
       (o.items || []).forEach((it: any) => {
         const skuRaw = it.sku || '';
         if (!skuRaw) return;
@@ -80,6 +113,8 @@ Deno.serve(async (req) => {
         porSkuFat[sk] = (porSkuFat[sk] || 0) + fat;
       });
     });
+
+    const vendasDetalhadas = Array.from(detalhadoMap.values());
 
     const vendasPorHora = Array.from(horaMap.values());
 
