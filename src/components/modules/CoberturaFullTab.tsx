@@ -77,7 +77,18 @@ export function CoberturaFullTab() {
   const [pinnedDay, setPinnedDay] = useState<string | null>(null);
 
   // Range de datas: termina ONTEM (D-1) — não conta o dia atual pois ainda não tem venda salva
+  // Se customDateIni e customDateFim estiverem preenchidos, usa o range customizado
   const { dateIni, dateFim, diasReais } = useMemo(() => {
+    if (customDateIni && customDateFim) {
+      const ini = new Date(customDateIni + 'T00:00:00');
+      const fim = new Date(customDateFim + 'T00:00:00');
+      const dias = Math.max(1, Math.round((fim.getTime() - ini.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+      return {
+        dateIni: customDateIni,
+        dateFim: customDateFim,
+        diasReais: dias,
+      };
+    }
     const dias = periodo;
     const fim = new Date(Date.now() - 24 * 60 * 60 * 1000); // ontem
     const ini = new Date(fim.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
@@ -86,7 +97,7 @@ export function CoberturaFullTab() {
       dateFim: fim.toISOString().split('T')[0],
       diasReais: dias,
     };
-  }, [periodo]);
+  }, [periodo, customDateIni, customDateFim]);
 
   const { data: vmdSalesData } = useVendasSKUEstoqueFromDB(dateIni, dateFim);
 
