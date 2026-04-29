@@ -1678,12 +1678,9 @@ Deno.serve(async (req) => {
       }
 
       if (loteLinhas.length > 0) {
-        // Dedup: VendasML has date created at column 2 (index 2: "Data de Criação")
-        // But date could also be used at column 11 if there is a 'Data Ref' instead?
-        // Let's use date created (index 2). Wait, earlier we saw VendasML has Data Ref at col 11 (Actually col 2 is Data Criação, VendasML is what?).
-        // For vendas, the data processed is 'dateFrom', which might be passed as a ref.
-        // Actually earlier it was appending. Let's use column 2 (Data de Criação) for VendasML which has `'DD/MM/YYYY`.
-        await invokeSheets(sheetId, `${sheetTab}!A:S`, loteLinhas, 'dedup_write', 2);
+        // APPEND PURO na coluna P em diante — NUNCA apaga linhas existentes.
+        // Colunas A-O têm fórmulas/dados sagrados, só escrevemos de P até AH (19 colunas).
+        await invokeSheets(sheetId, `${sheetTab}!P:AH`, loteLinhas, 'append');
       }
 
       let dbStatus = `dbRows=${loteDbRows.length}`;
