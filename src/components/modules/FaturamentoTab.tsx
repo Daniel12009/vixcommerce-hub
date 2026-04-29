@@ -120,7 +120,12 @@ export function FaturamentoTab() {
     return getLocalDateStr(d);
   }, [filterDias]);
 
-  // Use local data from Sheets to compute everything perfectly matching the Google Sheets formulas
+  const { data: rawDbDaily, loading: loadingDaily } = useVendasFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
+  const { data: rawDbDailyPrev, loading: loadingDailyPrev } = useVendasFromDB(dateIniPrev, dateFimPrev, filterConta !== 'all' ? [filterConta] : undefined);
+  const { data: rawDbSku, loading: loadingSku } = useVendasSKUFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
+  const { data: rawDbSkuPrev } = useVendasSKUFromDB(dateIniPrev, dateFimPrev, filterConta !== 'all' ? [filterConta] : undefined);
+
+  // Build Custo Map from "Teste Luiz Ads"
   const custoMap = useMemo(() => {
     const map = new Map<string, number>();
     if (sheetsData.comprasItems) {
@@ -131,142 +136,166 @@ export function FaturamentoTab() {
     return map;
   }, [sheetsData.comprasItems]);
 
-  const { dbDaily, dbDailyPrev, dbSku, dbSkuPrev, loadingDaily, loadingSku } = useMemo(() => {
-    if (!sheetsData.vendasItems || !sheetsData.marketplaceDiaItems) {
-      return { dbDaily: [], dbDailyPrev: [], dbSku: [], dbSkuPrev: [], loadingDaily: true, loadingSku: true };
+  // Calculate accurate daily CMV from vendasItems locally
+  const dailyCmvMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (sheetsData.vendasItems) {
+      sheetsData.vendasItems.forEach(v => {
+        if (v.statusPedido?.toLowerCase().includes('cancel')) return;
+        const d = parseDate(v.data);
+        if (!d) return;
+        const dateStr = getLocalDateStr(d);
+        const conta = (v.conta || 'Sem Conta').trim();
+        const s = (v.sku || v.skuProduto || 'Sem SKU').trim().toUpperCase();
+        const qtd = Number(v.quantidade || 0);
+        
+        const unitCost = custoMap.get(s) || 0;
+        const cmvTotal = unitCost * qtd;
+        
+        // Group by Date and Conta to match DB Daily
+        const key = `${dateStr}|${conta}`;
+        map.set(key, (map.get(key) || 0) + cmvTotal);
+      });
     }
+    return map;
+  }, [sheetsData.vendasItems, custoMap]);
 
-    const ini = new Date(dateIni + 'T00:00:00');
-    const fim = new Date(dateFim + 'T23:59:59');
-    const iniPrev = new Date(dateIniPrev + 'T00:00:00');
-    const fimPrev = new Date(dateFimPrev + 'T23:59:59');
+  // 1. Map Ads from "Marketplace Dia"
+  const adsMap = useMemo(() => {
+    const map = new Map<string, { ads: number, fat: number, impostos: number }>();
+    if (sheetsData.marketplaceDiaItems) {
+      sheetsData.marketplaceDiaItems.forEach(m => {
+        const d = parseDate(m.data);
+        if (!d) return;
+        const parts = m.origem.split('|');
+        const conta = parts.length > 1 ? parts[1].trim() : m.origem.trim();
+        const key = `${getLocalDateStr(d)}|${conta}`;
+        map.set(key, { ads: Number(m.ads || 0), fat: Number(m.faturamentoBruto || 0), impostos: Number(m.impostos || 0) });
+      });
+    }
+    return map;
+  }, [sheetsData.marketplaceDiaItems]);
 
-    // 1. Process dbDaily from marketplaceDiaItems (matches exactly the user's "Marketplace" tab)
-    const daily: any[] = [];
-    const dailyPrev: any[] = [];
-    
-    // Also build an Ads Proration map to distribute ads to SKUs
-    const adsProrationMap = new Map<string, { ads: number, fat: number, impostos: number }>();
+  // 2. Map Devoluções from "Devolucao" sheet
+  const devSkuMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (sheetsData.devolucaoItems) {
+      sheetsData.devolucaoItems.forEach(d => {
+        // We do not have dates in SKU aggregation easily, so we just map by sku|conta over the period
+        // For accurate date filtering, we'd need date comparison, but this is a rough exact match map.
+        const dt = parseDate(d.data);
+        if (!dt) return;
+        const dtIni = new Date(dateIni + 'T00:00:00');
+        const dtFim = new Date(dateFim + 'T23:59:59');
+        if (dt >= dtIni && dt <= dtFim) {
+          const key = `${String(d.sku).trim().toUpperCase()}|${d.conta.trim()}`;
+          map.set(key, (map.get(key) || 0) + Number(d.quantidade || 0));
+        }
+      });
+    }
+    return map;
+  }, [sheetsData.devolucaoItems, dateIni, dateFim]);
 
-    sheetsData.marketplaceDiaItems.forEach(m => {
-      const d = parseDate(m.data);
-      if (!d) return;
-      const isCurrent = d >= ini && d <= fim;
-      const isPrev = d >= iniPrev && d <= fimPrev;
+  const dbDaily = useMemo(() => {
+    return (rawDbDaily || []).map(d => {
+      const conta = d.conta || d.origem;
+      const key = `${d.data}|${conta}`;
       
-      const parts = m.origem.split('|');
-      const marketplace = parts[0].trim();
-      const conta = parts.length > 1 ? parts[1].trim() : m.origem.trim();
+      const cmvCalculado = dailyCmvMap.get(key) || 0;
+      
+      const prData = adsMap.get(key);
+      const adsInjected = prData && prData.ads > 0 ? prData.ads : Number(d.ads || 0);
+      const impostosInjected = prData && prData.impostos > 0 ? prData.impostos : Number(d.impostos || 0);
+      
+      const frete = Number(d.frete || 0); // Note: DB dbDaily actually does not return frete directly in old RPC, it subtracts it
+      // Actually DB dbDaily does not expose 'frete', we just use the adjusted values:
+      const lucroCorrigido = Number(d.faturamento_bruto) + Number(d.comissao) - adsInjected - impostosInjected - cmvCalculado;
+      
+      return { ...d, cmv: cmvCalculado, ads: adsInjected, impostos: impostosInjected, lucro_liquido: lucroCorrigido };
+    });
+  }, [rawDbDaily, dailyCmvMap, adsMap]);
 
-      const dateStr = getLocalDateStr(d);
-      const prKey = `${dateStr}|${conta}`;
-      adsProrationMap.set(prKey, { ads: Number(m.ads || 0), fat: Number(m.faturamentoBruto || 0), impostos: Number(m.impostos || 0) });
+  const dbDailyPrev = useMemo(() => {
+    return (rawDbDailyPrev || []).map(d => {
+      const conta = d.conta || d.origem;
+      const key = `${d.data}|${conta}`;
+      const cmvCalculado = dailyCmvMap.get(key) || 0;
+      
+      const prData = adsMap.get(key);
+      const adsInjected = prData && prData.ads > 0 ? prData.ads : Number(d.ads || 0);
+      const impostosInjected = prData && prData.impostos > 0 ? prData.impostos : Number(d.impostos || 0);
+      
+      const lucroCorrigido = Number(d.faturamento_bruto) + Number(d.comissao) - adsInjected - impostosInjected - cmvCalculado;
+      return { ...d, cmv: cmvCalculado, ads: adsInjected, impostos: impostosInjected, lucro_liquido: lucroCorrigido };
+    });
+  }, [rawDbDailyPrev, dailyCmvMap, adsMap]);
 
-      if (filterConta !== 'all' && filterConta !== conta) return;
+  const dbSku = useMemo(() => {
+    // Compute total Ads and Fat per conta to prorate SKU ads correctly
+    const contaTotals = new Map<string, { fat: number, ads: number }>();
+    dbDaily.forEach(daily => {
+      const t = contaTotals.get(daily.conta) || { fat: 0, ads: 0 };
+      t.fat += Number(daily.faturamento_bruto);
+      t.ads += Number(daily.ads);
+      contaTotals.set(daily.conta, t);
+    });
 
-      const dailyObj = {
-        data: dateStr,
-        conta,
-        marketplace,
-        faturamento_bruto: Number(m.faturamentoBruto || 0),
-        lucro_liquido: Number(m.lucroLiquidoDia || 0),
-        impostos: Number(m.impostos || 0),
-        ads: Number(m.ads || 0),
-        cmv: Number(m.cmv || 0),
-        comissao: Number(m.comissao || 0),
-        frete: Number(m.frete || 0) + Number(m.embalagem || 0),
-        pedidos: Number(m.numeroPedidos || 0),
-        quantidade: Number(m.numeroPedidos || 0),
+    return (rawDbSku || []).map(d => {
+      const conta = String(d.conta).trim();
+      const sku = String(d.sku).trim().toUpperCase();
+      
+      const unitCost = custoMap.get(sku) || 0;
+      const cmvCalculado = unitCost * Number(d.quantidade);
+      
+      const totals = contaTotals.get(conta);
+      let adsInjected = Number(d.ads || 0);
+      if (totals && totals.fat > 0 && adsInjected === 0) {
+        adsInjected = (Number(d.faturamento_bruto) / totals.fat) * totals.ads;
+      }
+
+      const devKey = `${sku}|${conta}`;
+      const devInjected = devSkuMap.get(devKey) || Number(d.dev_qtd || 0);
+      const pctDev = Number(d.quantidade) > 0 ? (devInjected / Number(d.quantidade)) * 100 : 0;
+
+      const lucroCorrigido = Number(d.faturamento_bruto) + Number(d.comissao) - adsInjected - Number(d.frete || 0) - cmvCalculado;
+      
+      return { 
+        ...d, 
+        cmv: cmvCalculado, 
+        ads: adsInjected, 
+        liquido: lucroCorrigido,
+        dev_qtd: devInjected,
+        pct_devolucao: pctDev
       };
+    });
+  }, [rawDbSku, custoMap, dbDaily, devSkuMap]);
 
-      if (isCurrent) daily.push(dailyObj);
-      if (isPrev) dailyPrev.push(dailyObj);
+  const dbSkuPrev = useMemo(() => {
+    const contaTotals = new Map<string, { fat: number, ads: number }>();
+    dbDailyPrev.forEach(daily => {
+      const t = contaTotals.get(daily.conta) || { fat: 0, ads: 0 };
+      t.fat += Number(daily.faturamento_bruto);
+      t.ads += Number(daily.ads);
+      contaTotals.set(daily.conta, t);
     });
 
-    // 2. Process dbSku from vendasItems
-    const mapSku = new Map<string, any>();
-    const mapSkuPrev = new Map<string, any>();
-
-    for (const v of sheetsData.vendasItems) {
-      if (v.statusPedido?.toLowerCase().includes('cancel')) continue;
-      const d = parseDate(v.data);
-      if (!d) continue;
-
-      const isCurrent = d >= ini && d <= fim;
-      const isPrev = d >= iniPrev && d <= fimPrev;
-      if (!isCurrent && !isPrev) continue;
-
-      const conta = (v.conta || 'Sem Conta').trim();
-      if (filterConta !== 'all' && filterConta !== conta) continue;
-
-      const s = (v.sku || v.skuProduto || 'Sem SKU').trim().toUpperCase();
-      const qtd = Number(v.quantidade || 1);
-      const fatBruto = Number(v.valorTotal || 0);
-      const unitCost = custoMap.get(s) || 0;
-      const cmvCalculado = unitCost * qtd;
-
-      const dateStr = getLocalDateStr(d);
-      const prKey = `${dateStr}|${conta}`;
-      const prData = adsProrationMap.get(prKey);
+    return (rawDbSkuPrev || []).map(d => {
+      const conta = String(d.conta).trim();
+      const sku = String(d.sku).trim().toUpperCase();
       
-      // Calculate Ads and Impostos (if missing) by prorating from the daily totals
-      let ads = Number(v.ads || 0);
-      let impostos = Number(v.impostos || 0);
+      const unitCost = custoMap.get(sku) || 0;
+      const cmvCalculado = unitCost * Number(d.quantidade);
       
-      if (prData && prData.fat > 0) {
-         if (ads === 0 && prData.ads > 0) ads = (fatBruto / prData.fat) * prData.ads;
-         if (impostos === 0 && prData.impostos > 0) impostos = (fatBruto / prData.fat) * prData.impostos;
+      const totals = contaTotals.get(conta);
+      let adsInjected = Number(d.ads || 0);
+      if (totals && totals.fat > 0 && adsInjected === 0) {
+        adsInjected = (Number(d.faturamento_bruto) / totals.fat) * totals.ads;
       }
 
-      const frete = Number(v.frete || 0) + Number(v.custoEnvio || 0);
-      const comissao = Number(v.comissao || 0);
-      const devolucaoStr = String(v.devolucao || '').toLowerCase();
-      const isDevolucao = devolucaoStr.includes('sim') || devolucaoStr.includes('true') || devolucaoStr === '1';
-
-      const comissaoAbs = comissao < 0 ? comissao : -comissao;
-      // liquido = fatBruto - (comissao + frete + ads + impostos + cmv)
-      // Since comissaoAbs is negative, we add it.
-      const liquido = fatBruto + comissaoAbs - frete - impostos - ads - cmvCalculado;
-
-      if (isCurrent) {
-        const sk = `${s}|${conta}`;
-        if (!mapSku.has(sk)) {
-          mapSku.set(sk, { sku: s, conta, marketplace: v.origem || 'Outros', faturamento_bruto: 0, liquido: 0, quantidade: 0, ads: 0, cmv: 0, comissao: 0, frete: 0, pedidos: 0, dev_qtd: 0, pct_devolucao: 0, impostos: 0 });
-        }
-        const item = mapSku.get(sk);
-        item.faturamento_bruto += fatBruto;
-        item.liquido += liquido;
-        item.quantidade += qtd;
-        item.ads += ads;
-        item.cmv += cmvCalculado;
-        item.comissao += comissaoAbs;
-        item.frete += frete;
-        item.impostos += impostos;
-        item.pedidos += 1;
-        if (isDevolucao) item.dev_qtd += qtd;
-      }
-
-      if (isPrev) {
-        const sk = `${s}|${conta}`;
-        if (!mapSkuPrev.has(sk)) {
-          mapSkuPrev.set(sk, { sku: s, conta, marketplace: v.origem || 'Outros', faturamento_bruto: 0, liquido: 0, quantidade: 0, ads: 0, cmv: 0, comissao: 0, frete: 0, pedidos: 0, dev_qtd: 0, pct_devolucao: 0, impostos: 0 });
-        }
-        const item = mapSkuPrev.get(sk);
-        item.faturamento_bruto += fatBruto;
-        item.liquido += liquido;
-        item.quantidade += qtd;
-      }
-    }
-
-    const skuList = Array.from(mapSku.values()).map(item => {
-      item.pct_devolucao = item.quantidade > 0 ? (item.dev_qtd / item.quantidade) * 100 : 0;
-      return item;
+      const lucroCorrigido = Number(d.faturamento_bruto) + Number(d.comissao) - adsInjected - Number(d.frete || 0) - cmvCalculado;
+      return { ...d, cmv: cmvCalculado, ads: adsInjected, liquido: lucroCorrigido };
     });
-
-    const skuPrevList = Array.from(mapSkuPrev.values());
-
-    return { dbDaily: daily, dbDailyPrev: dailyPrev, dbSku: skuList, dbSkuPrev: skuPrevList, loadingDaily: false, loadingSku: false };
-  }, [sheetsData.vendasItems, sheetsData.marketplaceDiaItems, dateIni, dateFim, dateIniPrev, dateFimPrev, filterConta, custoMap]);
+  }, [rawDbSkuPrev, custoMap, dbDailyPrev]);
 
   const [filterCanal, setFilterCanal] = useState<'all' | 'marketplace' | 'atacado'>('all');
   const [sortField, setSortField] = useState('faturamento');
