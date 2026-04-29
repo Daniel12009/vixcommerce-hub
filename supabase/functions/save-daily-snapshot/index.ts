@@ -115,8 +115,20 @@ Deno.serve(async (req) => {
         const fat = qty * (Number(it.unit_price) || 0);
         porSkuVendas[sk] = (porSkuVendas[sk] || 0) + qty;
         porSkuFat[sk] = (porSkuFat[sk] || 0) + fat;
+
+        // Detalhamento SKU x filtros
+        const skuKey = `${sk}||${plataforma}||${canal}||${c}`;
+        const existingSku = detalhadoSkuMap.get(skuKey);
+        if (existingSku) {
+          existingSku.vendas += qty;
+          existingSku.faturamento += fat;
+        } else {
+          detalhadoSkuMap.set(skuKey, { sku: sk, plataforma, canal, conta: c, vendas: qty, faturamento: fat });
+        }
       });
     });
+
+    const vendasDetalhadasSku = Array.from(detalhadoSkuMap.values());
 
     const vendasDetalhadas = Array.from(detalhadoMap.values());
 
