@@ -83,11 +83,14 @@ export function FaturamentoTab() {
   const [filterDias, setFilterDias] = useState(30);
   const [filterConta, setFilterConta] = useState('all');
   const [filterMarketplace, setFilterMarketplace] = useState('all');
-  const [customFrom, setCustomFrom] = useState(''); // YYYY-MM-DD
-  const [customTo, setCustomTo] = useState('');     // YYYY-MM-DD
+  // Default custom range to last 30 days so it never starts empty
+  const [customFrom, setCustomFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 29); return getLocalDateStr(d);
+  });
+  const [customTo, setCustomTo] = useState(() => getLocalDateStr(new Date()));
 
   const dateFim = useMemo(() => {
-    if (filterDias === -1 && customTo) return customTo;
+    if (filterDias === -1) return customTo || getLocalDateStr(new Date());
     return getLocalDateStr(new Date());
   }, [filterDias, customTo]);
 
@@ -516,9 +519,9 @@ export function FaturamentoTab() {
         <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 mb-4">
           <BarChart2 className="w-10 h-10 text-indigo-400" />
         </div>
-        <h3 className="text-foreground font-semibold mb-1">Nenhum dado encontrado no Banco</h3>
+        <h3 className="text-foreground font-semibold mb-1">Nenhum dado encontrado</h3>
         <p className="text-sm text-muted-foreground max-w-md">
-          Os dados do Banco são populados via <strong>Daily Sync</strong>. Certifique-se de que a sincronização automática está ativa.
+          Verifique o período selecionado ou se as planilhas foram carregadas corretamente.
         </p>
       </div>
     );
@@ -718,10 +721,11 @@ export function FaturamentoTab() {
                 data={scatterData}
                 fill="#6366f1"
                 shape={(props: any) => {
-                  const { cx, cy, r } = props;
+                  const { cx, cy, width, height } = props;
+                  const radius = Math.max((width || height || 20) / 2, 6);
                   const margem = props.payload?.z ?? 0;
                   const color = margem >= 15 ? '#22c55e' : margem >= 5 ? '#f59e0b' : '#ef4444';
-                  return <circle cx={cx} cy={cy} r={r} fill={color} fillOpacity={0.65} stroke={color} strokeWidth={1.5} />;
+                  return <circle cx={cx} cy={cy} r={radius} fill={color} fillOpacity={0.65} stroke={color} strokeWidth={1.5} />;
                 }}
               />
             </ScatterChart>
