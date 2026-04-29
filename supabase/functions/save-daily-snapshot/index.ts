@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,8 +18,6 @@ Deno.serve(async (req) => {
 
     console.log('[Snapshot] Starting daily sales snapshot...');
 
-    // 1. Fetch orders from all platforms (today)
-    // We invoke the other edge functions directly
     const fetchFunc = async (name: string, action: string) => {
       const res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
         method: 'POST',
@@ -49,7 +47,6 @@ Deno.serve(async (req) => {
 
     console.log(`[Snapshot] Found ${allOrders.length} paid orders.`);
 
-    // 2. Aggregate by hour
     const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
     for (let h = 0; h <= 23; h++) {
       const label = `${String(h).padStart(2, '0')}h`;
@@ -57,10 +54,30 @@ Deno.serve(async (req) => {
     }
 
     let totalFat = 0;
+    const porConta: Record<string, number> = {};
+    const porSkuVendas: Record<string, number> = {};
+    const porSkuFat: Record<string, number> = {};
+
+    // Detalhamento por hora + plataforma + canal + conta (para filtros retroativos no dashboard)
+    // chave: `${hora}||${plataforma}||${canal}||${conta}`
+    const detalhadoMap = new Map<string, { hora: string; plataforma: string; canal: string; conta: string; faturamento: number; pedidos: number }>();
+
+    // Detalhamento por SKU + plataforma + canal + conta (para gráficos Top SKUs filtrados)
+    // chave: `${sku}||${plataforma}||${canal}||${conta}`
+    const detalhadoSkuMap = new Map<string, { sku: string; plataforma: string; canal: string; conta: string; vendas: number; faturamento: number }>();
+
+    // Replica classifyCanal do front (simplificado): drop = drop_shipping/dropshipping; full = fulfillment; outros default
+    const classifyCanal = (o: any): string => {
+      const tipo = String(o.logistic_type || o.shipping?.logistic?.type || '').toLowerCase();
+      if (tipo.includes('drop')) return 'drop';
+      if (tipo.includes('fulfillment')) return 'full';
+      if (tipo.includes('cross_docking') || tipo.includes('xd_drop_off')) return 'flex';
+      return 'outros';
+    };
+
     allOrders.forEach(o => {
       const d = new Date(o.date_created);
-      // Adjust to SP time (assuming server is UTC)
-      d.setHours(d.getHours() - 3); 
+      d.setHours(d.getHours() - 3);
       const h = `${String(d.getHours()).padStart(2, '0')}h`;
       const cur = horaMap.get(h);
       if (cur) {
@@ -68,11 +85,55 @@ Deno.serve(async (req) => {
         cur.pedidos += 1;
         totalFat += o.total_amount;
       }
+      const c = (o.conta || 'Outros').toString();
+      porConta[c] = (porConta[c] || 0) + (Number(o.total_amount) || 0);
+
+      // Agrega detalhado
+      const plataforma = String(o.plataforma || '').toLowerCase() || 'outros';
+      const canal = classifyCanal(o);
+      const dkey = `${h}||${plataforma}||${canal}||${c}`;
+      const existing = detalhadoMap.get(dkey);
+      if (existing) {
+        existing.faturamento += Number(o.total_amount) || 0;
+        existing.pedidos += 1;
+      } else {
+        detalhadoMap.set(dkey, {
+          hora: h,
+          plataforma,
+          canal,
+          conta: c,
+          faturamento: Number(o.total_amount) || 0,
+          pedidos: 1,
+        });
+      }
+
+      (o.items || []).forEach((it: any) => {
+        const skuRaw = it.sku || '';
+        if (!skuRaw) return;
+        const sk = String(skuRaw).trim().toUpperCase();
+        const qty = Number(it.quantity) || 0;
+        const fat = qty * (Number(it.unit_price) || 0);
+        porSkuVendas[sk] = (porSkuVendas[sk] || 0) + qty;
+        porSkuFat[sk] = (porSkuFat[sk] || 0) + fat;
+
+        // Detalhamento SKU x filtros
+        const skuKey = `${sk}||${plataforma}||${canal}||${c}`;
+        const existingSku = detalhadoSkuMap.get(skuKey);
+        if (existingSku) {
+          existingSku.vendas += qty;
+          existingSku.faturamento += fat;
+        } else {
+          detalhadoSkuMap.set(skuKey, { sku: sk, plataforma, canal, conta: c, vendas: qty, faturamento: fat });
+        }
+      });
     });
 
+    const vendasDetalhadasSku = Array.from(detalhadoSkuMap.values());
+
+    const vendasDetalhadas = Array.from(detalhadoMap.values());
+
     const vendasPorHora = Array.from(horaMap.values());
-    
-    // 3. Save to DB
+
     const spOffset = -3 * 60;
     const now = new Date();
     const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
@@ -87,6 +148,11 @@ Deno.serve(async (req) => {
         vendas_por_hora: vendasPorHora,
         total_faturamento: totalFat,
         total_pedidos: allOrders.length,
+        por_conta: porConta,
+        por_sku_vendas: porSkuVendas,
+        por_sku_faturamento: porSkuFat,
+        vendas_detalhadas: vendasDetalhadas,
+        vendas_detalhadas_sku: vendasDetalhadasSku,
       }, { onConflict: 'data_referencia' });
 
     if (error) throw error;

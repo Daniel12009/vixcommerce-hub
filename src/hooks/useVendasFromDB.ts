@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getLocalDateStr } from '@/lib/utils-vix';
+import { canonicalSku } from '@/lib/sku-aliases';
 
 export interface MarketplaceDiaItem {
   data: string;
@@ -113,7 +114,7 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
 
       setLoading(true);
       try {
-        const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_marketplace_sku', {
+        const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_marketplace_sku_faturamento', {
           p_data_ini: finalIni,
           p_data_fim: finalFim,
           p_contas: (contas && contas.length > 0 && contas[0] && contas[0] !== 'all') ? contas : null
@@ -123,20 +124,46 @@ export function useVendasSKUFromDB(dateIni: string, dateFim: string, contas?: st
 
         if (active) {
           const items = (rpcData as any[]) || [];
-          setData(items.map((item: any) => ({
-            ...item,
-            faturamento_bruto: Number(item.faturamento_bruto || 0),
-            liquido: Number(item.liquido || item.lucro_liquido || 0),
-            quantidade: Number(item.quantidade || 0),
-            ads: Number(item.ads || 0),
-            cmv: Number(item.cmv || 0),
-            comissao: Number(item.comissao || 0),
-            frete: Number(item.frete || 0),
-            pedidos: Number(item.pedidos || 0),
-            dev_qtd: Number(item.dev_qtd || 0),
-            pct_devolucao: Number(item.pct_devolucao || 0),
-            conta: String(item.conta || '')
-          })));
+          // Aplica alias de SKU e agrega duplicatas (ex: FC-04 -> FC-04M)
+          const aggMap = new Map<string, any>();
+          for (const item of items) {
+            const sku = canonicalSku(item.sku);
+            const conta = String(item.conta || '');
+            const key = `${sku}||${conta}`;
+            const prev = aggMap.get(key);
+            if (!prev) {
+              aggMap.set(key, {
+                ...item,
+                sku,
+                faturamento_bruto: Number(item.faturamento_bruto || 0),
+                liquido: Number(item.liquido || item.lucro_liquido || 0),
+                quantidade: Number(item.quantidade || 0),
+                ads: Number(item.ads || 0),
+                cmv: Number(item.cmv || 0),
+                comissao: Number(item.comissao || 0),
+                frete: Number(item.frete || 0),
+                pedidos: Number(item.pedidos || 0),
+                dev_qtd: Number(item.dev_qtd || 0),
+                pct_devolucao: Number(item.pct_devolucao || 0),
+                conta,
+              });
+            } else {
+              prev.faturamento_bruto += Number(item.faturamento_bruto || 0);
+              prev.liquido += Number(item.liquido || item.lucro_liquido || 0);
+              prev.quantidade += Number(item.quantidade || 0);
+              prev.ads += Number(item.ads || 0);
+              prev.cmv += Number(item.cmv || 0);
+              prev.comissao += Number(item.comissao || 0);
+              prev.frete += Number(item.frete || 0);
+              prev.pedidos += Number(item.pedidos || 0);
+              prev.dev_qtd += Number(item.dev_qtd || 0);
+              // pct_devolucao recalculado se possível
+              prev.pct_devolucao = prev.quantidade > 0
+                ? (prev.dev_qtd / prev.quantidade) * 100
+                : 0;
+            }
+          }
+          setData(Array.from(aggMap.values()));
           setError(null);
         }
       } catch (err: any) {
@@ -177,7 +204,18 @@ export function useVendasSKUEstoqueFromDB(dateIni: string, dateFim: string, cont
         if (rpcError) throw rpcError;
 
         if (active) {
-          setData((rpcData as any[]) || []);
+          const items = (rpcData as any[]) || [];
+          const aggMap = new Map<string, { sku: string; conta: string; quantidade: number }>();
+          for (const item of items) {
+            const sku = canonicalSku(item.sku);
+            const conta = String(item.conta || '');
+            const key = `${sku}||${conta}`;
+            const prev = aggMap.get(key);
+            const qtd = Number(item.quantidade || 0);
+            if (!prev) aggMap.set(key, { sku, conta, quantidade: qtd });
+            else prev.quantidade += qtd;
+          }
+          setData(Array.from(aggMap.values()));
           setError(null);
         }
       } catch (err: any) {

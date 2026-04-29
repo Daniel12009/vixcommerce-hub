@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+// build-tag: 2026-04-24-fix-vendas-items-v3
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,10 +10,12 @@ const corsHeaders = {
 
 const ML_API = 'https://api.mercadolibre.com';
 
-// Supabase client to read ml_accounts table
+// Supabase client - PRIORIDADE: banco do projeto (Lovable Cloud).
+// EXTERNAL_DB_* fica como fallback APENAS se SUPABASE_URL não existir.
+// (Antes era o oposto — fazia o upsert ir para banco externo, deixando vendas_items vazio.)
 async function getSupabaseClient() {
-  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
-  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+  const url = (Deno.env.get('SUPABASE_URL') || Deno.env.get('EXTERNAL_DB_URL'))!;
+  const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('EXTERNAL_DB_SERVICE_KEY'))!;
   return { url, key };
 }
 
@@ -118,8 +121,8 @@ async function mlFetchWrite(account: any, path: string, method: 'PUT' | 'POST', 
 }
 
 async function invokeGsFunction(action: string, payload: any) {
-  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
-  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+  const url = (Deno.env.get('SUPABASE_URL') || Deno.env.get('EXTERNAL_DB_URL'))!;
+  const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('EXTERNAL_DB_SERVICE_KEY'))!;
   const gsUrl = `${url}/functions/v1/google-sheets`;
   
   // Normalize range logic for clear/read
@@ -149,8 +152,8 @@ async function invokeGsFunction(action: string, payload: any) {
 
 // Helper: chamar google-sheets edge function
 async function invokeSheets(spreadsheetId: string, range: string, values: any[][], action: 'append' | 'write' | 'dedup_write' = 'append', dateColumn?: number, contaColumn?: number) {
-  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
-  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+  const url = (Deno.env.get('SUPABASE_URL') || Deno.env.get('EXTERNAL_DB_URL'))!;
+  const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('EXTERNAL_DB_SERVICE_KEY'))!;
   const gsUrl = `${url}/functions/v1/google-sheets`;
   const gsHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` };
 
@@ -415,12 +418,12 @@ async function processarVendaMLSingle(
         String(listing_type_id).toLowerCase().includes('gold_special') ? 'Clássico' : 'Premium',
         '',
         tipo_log,
-        preco.toFixed(2),
+        toStringDecimal(preco),
         String(qtd),
-        valor_total_item.toFixed(2),
-        custo_calc.toFixed(2),
+        toStringDecimal(valor_total_item),
+        toStringDecimal(custo_calc),
         '0',
-        (Math.round(fee_total_neg * 100) / 100).toFixed(2),
+        toStringDecimal(Math.round(fee_total_neg * 100) / 100),
         '',
         venda.seller?.nickname || account.nome || '',
         estado,
@@ -1584,8 +1587,8 @@ Deno.serve(async (req) => {
 
       const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const dateTo   = reqDateTo   || dateFrom;
-      const sheetId  = reqSpreadsheetId || account.spreadsheet_id || PLANILHA_MESTRA;
-      const sheetTab = reqSheetName     || account.sheet_name     || 'VendasML';
+      const sheetId  = reqSpreadsheetId || account.spreadsheet_id || '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w';
+      const sheetTab = reqSheetName     || account.sheet_name     || 'VENDAS';
 
       const isoFrom = `${dateFrom}T00:00:00.000-03:00`;
       const isoTo   = `${dateTo}T23:59:59.999-03:00`;
@@ -1675,14 +1678,25 @@ Deno.serve(async (req) => {
       }
 
       if (loteLinhas.length > 0) {
-        // Dedup: VendasML has date created at column 2 (index 2: "Data de Criação")
-        // But date could also be used at column 11 if there is a 'Data Ref' instead?
-        // Let's use date created (index 2). Wait, earlier we saw VendasML has Data Ref at col 11 (Actually col 2 is Data Criação, VendasML is what?).
-        // For vendas, the data processed is 'dateFrom', which might be passed as a ref.
-        // Actually earlier it was appending. Let's use column 2 (Data de Criação) for VendasML which has `'DD/MM/YYYY`.
-        await invokeSheets(sheetId, `${sheetTab}!A:S`, loteLinhas, 'dedup_write', 2);
+        // Descobre a primeira linha vazia da coluna P (lendo P:P) e escreve com 'write' (PUT) ali.
+        // NUNCA apaga linhas. NUNCA mexe em A-O (que tem fórmulas).
+        let proximaLinha = 2;
+        try {
+          const leitura = await invokeGsFunction('read', { spreadsheetId: sheetId, range: `${sheetTab}!P:P` });
+          const valoresP: any[][] = leitura?.values || [];
+          // Primeira linha vazia = quantidade de linhas com conteúdo + 1
+          proximaLinha = valoresP.length + 1;
+          if (proximaLinha < 2) proximaLinha = 2;
+        } catch (e) {
+          console.warn('[SYNC VENDAS] Falha lendo P:P, usando linha 2 como fallback', e);
+        }
+        const ultimaLinha = proximaLinha + loteLinhas.length - 1;
+        const writeRange = `${sheetTab}!P${proximaLinha}:AH${ultimaLinha}`;
+        console.log(`[SYNC VENDAS] Escrevendo ${loteLinhas.length} linhas em ${writeRange}`);
+        await invokeSheets(sheetId, writeRange, loteLinhas, 'write');
       }
 
+      let dbStatus = `dbRows=${loteDbRows.length}`;
       if (loteDbRows.length > 0) {
         try {
           const resDb = await supabaseFetch('/vendas_items?on_conflict=numero_pedido,sku', {
@@ -1690,17 +1704,21 @@ Deno.serve(async (req) => {
             headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
             body: JSON.stringify(loteDbRows)
           });
+          const txt = await resDb.text();
           if (!resDb.ok) {
-             console.error('[VENDAS_ITEMS] upsert error:', await resDb.text());
+             console.error('[VENDAS_ITEMS] upsert error:', resDb.status, txt);
+             dbStatus += ` | DB_ERR_${resDb.status}: ${txt.slice(0,200)}`;
           } else {
              console.log('[VENDAS_ITEMS] upsert ok:', loteDbRows.length, 'linhas');
+             dbStatus += ` | DB_OK_${resDb.status}`;
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error('[SYNC VENDAS DB ML] Erro fatal no fetch do banco:', e);
+          dbStatus += ` | DB_THROW: ${e.message}`;
         }
       }
 
-      const msg = `ML Vendas ${account.nome}: ${loteLinhas.length} linhas em ${sheetTab} (${dateFrom})`;
+      const msg = `ML Vendas ${account.nome}: ${loteLinhas.length} linhas em ${sheetTab} (${dateFrom}) [${dbStatus}]`;
       console.log(`[SYNC] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: loteLinhas.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1962,8 +1980,8 @@ Deno.serve(async (req) => {
         const header = ['Plataforma', 'ID Anúncio', 'SKU', 'Tipo', 'Título', 'Preço', 'Visitas', 'Vendas', 'Canceladas', 'Conversão %', 'Link', 'Conta', 'Data Ref'];
         let abaTemHeader = false;
         try {
-          const gsUrl = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))! + '/functions/v1/google-sheets';
-          const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+          const gsUrl = (Deno.env.get('SUPABASE_URL') || Deno.env.get('EXTERNAL_DB_URL'))! + '/functions/v1/google-sheets';
+          const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('EXTERNAL_DB_SERVICE_KEY'))!;
           const checkRes = await fetch(gsUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
@@ -2094,8 +2112,8 @@ Deno.serve(async (req) => {
 
       if (rows.length > 0) {
         try {
-          const gsUrl = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))! + '/functions/v1/google-sheets';
-          const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+          const gsUrl = (Deno.env.get('SUPABASE_URL') || Deno.env.get('EXTERNAL_DB_URL'))! + '/functions/v1/google-sheets';
+          const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('EXTERNAL_DB_SERVICE_KEY'))!;
           await fetch(gsUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },

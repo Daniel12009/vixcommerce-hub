@@ -1,0 +1,1 @@
+SELECT public.unschedule_cron_job('sync-ml-vendas');

@@ -1,9 +1,13 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { RefreshCw, Filter, Clock, Globe, TrendingUp, DollarSign, Package, ShoppingCart, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Line } from 'recharts';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { formatBRL, formatNumber } from '@/lib/utils-vix';
 import { supabase } from '@/integrations/supabase/client';
+import { useVendasSKUEstoqueFromDB, useVendasSKUFromDB } from '@/hooks/useVendasFromDB';
+import { canonicalSku } from '@/lib/sku-aliases';
 import { MarketplaceTab } from './MarketplaceTab';
 import { FaturamentoTab } from './FaturamentoTab';
 
@@ -76,10 +80,38 @@ const getPlatformLabel = (p: string) => {
     default: return p || 'Outros';
   }
 };
+
+const normalizeConta = (conta: string): string => {
+  const u = (conta || '').trim().toUpperCase().replace(/[()\-\s.,]/g, '');
+  if (u.startsWith('VIAFLIX') || u.startsWith('VIAFIX')) return 'VIAFLIX';
+  if (u === 'GS' || u.startsWith('GSTORNEIRAS') || u.startsWith('GS')) return 'GS';
+  if (u.startsWith('DECARION') || u.startsWith('MONACO')) return 'MONACO';
+  return u;
+};
+
+const getBRTDateStr = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const d = parts.find(p => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+};
+
+const getBRTHour = (iso: string) => {
+  const h = Number(new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false,
+  }).formatToParts(new Date(iso)).find(p => p.type === 'hour')?.value || 0);
+  return h === 24 ? 0 : h;
+};
+
 // Module-level cache — survives component unmount/remount during navigation
 let _cachedOrders: DashOrder[] | null = null;
 let _cachedRefresh: string = '';
 let _cachedYesterday: any = null;
+let _cachedYesterdayDate: string = ''; // dateStr (YYYY-MM-DD) do snapshot cacheado — invalida ao virar o dia
 let _refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 export function DashboardPage() {
@@ -145,22 +177,139 @@ export function DashboardPage() {
       // Update state + module-level cache
       setOrders(allFetched);
       _cachedOrders = allFetched;
+
+      // Salva/atualiza snapshot do dia atual a cada refresh do Dashboard
+      const paidForSnapshot = allFetched.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
+      const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
+      for (let h = 0; h <= 23; h++) {
+        const label = `${String(h).padStart(2, '0')}h`;
+        horaMap.set(label, { hora: label, faturamento: 0, pedidos: 0 });
+      }
+      const porContaSnap: Record<string, number> = {};
+      const porSkuVendasSnap: Record<string, number> = {};
+      const porSkuFatSnap: Record<string, number> = {};
+      paidForSnapshot.forEach(o => {
+        const label = `${String(getBRTHour(o.date_created)).padStart(2, '0')}h`;
+        const cur = horaMap.get(label);
+        if (cur) {
+          cur.faturamento += o.total_amount || 0;
+          cur.pedidos += 1;
+        }
+        const c = (o.conta || 'Outros').toString();
+        porContaSnap[c] = (porContaSnap[c] || 0) + (Number(o.total_amount) || 0);
+        (o.items || []).forEach((it: any) => {
+          const skuRaw = it.sku || '';
+          if (!skuRaw) return;
+          const sk = canonicalSku(skuRaw);
+          const qty = Number(it.quantity) || 0;
+          const fat = qty * (Number(it.unit_price) || 0);
+          porSkuVendasSnap[sk] = (porSkuVendasSnap[sk] || 0) + qty;
+          porSkuFatSnap[sk] = (porSkuFatSnap[sk] || 0) + fat;
+        });
+      });
+      (supabase as any).from('daily_sales_snapshots').upsert({
+        data_referencia: getBRTDateStr(),
+        vendas_por_hora: Array.from(horaMap.values()),
+        total_faturamento: paidForSnapshot.reduce((s, o) => s + (o.total_amount || 0), 0),
+        total_pedidos: paidForSnapshot.length,
+        por_conta: porContaSnap,
+        por_sku_vendas: porSkuVendasSnap,
+        por_sku_faturamento: porSkuFatSnap,
+      }, { onConflict: 'data_referencia' }).then(({ error }: any) => {
+        if (error) console.warn('Erro ao salvar snapshot do dashboard:', error);
+      });
       
-      // Fetch yesterday's snapshot if not cached
-      if (!_cachedYesterday) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const dateStr = yesterday.toISOString().split('T')[0];
-        
-        const { data: snap } = await supabase
+      // Fetch yesterday's snapshot (or build from vendas_items as fallback)
+      // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
+      const todayBRTStr = getBRTDateStr();
+      const [yy, mm, dd] = todayBRTStr.split('-').map(Number);
+      const yesterday = new Date(Date.UTC(yy, mm - 1, dd));
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      const dateStr = yesterday.toISOString().split('T')[0];
+
+      // Invalida cache se a data de "ontem" mudou (virou o dia) OU se o cache está incompleto
+      const cacheIncompleto = _cachedYesterday && (
+        !_cachedYesterday.por_conta ||
+        Object.keys(_cachedYesterday.por_conta || {}).length === 0
+      );
+      const needsYesterdayFetch = !_cachedYesterday || _cachedYesterdayDate !== dateStr || cacheIncompleto;
+
+      if (needsYesterdayFetch) {
+        const { data: snap } = await (supabase as any)
           .from('daily_sales_snapshots')
           .select('*')
           .eq('data_referencia', dateStr)
           .maybeSingle();
-        
+
         if (snap) {
           setYesterdaySnapshot(snap);
           _cachedYesterday = snap;
+          _cachedYesterdayDate = dateStr;
+        } else {
+          // Fallback: monta o snapshot a partir de vendas_items (planilha Vendas)
+          try {
+            const yDD = String(yesterday.getUTCDate()).padStart(2, '0');
+            const yMM = String(yesterday.getUTCMonth() + 1).padStart(2, '0');
+            const yYYYY = yesterday.getUTCFullYear();
+            const dataBR = `${yDD}/${yMM}/${yYYYY}`;
+            const dataISO = `${yYYYY}-${yMM}-${yDD}`;
+
+            // Tenta ambos formatos (banco pode ter coluna date OU text)
+            const { data: vRows } = await (supabase as any)
+              .from('vendas_items')
+              .select('data, valor_total, numero_pedido, conta, sku, sku_produto, quantidade')
+              .or(`data.eq.${dataBR},data.eq.${dataISO}`)
+              .limit(10000);
+
+            if (vRows && vRows.length > 0) {
+              const totalDia = vRows.reduce((s: number, r: any) => s + (Number(r.valor_total) || 0), 0);
+              const pedidosDia = new Set(vRows.map((r: any) => r.numero_pedido)).size;
+
+              // Distribui o total uniformemente nas horas comerciais (8h-22h) para visualizar tendência
+              const horas: any[] = [];
+              const horasComerciais = 15;
+              for (let h = 0; h <= 23; h++) {
+                const label = `${String(h).padStart(2, '0')}h`;
+                const fat = (h >= 8 && h <= 22) ? totalDia / horasComerciais : 0;
+                horas.push({ hora: label, faturamento: fat, pedidos: 0 });
+              }
+
+              // Agrega ontem por conta e por SKU (para comparativos nos gráficos)
+              const porConta: Record<string, number> = {};
+              const porSkuVendas: Record<string, number> = {};
+              const porSkuFat: Record<string, number> = {};
+              vRows.forEach((r: any) => {
+                const c = (r.conta || 'Outros').toString();
+                porConta[c] = (porConta[c] || 0) + (Number(r.valor_total) || 0);
+                const skuRaw = r.sku || r.sku_produto || '';
+                if (skuRaw) {
+                  const sk = canonicalSku(skuRaw);
+                  porSkuVendas[sk] = (porSkuVendas[sk] || 0) + (Number(r.quantidade) || 0);
+                  porSkuFat[sk] = (porSkuFat[sk] || 0) + (Number(r.valor_total) || 0);
+                }
+              });
+
+              const synthetic = {
+                data_referencia: dateStr,
+                vendas_por_hora: horas,
+                total_faturamento: totalDia,
+                total_pedidos: pedidosDia,
+                por_conta: porConta,
+                por_sku_vendas: porSkuVendas,
+                por_sku_faturamento: porSkuFat,
+              };
+              setYesterdaySnapshot(synthetic);
+              _cachedYesterday = synthetic;
+              _cachedYesterdayDate = dateStr;
+            } else {
+              // Não há dados — limpa para evitar segurar snapshot antigo
+              setYesterdaySnapshot(null);
+              _cachedYesterday = null;
+              _cachedYesterdayDate = dateStr;
+            }
+          } catch (e) {
+            console.warn('Fallback yesterday from vendas_items failed:', e);
+          }
         }
       }
 
@@ -225,6 +374,38 @@ export function DashboardPage() {
 
   const paidOrders = filteredOrders.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
 
+  // VMD baseada nos últimos 15 dias do SQL — respeita filtro de conta
+  const VMD_DIAS = 15;
+  const vmdDateFim = new Date().toISOString().split('T')[0];
+  const vmdDateIni = new Date(Date.now() - VMD_DIAS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { data: vmdSqlData } = useVendasSKUEstoqueFromDB(vmdDateIni, vmdDateFim);
+  const vmdSqlBySku = useMemo(() => {
+    const m = new Map<string, number>();
+    (vmdSqlData || []).forEach(s => {
+      const sku = canonicalSku(s.sku);
+      if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
+      if (!sku) return;
+      m.set(sku, (m.get(sku) || 0) + (Number(s.quantidade) || 0) / VMD_DIAS);
+    });
+    if (typeof window !== 'undefined') {
+      console.log('[VMD] linhas SQL:', (vmdSqlData || []).length, '| SKUs no map:', m.size, '| FC-138 →', m.get('FC-138'), '| filtroConta:', filterConta);
+    }
+    return m;
+  }, [vmdSqlData, filterConta]);
+
+  // Faturamento médio diário por SKU (últimos 15d) — respeita filtro de conta
+  const { data: vmdFatSqlData } = useVendasSKUFromDB(vmdDateIni, vmdDateFim);
+  const vmdFatBySku = useMemo(() => {
+    const m = new Map<string, number>();
+    (vmdFatSqlData || []).forEach(s => {
+      const sku = canonicalSku(s.sku);
+      if (filterConta !== 'all' && normalizeConta(s.conta) !== normalizeConta(filterConta)) return;
+      if (!sku) return;
+      m.set(sku, (m.get(sku) || 0) + (Number(s.faturamento_bruto) || 0) / VMD_DIAS);
+    });
+    return m;
+  }, [vmdFatSqlData, filterConta]);
+
   // Unique platforms & accounts
   const plataformas = useMemo(() => [...new Set(orders.map(o => o.plataforma || '').filter(Boolean))], [orders]);
   const contasUnicas = useMemo(() => [...new Set(orders.map(o => o.conta || 'Sem Conta'))].sort(), [orders]);
@@ -248,96 +429,194 @@ export function DashboardPage() {
     return [...map.values()].sort((a, b) => b.value - a.value);
   }, [paidOrders]);
 
-  // Faturamento por Conta (Bar)
+  // Snapshot de ontem com filtros aplicados (plataforma + canal + conta)
+  // Usa `vendas_detalhadas` (gravado pela edge function save-daily-snapshot a partir de 28/04/2026).
+  // Para snapshots antigos sem esse campo, cai no agregado total (comportamento legado).
+  const filteredYesterday = useMemo(() => {
+    const snap = yesterdaySnapshot;
+    if (!snap) return null;
+    const detalhe: any[] = Array.isArray(snap.vendas_detalhadas) ? snap.vendas_detalhadas : [];
+    const detalheSku: any[] = Array.isArray(snap.vendas_detalhadas_sku) ? snap.vendas_detalhadas_sku : [];
+    const hasDetail = detalhe.length > 0;
+    const hasDetailSku = detalheSku.length > 0;
+
+    if (!hasDetail) {
+      // Sem detalhe — só dá pra usar agregados se nenhum filtro estiver ativo
+      const semFiltro = filterPlataforma === 'all' && filterCanal === 'all' && filterConta === 'all';
+      return {
+        vendas_por_hora: semFiltro ? (snap.vendas_por_hora || []) : [],
+        por_conta: semFiltro ? (snap.por_conta || {}) : {},
+        por_sku_vendas: semFiltro ? (snap.por_sku_vendas || {}) : {},
+        por_sku_faturamento: semFiltro ? (snap.por_sku_faturamento || {}) : {},
+        sem_detalhe: !semFiltro,
+      };
+    }
+
+    // Aplica filtros
+    const matchFilters = (d: any) => {
+      if (filterPlataforma !== 'all' && (d.plataforma || '') !== filterPlataforma) return false;
+      if (filterCanal !== 'all' && (d.canal || '') !== filterCanal) return false;
+      if (filterConta !== 'all' && (d.conta || '') !== filterConta) return false;
+      return true;
+    };
+    const filt = detalhe.filter(matchFilters);
+
+    // Reagrega por hora + conta
+    const horaMap = new Map<string, number>();
+    for (let h = 0; h <= 23; h++) horaMap.set(`${String(h).padStart(2, '0')}h`, 0);
+    const porConta: Record<string, number> = {};
+    filt.forEach(d => {
+      horaMap.set(d.hora, (horaMap.get(d.hora) || 0) + (Number(d.faturamento) || 0));
+      const c = d.conta || 'Outros';
+      porConta[c] = (porConta[c] || 0) + (Number(d.faturamento) || 0);
+    });
+    const vendas_por_hora = Array.from(horaMap.entries()).map(([hora, faturamento]) => ({ hora, faturamento }));
+
+    // Reagrega por SKU se houver detalhe SKU; senão usa agregado total apenas quando sem filtro
+    let porSkuVendas: Record<string, number> = {};
+    let porSkuFat: Record<string, number> = {};
+    if (hasDetailSku) {
+      const filtSku = detalheSku.filter(matchFilters);
+      filtSku.forEach(d => {
+        const sk = canonicalSku(String(d.sku || '').toUpperCase());
+        if (!sk) return;
+        porSkuVendas[sk] = (porSkuVendas[sk] || 0) + (Number(d.vendas) || 0);
+        porSkuFat[sk] = (porSkuFat[sk] || 0) + (Number(d.faturamento) || 0);
+      });
+    } else {
+      const semFiltro = filterPlataforma === 'all' && filterCanal === 'all' && filterConta === 'all';
+      if (semFiltro) {
+        porSkuVendas = snap.por_sku_vendas || {};
+        porSkuFat = snap.por_sku_faturamento || {};
+      }
+    }
+
+    return { vendas_por_hora, por_conta: porConta, por_sku_vendas: porSkuVendas, por_sku_faturamento: porSkuFat, sem_detalhe: false };
+  }, [yesterdaySnapshot, filterPlataforma, filterCanal, filterConta]);
+
+  // Faturamento por Conta (Bar) — inclui comparativo com ontem
   const fatPorConta = useMemo(() => {
-    const map = new Map<string, { conta: string; faturamento: number; pedidos: number }>();
+    const map = new Map<string, { conta: string; faturamento: number; faturamentoOntem: number; pedidos: number }>();
     paidOrders.forEach(o => {
       const c = o.conta || 'Outros';
-      const cur = map.get(c) || { conta: c, faturamento: 0, pedidos: 0 };
+      const cur = map.get(c) || { conta: c, faturamento: 0, faturamentoOntem: 0, pedidos: 0 };
       cur.faturamento += o.total_amount;
       cur.pedidos += 1;
       map.set(c, cur);
     });
+    // Mescla contas que existiram ontem (mesmo sem venda hoje) — já filtrado
+    const ontem: Record<string, number> = filteredYesterday?.por_conta || {};
+    Object.entries(ontem).forEach(([c, v]) => {
+      const cur = map.get(c) || { conta: c, faturamento: 0, faturamentoOntem: 0, pedidos: 0 };
+      cur.faturamentoOntem = Number(v) || 0;
+      map.set(c, cur);
+    });
     return [...map.values()].sort((a, b) => b.faturamento - a.faturamento);
-  }, [paidOrders]);
+  }, [paidOrders, filteredYesterday]);
 
-  // Vendas por Hora (Area) com comparativo de ontem
+  // Vendas por Hora (Area) com comparativo de ontem — sempre em America/Sao_Paulo (BRT)
   const vendasPorHora = useMemo(() => {
     const hours: any[] = [];
     const yesterdayMap = new Map<string, number>();
-    
-    if (yesterdaySnapshot?.vendas_por_hora) {
-      yesterdaySnapshot.vendas_por_hora.forEach((h: any) => {
+
+    if (filteredYesterday?.vendas_por_hora) {
+      filteredYesterday.vendas_por_hora.forEach((h: any) => {
         yesterdayMap.set(h.hora, h.faturamento);
       });
     }
 
-    const currentHour = new Date().getHours();
+    // Helper: extrai a hora (0-23) considerando o fuso de São Paulo, independente do navegador
+    const getHourBRT = (iso: string): number => {
+      try {
+        const parts = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          hour12: false,
+        }).formatToParts(new Date(iso));
+        const hStr = parts.find(p => p.type === 'hour')?.value || '0';
+        const h = parseInt(hStr, 10);
+        return h === 24 ? 0 : h;
+      } catch {
+        return new Date(iso).getHours();
+      }
+    };
+
+    // Hora atual em BRT
+    const currentHour = (() => {
+      const parts = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        hour12: false,
+      }).formatToParts(new Date());
+      const hStr = parts.find(p => p.type === 'hour')?.value || '0';
+      const h = parseInt(hStr, 10);
+      return h === 24 ? 0 : h;
+    })();
+
+    // Pré-agrega por hora BRT
+    const fatHojePorHora = new Map<number, number>();
+    paidOrders.forEach(o => {
+      const h = getHourBRT(o.date_created);
+      fatHojePorHora.set(h, (fatHojePorHora.get(h) || 0) + o.total_amount);
+    });
+
     for (let h = 0; h <= 23; h++) {
       const label = `${String(h).padStart(2, '0')}h`;
-      const fatHoje = paidOrders
-        .filter(o => {
-          const d = new Date(o.date_created);
-          return d.getHours() === h;
-        })
-        .reduce((s, o) => s + o.total_amount, 0);
-
-      // Only show today's line up to current hour to keep it clean, 
-      // but always show yesterday's full line for comparison
       hours.push({
         hora: label,
-        faturamento: h <= currentHour ? fatHoje : null,
-        faturamentoOntem: yesterdayMap.get(label) || 0
+        faturamento: h <= currentHour ? (fatHojePorHora.get(h) || 0) : null,
+        faturamentoOntem: yesterdayMap.get(label) || 0,
       });
     }
     return hours;
-  }, [paidOrders, yesterdaySnapshot]);
+  }, [paidOrders, filteredYesterday]);
 
-  const { comprasItems, estoqueItems } = useSheetsData();
+  const { comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems } = useSheetsData();
 
-  // Top SKUs do dia (com VMD)
+  // Top SKUs do dia com média real dos últimos 15 dias do SQL + comparativo de ontem (filtrado)
   const topSkus = useMemo(() => {
-    const map = new Map<string, { sku: string; vendas: number; faturamento: number; vmd: number; vmdFaturamento: number }>();
-    
-    // Create VMD map from all possible sheet sources
-    const vmdMap = new Map<string, number>();
-    
-    // Source 1: Compras Sheet (mediaVendaDiaria)
-    (comprasItems || []).forEach(item => {
-      if (item.sku) {
-        const sku = item.sku.trim().toUpperCase();
-        if (item.mediaVendaDiaria) vmdMap.set(sku, item.mediaVendaDiaria);
-      }
-    });
-
-    // Source 2: Estoque Sheet (vmd) - overrides if exists
-    (estoqueItems || []).forEach(item => {
-      if (item.skuPrincipal) {
-        const sku = item.skuPrincipal.trim().toUpperCase();
-        if (item.vmd) vmdMap.set(sku, item.vmd);
-      }
-    });
+    const map = new Map<string, { sku: string; vendas: number; faturamento: number; vendasOntem: number; faturamentoOntem: number; vmd: number; vmdFaturamento: number }>();
+    const ontemVendas: Record<string, number> = filteredYesterday?.por_sku_vendas || {};
+    const ontemFat: Record<string, number> = filteredYesterday?.por_sku_faturamento || {};
 
     paidOrders.forEach(o => {
       o.items.forEach(item => {
         const rawSku = item.sku || item.title || 'N/A';
-        const sku = rawSku.trim().toUpperCase();
-        const vmdUnits = vmdMap.get(sku) || 0;
-        const cur = map.get(sku) || { 
-          sku, 
-          vendas: 0, 
-          faturamento: 0, 
+        const sku = canonicalSku(rawSku);
+        const vmdUnits = vmdSqlBySku.get(sku) || 0;
+        const vmdFat = vmdFatBySku.get(sku) || 0;
+        const cur = map.get(sku) || {
+          sku,
+          vendas: 0,
+          faturamento: 0,
+          vendasOntem: Number(ontemVendas[sku]) || 0,
+          faturamentoOntem: Number(ontemFat[sku]) || 0,
           vmd: vmdUnits,
-          // Estimate VMD revenue based on current item price if available
-          vmdFaturamento: vmdUnits * (item.unit_price || 0)
+          vmdFaturamento: vmdFat,
         };
         cur.vendas += item.quantity;
         cur.faturamento += (item.unit_price || 0) * item.quantity;
         map.set(sku, cur);
       });
     });
+
+    // Garante que SKUs que venderam ontem (filtrado) também apareçam no comparativo
+    Object.keys(ontemVendas).forEach(sku => {
+      if (!map.has(sku)) {
+        map.set(sku, {
+          sku,
+          vendas: 0,
+          faturamento: 0,
+          vendasOntem: Number(ontemVendas[sku]) || 0,
+          faturamentoOntem: Number(ontemFat[sku]) || 0,
+          vmd: vmdSqlBySku.get(sku) || 0,
+          vmdFaturamento: vmdFatBySku.get(sku) || 0,
+        });
+      }
+    });
+
     return [...map.values()];
-  }, [paidOrders, comprasItems, estoqueItems]);
+  }, [paidOrders, vmdSqlBySku, vmdFatBySku, filteredYesterday]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
@@ -346,6 +625,97 @@ export function DashboardPage() {
   const topSkusByFaturamento = useMemo(() => 
     [...topSkus].sort((a, b) => b.faturamento - a.faturamento).slice(0, 10)
   , [topSkus]);
+
+  // SKUs com VMD > 0 que ainda NÃO venderam hoje (oportunidades / alerta)
+  // Status de estoque: 'sem_estoque' (vermelho) | 'sem_full' (laranja escuro) | 'com_estoque' (laranja claro)
+  const skusSemVendaHoje = useMemo(() => {
+    const vendidosHoje = new Set<string>();
+    paidOrders.forEach(o => o.items.forEach(item => {
+      const sku = canonicalSku(item.sku || item.title || 'N/A');
+      vendidosHoje.add(sku);
+    }));
+
+    // Mapas de estoque Full (ML) e Tiny (local) — Full respeita o filtro de conta
+    const fullBySku = new Map<string, number>();
+    (estoqueFullItems || []).forEach((i: any) => {
+      const sku = canonicalSku(i.sku);
+      if (!sku) return;
+      if (filterConta !== 'all' && normalizeConta(i.conta) !== normalizeConta(filterConta)) return;
+      // Estoque "disponível" no Full = aptasParaVenda (mesmo critério da aba Cobertura)
+      const qtd = Number(i.aptasParaVenda ?? i.quantidade ?? 0) || 0;
+      fullBySku.set(sku, (fullBySku.get(sku) || 0) + qtd);
+    });
+    const tinyBySku = new Map<string, number>();
+    (estoqueTinyItems || []).forEach((i: any) => {
+      const sku = canonicalSku(i.sku);
+      if (!sku) return;
+      // Tiny não tem campo `conta` confiável, então não filtra por conta aqui.
+      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
+    });
+
+    // VMD: SOMENTE do SQL (vendas reais dos últimos 15 dias, respeitando filtro de conta).
+    // Não usamos `comprasItems`/`estoqueItems` aqui porque eles vêm de planilhas de
+    // estimativa que podem listar SKUs que há tempos não vendem (ex.: FC-08).
+    const vmdMap = new Map<string, { vmd: number; preco: number; nome: string }>();
+
+    // Mapa auxiliar para enriquecer com nome/preço quando disponível
+    const metaBySku = new Map<string, { preco: number; nome: string }>();
+    (comprasItems || []).forEach((item: any) => {
+      if (!item.sku) return;
+      const sku = canonicalSku(item.sku);
+      metaBySku.set(sku, { preco: item.preco || 0, nome: item.nome || sku });
+    });
+    (estoqueItems || []).forEach((item: any) => {
+      if (!item.skuPrincipal) return;
+      const sku = canonicalSku(item.skuPrincipal);
+      const prev = metaBySku.get(sku);
+      metaBySku.set(sku, { preco: prev?.preco || 0, nome: item.nome || prev?.nome || sku });
+    });
+
+    vmdSqlBySku.forEach((v, sku) => {
+      if (v > 0) {
+        const meta = metaBySku.get(sku);
+        vmdMap.set(sku, { vmd: v, preco: meta?.preco || 0, nome: meta?.nome || sku });
+      }
+    });
+
+    const lista: {
+      sku: string; vmd: number; vmdFaturamento: number; nome: string;
+      estoqueFull: number; estoqueTiny: number; status: 'sem_estoque' | 'sem_full' | 'com_estoque';
+      statusLabel: string; cor: string;
+    }[] = [];
+    vmdMap.forEach((v, sku) => {
+      if (v.vmd > 0 && !vendidosHoje.has(sku)) {
+        const full = fullBySku.get(sku) || 0;
+        const tiny = tinyBySku.get(sku) || 0;
+        let status: 'sem_estoque' | 'sem_full' | 'com_estoque';
+        let statusLabel: string;
+        let cor: string;
+        if (full <= 0 && tiny <= 0) {
+          status = 'sem_estoque'; statusLabel = 'Sem estoque (Full + Tiny)'; cor = '#dc2626'; // vermelho forte
+        } else if (full <= 0 && tiny > 0) {
+          status = 'sem_full'; statusLabel = 'Rompido no Full (tem no Tiny)'; cor = '#f97316'; // laranja
+        } else {
+          status = 'com_estoque'; statusLabel = 'Com estoque, sem venda'; cor = '#facc15'; // amarelo
+        }
+        lista.push({
+          sku, vmd: v.vmd, vmdFaturamento: v.vmd * v.preco, nome: v.nome,
+          estoqueFull: full, estoqueTiny: tiny, status, statusLabel, cor,
+        });
+      }
+    });
+    // Ordena por VMD (mais vende → menos vende). Cor só indica o motivo.
+    return lista.sort((a, b) => b.vmd - a.vmd);
+  }, [paidOrders, comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems, vmdSqlBySku, filterConta]);
+
+  // Filtro do gráfico "SKUs com VMD > 0 sem venda hoje" — clique nas legendas
+  const [skusSemVendaFilter, setSkusSemVendaFilter] = useState<'all' | 'sem_estoque' | 'sem_full' | 'com_estoque'>('all');
+  const skusSemVendaHojeFiltrado = useMemo(() => {
+    const base = skusSemVendaFilter === 'all'
+      ? skusSemVendaHoje
+      : skusSemVendaHoje.filter(s => s.status === skusSemVendaFilter);
+    return base.slice(0, 15);
+  }, [skusSemVendaHoje, skusSemVendaFilter]);
 
   // Todos os pedidos do dia
   const todosPedidosDia = useMemo(() =>
@@ -470,7 +840,7 @@ export function DashboardPage() {
                 <TrendingUp className="w-4 h-4 text-primary" /> Faturamento por Hora
               </h3>
               <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={vendasPorHora}>
+                <ComposedChart data={vendasPorHora}>
                   <defs>
                     <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
@@ -481,9 +851,10 @@ export function DashboardPage() {
                   <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip formatter={(v: any, name: string) => name.includes('Faturamento') ? formatBRL(Number(v)) : v} />
-                  <Area type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" fill="transparent" strokeWidth={1} strokeDasharray="5 5" name="Faturamento (Ontem)" />
-                  <Area type="monotone" dataKey="faturamento" stroke="#6366f1" fill="url(#fatGrad)" strokeWidth={2} name="Faturamento (Hoje)" />
-                </AreaChart>
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="faturamento" stroke="#6366f1" fill="url(#fatGrad)" strokeWidth={2} name="Faturamento (Hoje)" connectNulls={false} />
+                  <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={false} name="Faturamento (Ontem)" />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
 
@@ -494,15 +865,17 @@ export function DashboardPage() {
                   <DollarSign className="w-4 h-4 text-green-500" /> Faturamento por Conta
                 </h3>
                 <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={fatPorConta}>
+                  <ComposedChart data={fatPorConta}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="conta" tick={{ fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v: number) => formatBRL(v)} />
-                    <Bar dataKey="faturamento" fill="#22c55e" name="Faturamento" radius={[6, 6, 0, 0]}>
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="faturamento" fill="#22c55e" name="Faturamento (Hoje)" radius={[6, 6, 0, 0]}>
                       {fatPorConta.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Bar>
-                  </BarChart>
+                    <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Faturamento (Ontem)" />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             )}
@@ -513,24 +886,25 @@ export function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-indigo-500" /> Top Vendas (Unidades) vs VMD
+                  <Package className="w-4 h-4 text-indigo-500" /> Top Vendas (Unidades) vs Média 15d
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <ComposedChart data={topSkusByVendas}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                     <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
                     <Legend />
                     <Bar dataKey="vendas" fill="#22c55e" name="Vendas Hoje" radius={[4, 4, 0, 0]} barSize={40} />
-                    <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="VMD (Meta)" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="vendasOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Vendas Ontem" />
+                    <Line type="monotone" dataKey="vmd" stroke="#ef4444" name="Média 15d (Unid./dia)" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
 
               <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in min-w-0">
                 <h3 className="text-foreground font-semibold mb-4 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-green-500" /> Top Faturamento vs Meta (VMD)
+                  <DollarSign className="w-4 h-4 text-green-500" /> Top Faturamento vs Média 15d
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <ComposedChart data={topSkusByFaturamento}>
@@ -540,10 +914,80 @@ export function DashboardPage() {
                     <Tooltip formatter={(v: any) => formatBRL(Number(v))} />
                     <Legend />
                     <Bar dataKey="faturamento" fill="#6366f1" name="Faturamento Hoje" radius={[4, 4, 0, 0]} barSize={40} />
-                    <Line type="monotone" dataKey="vmdFaturamento" stroke="#ef4444" name="Fat. Médio (Meta)" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="faturamentoOntem" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} name="Faturamento Ontem" />
+                    <Line type="monotone" dataKey="vmdFaturamento" stroke="#ef4444" name="Fat. Médio 15d/dia" strokeWidth={2} dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+          )}
+
+          {/* SKUs com VMD que NÃO venderam hoje (alerta de oportunidade) */}
+          {skusSemVendaHoje.length > 0 && (
+            <div className="bg-card border border-border rounded-xl p-4 md:p-6 animate-fade-in mb-6">
+              <h3 className="text-foreground font-semibold mb-1 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" /> SKUs com VMD &gt; 0 sem venda hoje
+                <span className="text-xs bg-amber-500/15 text-amber-600 px-2 py-0.5 rounded-full ml-2">
+                  {skusSemVendaHojeFiltrado.length}{skusSemVendaFilter !== 'all' ? ` / ${skusSemVendaHoje.length}` : ''}
+                </span>
+              </h3>
+              <p className="text-xs text-muted-foreground mb-2">
+                Produtos com média de venda diária maior que zero que ainda não tiveram nenhuma venda hoje. Clique nas legendas para filtrar.
+              </p>
+              {/* Legenda de status — clicável (filtra o gráfico) */}
+              <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
+                {([
+                  { key: 'all', label: 'Todos', color: 'hsl(var(--muted-foreground))' },
+                  { key: 'sem_estoque', label: 'Sem estoque (Full + Tiny)', color: '#dc2626' },
+                  { key: 'sem_full', label: 'Rompido no Full (tem no Tiny)', color: '#f97316' },
+                  { key: 'com_estoque', label: 'Com estoque, sem venda', color: '#facc15' },
+                ] as const).map(opt => {
+                  const active = skusSemVendaFilter === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => setSkusSemVendaFilter(opt.key as any)}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all ${
+                        active
+                          ? 'border-foreground/40 bg-muted'
+                          : 'border-border hover:border-foreground/20 hover:bg-muted/50 opacity-70'
+                      }`}
+                    >
+                      <span className="inline-block w-3 h-3 rounded-sm" style={{ background: opt.color }} />
+                      <span className={active ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+                        {opt.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <ResponsiveContainer width="100%" height={320}>
+                <ComposedChart data={skusSemVendaHojeFiltrado}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="sku" tick={{ fontSize: 9 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    content={({ active, payload }: any) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-xs">
+                          <div className="font-semibold text-foreground mb-1">{d.sku}</div>
+                          <div style={{ color: d.cor }} className="font-medium mb-1">{d.statusLabel}</div>
+                          <div className="text-muted-foreground">VMD: <span className="text-foreground font-medium">{Number(d.vmd).toFixed(1)} un/dia</span></div>
+                          <div className="text-muted-foreground">Estoque Full: <span className="text-foreground font-medium">{d.estoqueFull}</span></div>
+                          <div className="text-muted-foreground">Estoque Tiny: <span className="text-foreground font-medium">{d.estoqueTiny}</span></div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="vmd" name="VMD (Unid./dia)" radius={[4, 4, 0, 0]} barSize={30}>
+                    {skusSemVendaHojeFiltrado.map((entry, i) => (
+                      <Cell key={i} fill={entry.cor} />
+                    ))}
+                  </Bar>
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
           )}
 

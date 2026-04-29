@@ -51,8 +51,8 @@ export function AtendimentoPage() {
         if (data && data.length > 0) setSelectedSeller(String(data[0].seller_id || data[0].id));
       });
 
-    supabase.from('shopee_accounts').select('id, nome, shop_id').eq('ativo', true).order('nome')
-      .then(({ data }) => {
+    (supabase as any).from('shopee_accounts').select('id, nome, shop_id').eq('ativo', true).order('nome')
+      .then(({ data }: any) => {
         setShopeeAccounts(data ?? []);
         if (data && data.length > 0) setSelectedShopee(String(data[0].shop_id));
       });
