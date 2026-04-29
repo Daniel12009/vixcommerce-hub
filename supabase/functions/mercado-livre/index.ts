@@ -1678,9 +1678,22 @@ Deno.serve(async (req) => {
       }
 
       if (loteLinhas.length > 0) {
-        // APPEND PURO na coluna P em diante — NUNCA apaga linhas existentes.
-        // Colunas A-O têm fórmulas/dados sagrados, só escrevemos de P até AH (19 colunas).
-        await invokeSheets(sheetId, `${sheetTab}!P:AH`, loteLinhas, 'append');
+        // Descobre a primeira linha vazia da coluna P (lendo P:P) e escreve com 'write' (PUT) ali.
+        // NUNCA apaga linhas. NUNCA mexe em A-O (que tem fórmulas).
+        let proximaLinha = 2;
+        try {
+          const leitura = await invokeGsFunction('read', { spreadsheetId: sheetId, range: `${sheetTab}!P:P` });
+          const valoresP: any[][] = leitura?.values || [];
+          // Primeira linha vazia = quantidade de linhas com conteúdo + 1
+          proximaLinha = valoresP.length + 1;
+          if (proximaLinha < 2) proximaLinha = 2;
+        } catch (e) {
+          console.warn('[SYNC VENDAS] Falha lendo P:P, usando linha 2 como fallback', e);
+        }
+        const ultimaLinha = proximaLinha + loteLinhas.length - 1;
+        const writeRange = `${sheetTab}!P${proximaLinha}:AH${ultimaLinha}`;
+        console.log(`[SYNC VENDAS] Escrevendo ${loteLinhas.length} linhas em ${writeRange}`);
+        await invokeSheets(sheetId, writeRange, loteLinhas, 'write');
       }
 
       let dbStatus = `dbRows=${loteDbRows.length}`;
