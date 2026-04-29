@@ -1587,8 +1587,8 @@ Deno.serve(async (req) => {
 
       const dateFrom = reqDateFrom || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const dateTo   = reqDateTo   || dateFrom;
-      const sheetId  = reqSpreadsheetId || account.spreadsheet_id || PLANILHA_MESTRA;
-      const sheetTab = reqSheetName     || account.sheet_name     || 'VendasML';
+      const sheetId  = reqSpreadsheetId || account.spreadsheet_id || '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w';
+      const sheetTab = reqSheetName     || account.sheet_name     || 'VENDAS';
 
       const isoFrom = `${dateFrom}T00:00:00.000-03:00`;
       const isoTo   = `${dateTo}T23:59:59.999-03:00`;
