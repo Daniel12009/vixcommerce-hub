@@ -96,13 +96,13 @@ const SYNC_ACTIONS = [
   {
     id: 'tiny-shopee',
     label: '🛒 Shopee Vendas (via Tiny)',
-    description: 'Busca vendas Shopee via Tiny ERP → Shopee_Vendas',
+    description: 'Busca vendas Shopee via Tiny ERP (últimos 7 dias) → Shopee_Vendas',
     fn: 'tiny',
     body: {
       action: 'sync_vendas_marketplace',
       plataforma: 'shopee',
-      date_from: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
-      date_to: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
+      date_from: new Date(Date.now() - 7 * 86400000).toLocaleDateString('pt-BR'),
+      date_to: new Date().toLocaleDateString('pt-BR'),
     },
     color: 'bg-[hsl(16,100%,60%,0.15)]',
   },
