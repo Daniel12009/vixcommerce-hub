@@ -124,23 +124,36 @@ async function fetchOrderDetail(token: string, orderId: string): Promise<any> {
   return data?.retorno?.pedido || null;
 }
 
-// Search orders from Tiny
-async function searchOrders(token: string, dataInicial: string, dataFinal: string, pagina: number): Promise<any> {
+// Search orders from Tiny with patient retry mode
+async function searchOrders(token: string, dataInicial: string, dataFinal: string, pagina: number, tentativa = 1): Promise<any> {
   const form = new URLSearchParams({
     token,
     formato: 'json',
-    dataInicialOcorrencia: dataInicial,
-    dataFinalOcorrencia: dataFinal,
+    dataInicial: dataInicial, // Usando data base da criação como no Python (menos pesado pro BD do Tiny)
+    dataFinal: dataFinal,
     pagina: String(pagina),
-    sort: 'DESC',
   });
 
-  const res = await fetch(`${TINY_API}/pedidos.pesquisa.php`, {
-    method: 'POST',
-    body: form,
-  });
-
-  return res.json();
+  try {
+    const res = await fetch(`${TINY_API}/pedidos.pesquisa.php`, {
+      method: 'POST',
+      body: form,
+    });
+    const data = await res.json();
+    
+    // Se o Tiny negar a consulta, aplica o castigo de 5 segundos como no script Python
+    if (data?.retorno?.status === 'Erro' && !data?.retorno?.codigo_erro) {
+       throw new Error(data.retorno.erros?.[0]?.erro || 'Unknown timeout');
+    }
+    return data;
+  } catch (e) {
+    if (tentativa <= 3) {
+      console.warn(`[TINY API] Falha na página ${pagina}. Tentativa ${tentativa}/3... aguardando 5s`);
+      await new Promise(r => setTimeout(r, 5000));
+      return searchOrders(token, dataInicial, dataFinal, pagina, tentativa + 1);
+    }
+    throw e;
+  }
 }
 
 function parseTinyDate(dateStr: string): string {
@@ -736,9 +749,15 @@ Deno.serve(async (req) => {
               // Ignorar cancelados
               if (situacaoRaw.includes('cancelado')) continue;
 
-              const numEcom = (pedido.numero_ecommerce || '').toString();
-              const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
-              const origem = (pedido.origem || '').toString().toLowerCase();
+              // Buscar detalhes do Tiny ANTES de filtrar, pois a listagem não traz `ecommerce`
+              const orderId = pedido.id || pedido.numero;
+              let detail: any = null;
+              try { detail = await fetchOrderDetail(account.api_token, String(orderId)); } catch { /* skip */ }
+              const dp = detail || pedido;
+
+              const numEcom = (dp.numero_ecommerce || '').toString();
+              const ecommerce = (dp.ecommerce || dp.nome_ecommerce || '').toString().toLowerCase();
+              const origem = (dp.origem || '').toString().toLowerCase();
 
               debugInfo.total_pedidos++;
               if (debugInfo.ecommerce_samples.length < 10 && (ecommerce || origem)) {
@@ -752,12 +771,6 @@ Deno.serve(async (req) => {
                 continue;
               }
               debugInfo.pedidos_shopee++;
-
-              // Buscar detalhes do Tiny
-              const orderId = pedido.id || pedido.numero;
-              let detail: any = null;
-              try { detail = await fetchOrderDetail(account.api_token, String(orderId)); } catch { /* skip */ }
-              const dp = detail || pedido;
 
               const itens = dp.itens || [];
               if (itens.length === 0) continue;
