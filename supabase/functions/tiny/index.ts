@@ -1,5 +1,72 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { shopeeFetch, supabaseFetch as shopeeSupabaseFetch } from '../_shared/shopee-utils.ts';
+
+// ═══ INLINED SHOPEE UTILS (Lovable deploys functions individually) ═══════════
+const SHOPEE_API_BASE = 'https://partner.shopeemobile.com';
+
+async function shopeeGenerateSign(partnerKey: string, baseString: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(partnerKey), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(baseString));
+  return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function buildShopeeUrl(account: any, apiPath: string, extraParams: Record<string, string> = {}): Promise<string> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const partnerId = parseInt(account.partner_id);
+  const shopId = parseInt(account.shop_id);
+  const baseString = `${partnerId}${apiPath}${timestamp}${account.access_token}${shopId}`;
+  const sign = await shopeeGenerateSign(account.partner_key, baseString);
+  const params = new URLSearchParams({ partner_id: String(partnerId), timestamp: String(timestamp), sign, access_token: account.access_token, shop_id: String(shopId), ...extraParams });
+  return `${SHOPEE_API_BASE}${apiPath}?${params.toString()}`;
+}
+
+async function shopeeRefreshToken(account: any): Promise<string> {
+  const apiPath = '/api/v2/auth/access_token/get';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const partnerId = parseInt(account.partner_id);
+  const baseString = `${partnerId}${apiPath}${timestamp}`;
+  const sign = await shopeeGenerateSign(account.partner_key, baseString);
+  const params = new URLSearchParams({ partner_id: String(partnerId), timestamp: String(timestamp), sign });
+  const res = await fetch(`${SHOPEE_API_BASE}${apiPath}?${params.toString()}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: account.refresh_token, partner_id: partnerId, shop_id: parseInt(account.shop_id) }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(`Shopee token refresh failed: ${data.error} - ${data.message}`);
+  // Update tokens in DB
+  const dbUrl = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const dbKey = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+  await fetch(`${dbUrl}/rest/v1/shopee_accounts?id=eq.${account.id}`, {
+    method: 'PATCH', headers: { 'apikey': dbKey, 'Authorization': `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: data.access_token, refresh_token: data.refresh_token, token_expires_at: new Date(Date.now() + (data.expire_in * 1000)).toISOString() }),
+  });
+  return data.access_token;
+}
+
+async function shopeeFetch(account: any, apiPath: string, extraParams: Record<string, string> = {}): Promise<any> {
+  if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+    account.access_token = await shopeeRefreshToken(account);
+  }
+  let url = await buildShopeeUrl(account, apiPath, extraParams);
+  let res = await fetch(url);
+  let data = await res.json();
+  const errStr = (data.error || '').toLowerCase();
+  if (data.error && (errStr.includes('token') || errStr.includes('auth') || errStr.includes('permission'))) {
+    account.access_token = await shopeeRefreshToken(account);
+    url = await buildShopeeUrl(account, apiPath, extraParams);
+    res = await fetch(url);
+    data = await res.json();
+  }
+  if (data.error) throw new Error(`Shopee API error: ${data.error} - ${data.message || ''}`);
+  return data;
+}
+
+async function shopeeSupabaseFetch(path: string, options: any = {}) {
+  const url = (Deno.env.get('EXTERNAL_DB_URL') || Deno.env.get('SUPABASE_URL'))!;
+  const key = (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!;
+  return fetch(`${url}/rest/v1${path}`, { ...options, headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation', ...options.headers } });
+}
+// ═══ END INLINED SHOPEE UTILS ═══════════════════════════════════════════════
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
