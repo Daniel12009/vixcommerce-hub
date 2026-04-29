@@ -585,8 +585,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'sync_vendas_marketplace') {
-      const body = await req.clone().json().catch(() => ({} as any));
-      const { date_from, date_to, plataforma, spreadsheet_id, sheet_name } = body;
+      const { date_from, date_to, plataforma, spreadsheet_id, sheet_name } = reqBody;
 
       if (!date_from || !date_to || !plataforma) {
         throw new Error('date_from, date_to e plataforma são obrigatórios');
