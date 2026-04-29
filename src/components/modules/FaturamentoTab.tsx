@@ -92,7 +92,7 @@ export function FaturamentoTab() {
   }, [filterDias, customTo]);
 
   const dateIni = useMemo(() => {
-    if (filterDias === -1 && customFrom) return customFrom;
+    if (filterDias === -1) return customFrom || getLocalDateStr(new Date());
     const d = new Date();
     d.setDate(d.getDate() - (filterDias - 1));
     return getLocalDateStr(d);
@@ -120,10 +120,136 @@ export function FaturamentoTab() {
     return getLocalDateStr(d);
   }, [filterDias]);
 
-  const { data: dbDaily, loading: loadingDaily } = useVendasFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
-  const { data: dbDailyPrev, loading: loadingDailyPrev } = useVendasFromDB(dateIniPrev, dateFimPrev, filterConta !== 'all' ? [filterConta] : undefined);
-  const { data: dbSku, loading: loadingSku } = useVendasSKUFromDB(dateIni, dateFim, filterConta !== 'all' ? [filterConta] : undefined);
-  const { data: dbSkuPrev } = useVendasSKUFromDB(dateIniPrev, dateFimPrev, filterConta !== 'all' ? [filterConta] : undefined);
+  // Use local data from Sheets (Teste Luiz Ads) to compute CMVs and Margins locally
+  const custoMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (sheetsData.comprasItems) {
+      sheetsData.comprasItems.forEach(item => {
+        if (item.sku && item.custoProduto) map.set(item.sku.trim().toUpperCase(), Number(item.custoProduto));
+      });
+    }
+    return map;
+  }, [sheetsData.comprasItems]);
+
+  const { dbDaily, dbDailyPrev, dbSku, dbSkuPrev } = useMemo(() => {
+    const daily: any[] = [];
+    const dailyPrev: any[] = [];
+    const skuList: any[] = [];
+    const skuPrevList: any[] = [];
+
+    if (!sheetsData.vendasItems) return { dbDaily: [], dbDailyPrev: [], dbSku: [], dbSkuPrev: [] };
+
+    const ini = new Date(dateIni + 'T00:00:00');
+    const fim = new Date(dateFim + 'T23:59:59');
+    const iniPrev = new Date(dateIniPrev + 'T00:00:00');
+    const fimPrev = new Date(dateFimPrev + 'T23:59:59');
+
+    const mapDaily = new Map<string, any>();
+    const mapDailyPrev = new Map<string, any>();
+    const mapSku = new Map<string, any>();
+    const mapSkuPrev = new Map<string, any>();
+
+    for (const v of sheetsData.vendasItems) {
+      if (v.statusPedido?.toLowerCase().includes('cancel')) continue;
+
+      const d = parseDate(v.data);
+      if (!d) continue;
+
+      const dateStr = getLocalDateStr(d);
+      const isCurrent = d >= ini && d <= fim;
+      const isPrev = d >= iniPrev && d <= fimPrev;
+      
+      if (!isCurrent && !isPrev) continue;
+
+      // Extract details
+      const conta = (v.conta || 'Sem Conta').trim();
+      const marketplace = (v.origem || 'Outros').trim();
+      const s = (v.sku || v.skuProduto || 'Sem SKU').trim().toUpperCase();
+      const qtd = Number(v.quantidade || 0);
+      const fatBruto = Number(v.valorTotal || 0);
+      const frete = Number(v.frete || 0);
+      
+      // Compute Costs based on "Teste Luiz Ads"
+      const unitCost = custoMap.get(s) || 0;
+      const cmvCalculado = unitCost * qtd;
+
+      const ads = Number(v.ads || 0);
+      const impostos = Number(v.impostos || 0);
+      const comissao = Number(v.comissao || 0); // Usually negative
+      
+      // Net Profit calculation
+      // liquido = fatBruto + comissao - ads - impostos - cmv
+      const lucroCalculado = fatBruto + (comissao < 0 ? comissao : -comissao) - ads - impostos - cmvCalculado;
+
+      if (isCurrent && (filterConta === 'all' || filterConta === conta)) {
+        // Daily Aggregation
+        const dk = `${dateStr}|${conta}|${marketplace}`;
+        if (!mapDaily.has(dk)) {
+          mapDaily.set(dk, { data: dateStr, conta, marketplace, faturamento_bruto: 0, lucro_liquido: 0, impostos: 0, ads: 0, cmv: 0, comissao: 0, pedidos: 0, quantidade: 0 });
+        }
+        const dailyItem = mapDaily.get(dk);
+        dailyItem.faturamento_bruto += fatBruto;
+        dailyItem.lucro_liquido += lucroCalculado;
+        dailyItem.impostos += impostos;
+        dailyItem.ads += ads;
+        dailyItem.cmv += cmvCalculado;
+        dailyItem.comissao += comissao;
+        dailyItem.pedidos += 1;
+        dailyItem.quantidade += qtd;
+
+        // SKU Aggregation
+        const sk = `${s}|${conta}`;
+        if (!mapSku.has(sk)) {
+          mapSku.set(sk, { sku: s, conta, marketplace, faturamento_bruto: 0, liquido: 0, quantidade: 0, ads: 0, cmv: 0, comissao: 0, frete: 0, pedidos: 0, dev_qtd: 0, pct_devolucao: 0 });
+        }
+        const skuItem = mapSku.get(sk);
+        skuItem.faturamento_bruto += fatBruto;
+        skuItem.liquido += lucroCalculado;
+        skuItem.quantidade += qtd;
+        skuItem.ads += ads;
+        skuItem.cmv += cmvCalculado;
+        skuItem.comissao += comissao;
+        skuItem.frete += frete;
+        skuItem.pedidos += 1;
+        // Assuming devolucao logic is parsed locally
+      }
+
+      if (isPrev && (filterConta === 'all' || filterConta === conta)) {
+        const dk = `${dateStr}|${conta}|${marketplace}`;
+        if (!mapDailyPrev.has(dk)) {
+          mapDailyPrev.set(dk, { data: dateStr, conta, marketplace, faturamento_bruto: 0, lucro_liquido: 0, impostos: 0, ads: 0, cmv: 0, comissao: 0, pedidos: 0, quantidade: 0 });
+        }
+        const dailyItem = mapDailyPrev.get(dk);
+        dailyItem.faturamento_bruto += fatBruto;
+        dailyItem.lucro_liquido += lucroCalculado;
+        dailyItem.impostos += impostos;
+        dailyItem.ads += ads;
+        dailyItem.cmv += cmvCalculado;
+        dailyItem.comissao += comissao;
+        dailyItem.pedidos += 1;
+        dailyItem.quantidade += qtd;
+
+        const sk = `${s}|${conta}`;
+        if (!mapSkuPrev.has(sk)) {
+          mapSkuPrev.set(sk, { sku: s, conta, marketplace, faturamento_bruto: 0, liquido: 0, quantidade: 0, ads: 0, cmv: 0, comissao: 0, frete: 0, pedidos: 0, dev_qtd: 0, pct_devolucao: 0 });
+        }
+        const skuItem = mapSkuPrev.get(sk);
+        skuItem.faturamento_bruto += fatBruto;
+        skuItem.liquido += lucroCalculado;
+        skuItem.quantidade += qtd;
+      }
+    }
+
+    return { 
+      dbDaily: Array.from(mapDaily.values()), 
+      dbDailyPrev: Array.from(mapDailyPrev.values()), 
+      dbSku: Array.from(mapSku.values()), 
+      dbSkuPrev: Array.from(mapSkuPrev.values()) 
+    };
+  }, [sheetsData.vendasItems, dateIni, dateFim, dateIniPrev, dateFimPrev, filterConta, custoMap]);
+
+  const loadingDaily = !sheetsData.vendasItems;
+  const loadingSku = !sheetsData.vendasItems;
 
   const [filterCanal, setFilterCanal] = useState<'all' | 'marketplace' | 'atacado'>('all');
   const [sortField, setSortField] = useState('faturamento');
