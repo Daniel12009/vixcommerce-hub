@@ -738,15 +738,17 @@ Deno.serve(async (req) => {
 
               const numEcom = (pedido.numero_ecommerce || '').toString();
               const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
+              const origem = (pedido.origem || '').toString().toLowerCase();
 
               debugInfo.total_pedidos++;
-              if (debugInfo.ecommerce_samples.length < 10 && ecommerce) {
-                debugInfo.ecommerce_samples.push(`${ecommerce} (num:${numEcom.substring(0,10)})`);
+              if (debugInfo.ecommerce_samples.length < 10 && (ecommerce || origem)) {
+                debugInfo.ecommerce_samples.push(`eco:${ecommerce} orig:${origem} (num:${numEcom.substring(0,10)})`);
               }
-              if (!ecommerce) debugInfo.sem_ecommerce++;
+              if (!ecommerce && !origem) debugInfo.sem_ecommerce++;
 
-              // Filtrar apenas marketplace desejado (incluindo "monaco" caso o nome no Tiny tenha sido alterado)
-              if (!ecommerce.includes(platLower) && !ecommerce.includes('monaco')) {
+              // Filtrar apenas marketplace desejado (incluindo "monaco") em ecommerce ou origem
+              if (!ecommerce.includes(platLower) && !origem.includes(platLower) && 
+                  !ecommerce.includes('monaco') && !origem.includes('monaco')) {
                 continue;
               }
               debugInfo.pedidos_shopee++;
