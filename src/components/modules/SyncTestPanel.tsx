@@ -95,20 +95,14 @@ const SYNC_ACTIONS = [
   },
   {
     id: 'tiny-shopee',
-    label: '🛒 Shopee Vendas (Nativa Shopee)',
-    description: 'Busca vendas Shopee via API Nativa (dia anterior) → Shopee_Vendas',
-    fn: 'shopee',
+    label: '🛒 Shopee Vendas (via Tiny + Escrow)',
+    description: 'Busca vendas Shopee via Tiny ERP com comissões reais da API Shopee → Shopee_Vendas',
+    fn: 'tiny',
     body: {
       action: 'sync_vendas_marketplace',
       plataforma: 'shopee',
-      date_from: (() => {
-        const d = new Date(Date.now() - 86400000);
-        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-      })(),
-      date_to: (() => {
-        const d = new Date(Date.now() - 86400000);
-        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-      })(),
+      date_from: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
+      date_to: new Date(Date.now() - 86400000).toLocaleDateString('pt-BR'),
     },
     color: 'bg-[hsl(16,100%,60%,0.15)]',
   },
