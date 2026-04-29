@@ -898,7 +898,10 @@ Deno.serve(async (req) => {
       }
 
       const hybridLabel = platLower === 'shopee' && shopeeAccount ? ' (HYBRID: Tiny+Shopee API)' : '';
-      const msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}${hybridLabel}`;
+      let msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}${hybridLabel}`;
+      if (allRows.length === 0) {
+         msg += ` | DEBUG: total_pedidos=${debugInfo.total_pedidos}, pedidos_shopee=${debugInfo.pedidos_shopee}, samples=${debugInfo.ecommerce_samples.join(', ')}`;
+      }
       console.log(`[SYNC] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: allRows.length, debug: debugInfo }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
