@@ -70,11 +70,12 @@ function DeltaArrow({ current, previous, invert }: { current: number; previous: 
   );
 }
 
-const isAtacado = (conta: string) =>
-  conta.toLowerCase().includes('atacado') ||
-  conta.toLowerCase().includes('alexia') ||
-  conta.toLowerCase().includes('vf|') ||
-  conta.toLowerCase().includes('|vf');
+const isAtacado = (origemOrConta: string) => {
+  const s = origemOrConta.toLowerCase();
+  return s.includes('atacado') || s.includes('alexia') ||
+    s.includes('loja fisica') || s.includes('showroom') ||
+    s.startsWith('vf|') || s.includes('|vf');
+};
 
 export function FaturamentoTab() {
   const sheetsData = useSheetsData();
@@ -83,6 +84,7 @@ export function FaturamentoTab() {
   const [filterDias, setFilterDias] = useState(30);
   const [filterConta, setFilterConta] = useState('all');
   const [filterMarketplace, setFilterMarketplace] = useState('all');
+  const [filterSku, setFilterSku] = useState('all');
   // Default custom range to last 30 days so it never starts empty
   const [customFrom, setCustomFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 29); return getLocalDateStr(d);
@@ -195,7 +197,6 @@ export function FaturamentoTab() {
 
       // Montar origem completa: "Marketplace|Conta" como no Looker
       const conta = (v.conta || 'Sem Conta').trim();
-      if (filterConta !== 'all' && filterConta !== conta) continue;
 
       const rawOrigem = (v.origem || '').trim();
       // origem completa para agrupar = se já tem pipe usa direto, senão monta
@@ -303,17 +304,17 @@ export function FaturamentoTab() {
       loadingDaily: false,
       loadingSku:   false,
     };
-  }, [sheetsData.vendasItems, dateIni, dateFim, dateIniPrev, dateFimPrev, filterConta, adsDiaMap, devSkuMap]);
+  }, [sheetsData.vendasItems, dateIni, dateFim, dateIniPrev, dateFimPrev, adsDiaMap, devSkuMap]);
 
   const [filterCanal, setFilterCanal] = useState<'all' | 'marketplace' | 'atacado'>('all');
   const [sortField, setSortField] = useState('faturamento');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  // Dynamic filter lists from DB data
+  // Dynamic filter lists — Conta uses full "origem" for unique identification
   const dynamicContas = useMemo(() => {
     const set = new Set<string>();
     dbDaily.forEach(v => {
-      if (v.conta) set.add(v.conta.trim());
+      if (v.origem) set.add(v.origem.trim());
     });
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [dbDaily]);
@@ -326,35 +327,49 @@ export function FaturamentoTab() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [dbDaily]);
 
-  // Combined local filtering for Marketplace
+  const dynamicSkus = useMemo(() => {
+    const set = new Set<string>();
+    dbSku.forEach(v => {
+      if (v.sku) set.add(v.sku);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [dbSku]);
+
+  // Combined local filtering
   const filteredDaily = useMemo(() => {
     return dbDaily.filter(v => 
       (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
-      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
+      (filterConta !== 'all' ? v.origem === filterConta : true) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.origem || v.conta || '') : !isAtacado(v.origem || v.conta || '')))
     );
-  }, [dbDaily, filterMarketplace, filterCanal]);
+  }, [dbDaily, filterMarketplace, filterConta, filterCanal]);
 
   const filteredDailyPrev = useMemo(() => {
     return dbDailyPrev.filter(v => 
       (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
-      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
+      (filterConta !== 'all' ? v.origem === filterConta : true) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.origem || v.conta || '') : !isAtacado(v.origem || v.conta || '')))
     );
-  }, [dbDailyPrev, filterMarketplace, filterCanal]);
+  }, [dbDailyPrev, filterMarketplace, filterConta, filterCanal]);
 
   const filteredSku = useMemo(() => {
     return dbSku.filter(v => 
-      (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
-      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
+      (filterMarketplace === 'all' || v.marketplace?.includes(filterMarketplace)) &&
+      (filterConta !== 'all' ? v.origem === filterConta : true) &&
+      (filterSku === 'all' || v.sku === filterSku) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.origem || v.conta || '') : !isAtacado(v.origem || v.conta || '')))
     );
-  }, [dbSku, filterMarketplace, filterCanal]);
+  }, [dbSku, filterMarketplace, filterConta, filterSku, filterCanal]);
 
   const filteredSkuPrev = useMemo(() => {
     if (!dbSkuPrev) return [];
     return dbSkuPrev.filter(v => 
-      (filterMarketplace === 'all' || v.marketplace === filterMarketplace) &&
-      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.conta || '') : !isAtacado(v.conta || '')))
+      (filterMarketplace === 'all' || v.marketplace?.includes(filterMarketplace)) &&
+      (filterConta !== 'all' ? v.origem === filterConta : true) &&
+      (filterSku === 'all' || v.sku === filterSku) &&
+      (filterCanal === 'all' || (filterCanal === 'atacado' ? isAtacado(v.origem || v.conta || '') : !isAtacado(v.origem || v.conta || '')))
     );
-  }, [dbSkuPrev, filterMarketplace, filterCanal]);
+  }, [dbSkuPrev, filterMarketplace, filterConta, filterSku, filterCanal]);
 
   // Final cleanup: removed legacy Sheets-based filtering
 
@@ -561,7 +576,7 @@ export function FaturamentoTab() {
 
         <div className="flex items-center gap-1.5">
           <label className="text-xs text-muted-foreground font-medium">Conta:</label>
-          <select value={filterConta} onChange={e => setFilterConta(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs">
+          <select value={filterConta} onChange={e => setFilterConta(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs max-w-[220px]">
             <option value="all">Todas as Contas</option>
             {dynamicContas.map(c => <option key={c} value={c}>{c.length > 35 ? c.slice(0, 32) + '...' : c}</option>)}
           </select>
@@ -585,6 +600,14 @@ export function FaturamentoTab() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground font-medium">SKU:</label>
+          <select value={filterSku} onChange={e => setFilterSku(e.target.value)} className="px-2.5 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs max-w-[160px]">
+            <option value="all">Todos SKUs</option>
+            {dynamicSkus.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
         </div>
 
         <div className="flex items-center ml-auto gap-3">
