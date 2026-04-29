@@ -436,7 +436,9 @@ export function DashboardPage() {
     const snap = yesterdaySnapshot;
     if (!snap) return null;
     const detalhe: any[] = Array.isArray(snap.vendas_detalhadas) ? snap.vendas_detalhadas : [];
+    const detalheSku: any[] = Array.isArray(snap.vendas_detalhadas_sku) ? snap.vendas_detalhadas_sku : [];
     const hasDetail = detalhe.length > 0;
+    const hasDetailSku = detalheSku.length > 0;
 
     if (!hasDetail) {
       // Sem detalhe — só dá pra usar agregados se nenhum filtro estiver ativo
@@ -444,19 +446,22 @@ export function DashboardPage() {
       return {
         vendas_por_hora: semFiltro ? (snap.vendas_por_hora || []) : [],
         por_conta: semFiltro ? (snap.por_conta || {}) : {},
+        por_sku_vendas: semFiltro ? (snap.por_sku_vendas || {}) : {},
+        por_sku_faturamento: semFiltro ? (snap.por_sku_faturamento || {}) : {},
         sem_detalhe: !semFiltro,
       };
     }
 
     // Aplica filtros
-    const filt = detalhe.filter(d => {
+    const matchFilters = (d: any) => {
       if (filterPlataforma !== 'all' && (d.plataforma || '') !== filterPlataforma) return false;
       if (filterCanal !== 'all' && (d.canal || '') !== filterCanal) return false;
       if (filterConta !== 'all' && (d.conta || '') !== filterConta) return false;
       return true;
-    });
+    };
+    const filt = detalhe.filter(matchFilters);
 
-    // Reagrega por hora
+    // Reagrega por hora + conta
     const horaMap = new Map<string, number>();
     for (let h = 0; h <= 23; h++) horaMap.set(`${String(h).padStart(2, '0')}h`, 0);
     const porConta: Record<string, number> = {};
@@ -466,7 +471,27 @@ export function DashboardPage() {
       porConta[c] = (porConta[c] || 0) + (Number(d.faturamento) || 0);
     });
     const vendas_por_hora = Array.from(horaMap.entries()).map(([hora, faturamento]) => ({ hora, faturamento }));
-    return { vendas_por_hora, por_conta: porConta, sem_detalhe: false };
+
+    // Reagrega por SKU se houver detalhe SKU; senão usa agregado total apenas quando sem filtro
+    let porSkuVendas: Record<string, number> = {};
+    let porSkuFat: Record<string, number> = {};
+    if (hasDetailSku) {
+      const filtSku = detalheSku.filter(matchFilters);
+      filtSku.forEach(d => {
+        const sk = canonicalSku(String(d.sku || '').toUpperCase());
+        if (!sk) return;
+        porSkuVendas[sk] = (porSkuVendas[sk] || 0) + (Number(d.vendas) || 0);
+        porSkuFat[sk] = (porSkuFat[sk] || 0) + (Number(d.faturamento) || 0);
+      });
+    } else {
+      const semFiltro = filterPlataforma === 'all' && filterCanal === 'all' && filterConta === 'all';
+      if (semFiltro) {
+        porSkuVendas = snap.por_sku_vendas || {};
+        porSkuFat = snap.por_sku_faturamento || {};
+      }
+    }
+
+    return { vendas_por_hora, por_conta: porConta, por_sku_vendas: porSkuVendas, por_sku_faturamento: porSkuFat, sem_detalhe: false };
   }, [yesterdaySnapshot, filterPlataforma, filterCanal, filterConta]);
 
   // Faturamento por Conta (Bar) — inclui comparativo com ontem
