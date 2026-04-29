@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { shopeeFetch, supabaseFetch as shopeeSupabaseFetch } from '../_shared/shopee-utils.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -605,6 +606,44 @@ Deno.serve(async (req) => {
         });
       }
 
+      // ═══ SHOPEE HYBRID: buscar conta Shopee para enriquecer dados ═══
+      let shopeeAccount: any = null;
+      const shopeeEscrowCache = new Map<string, any>();
+      if (platLower === 'shopee') {
+        try {
+          const shopeeRes = await shopeeSupabaseFetch('/shopee_accounts?ativo=eq.true&order=id.asc&limit=1');
+          const shopeeAccounts = await shopeeRes.json();
+          if (shopeeAccounts && shopeeAccounts.length > 0) {
+            shopeeAccount = shopeeAccounts[0];
+            console.log(`[HYBRID] Conta Shopee encontrada: ${shopeeAccount.nome} (shop_id: ${shopeeAccount.shop_id})`);
+          } else {
+            console.warn('[HYBRID] Nenhuma conta Shopee ativa encontrada — usando fallback de comissão');
+          }
+        } catch (e) {
+          console.error('[HYBRID] Erro buscando conta Shopee:', e);
+        }
+      }
+
+      // Helper: buscar escrow_detail da Shopee para um order_sn
+      async function getShopeeEscrow(orderSn: string): Promise<any> {
+        if (!shopeeAccount || !orderSn) return null;
+        if (shopeeEscrowCache.has(orderSn)) return shopeeEscrowCache.get(orderSn);
+        try {
+          const data = await shopeeFetch(shopeeAccount, '/api/v2/payment/get_escrow_detail', {
+            order_sn: orderSn,
+          });
+          const income = data?.response?.order_income || null;
+          shopeeEscrowCache.set(orderSn, income);
+          // Rate limit: 500ms delay
+          await new Promise(r => setTimeout(r, 500));
+          return income;
+        } catch (err) {
+          console.warn(`[HYBRID] Escrow falhou para ${orderSn}:`, err instanceof Error ? err.message : err);
+          shopeeEscrowCache.set(orderSn, null);
+          return null;
+        }
+      }
+
       const allRows: any[][] = [];
       const allDbRows: any[] = [];
 
@@ -636,7 +675,7 @@ Deno.serve(async (req) => {
               // Filtrar apenas marketplace desejado
               if (!ecommerce.includes(platLower)) continue;
 
-              // Buscar detalhes
+              // Buscar detalhes do Tiny
               const orderId = pedido.id || pedido.numero;
               let detail: any = null;
               try { detail = await fetchOrderDetail(account.api_token, String(orderId)); } catch { /* skip */ }
@@ -648,20 +687,65 @@ Deno.serve(async (req) => {
               const dataVenda = (dp.data_pedido || '').replace(/-/g, '/');
               const uf = dp.cliente?.uf || dp.cliente?.estado || '';
 
+              // ═══ SHOPEE HYBRID: buscar dados financeiros reais ═══
+              let escrowIncome: any = null;
+              if (platLower === 'shopee' && numEcom) {
+                escrowIncome = await getShopeeEscrow(numEcom);
+              }
+
+              // Se temos escrow, extrair valores financeiros reais
+              const shopeeComissaoTotal = escrowIncome
+                ? Math.abs(parseFloat(escrowIncome.commission_fee || 0))
+                  + Math.abs(parseFloat(escrowIncome.service_fee || 0))
+                  + Math.abs(parseFloat(escrowIncome.seller_service_fee || 0))
+                : 0;
+              const shopeeTaxaTransacao = escrowIncome
+                ? Math.abs(parseFloat(escrowIncome.seller_transaction_fee || 0))
+                : 0;
+              const shopeeReceitaTotal = escrowIncome
+                ? parseFloat(escrowIncome.order_amount || 0)
+                : 0;
+              const shopeeFrete = escrowIncome
+                ? Math.abs(parseFloat(escrowIncome.actual_shipping_fee || 0))
+                  - Math.abs(parseFloat(escrowIncome.shopee_shipping_rebate || 0))
+                : 0;
+
+              // Total de itens para rateio proporcional dos valores do escrow
+              const totalReceitaTiny = itens.reduce((s: number, iw: any) => {
+                const it = iw.item || iw;
+                return s + (parseFloat(it.valor_unitario || '0') * parseInt(it.quantidade || '1'));
+              }, 0);
+
               for (const itemWrapper of itens) {
                 const item = itemWrapper.item || itemWrapper;
                 const sku = item.codigo || '';
                 const qtd = parseInt(item.quantidade || '1');
                 const precoUnit = parseFloat(item.valor_unitario || '0');
-                const receita = precoUnit * qtd;
+                const receitaTiny = precoUnit * qtd;
 
-                // Comissão: API tem prioridade, senão fallback
-                const comissaoApi = parseFloat(item.valor_comissao || '0');
-                const comissaoFinal = comissaoApi > 0
-                  ? comissaoApi
-                  : calcularComissao(platLower, precoUnit, qtd);
+                // Rateio proporcional se escrow disponível
+                const proporcao = totalReceitaTiny > 0 ? receitaTiny / totalReceitaTiny : 1 / Math.max(itens.length, 1);
 
-                const frete = parseFloat(dp.valor_frete || '0');
+                let receita: number;
+                let comissaoFinal: number;
+                let tarifa: number;
+                let frete: number;
+
+                if (escrowIncome) {
+                  // SHOPEE HYBRID: valores reais da API
+                  receita = shopeeReceitaTotal > 0 ? shopeeReceitaTotal * proporcao : receitaTiny;
+                  comissaoFinal = shopeeComissaoTotal * proporcao;
+                  tarifa = shopeeTaxaTransacao * proporcao;
+                  frete = shopeeFrete > 0 ? shopeeFrete * proporcao : 0;
+                  console.log(`[HYBRID] ${numEcom} SKU=${sku}: receita=${receita.toFixed(2)}, comissao=${comissaoFinal.toFixed(2)}, tarifa=${tarifa.toFixed(2)}, frete=${frete.toFixed(2)}`);
+                } else {
+                  // Fallback: cálculo estimado (tabela de comissões)
+                  receita = receitaTiny;
+                  const comissaoApi = parseFloat(item.valor_comissao || '0');
+                  comissaoFinal = comissaoApi > 0 ? comissaoApi : calcularComissao(platLower, precoUnit, qtd);
+                  tarifa = 0;
+                  frete = parseFloat(dp.valor_frete || '0');
+                }
 
                 // Linha no formato 19-colunas (col 0-18)
                 allRows.push([
@@ -675,22 +759,22 @@ Deno.serve(async (req) => {
                   'Padrão',                                 // 7  tipo de anuncio
                   '',                                       // 8  Venda por publicidade
                   DELIVERY_MAP[platLower] || 'Padrão',      // 9  Forma de entrega
-                  precoUnit,                                // 10 Preço unitário
-                  qtd,                                      // 11 Unidades
-                  receita,                                  // 12 Receita
+                  precoUnit,                                // 10 Preço unitário (Tiny)
+                  qtd,                                      // 11 Unidades (Tiny)
+                  receita,                                  // 12 Receita (Shopee se disponível)
                   frete > 0 ? -frete : 0,                   // 13 Envio Seller
-                  0,                                        // 14 TARIFA
-                  -Math.abs(comissaoFinal),                  // 15 Tarifa de venda
+                  tarifa > 0 ? -tarifa : 0,                 // 14 TARIFA (taxa transação Shopee)
+                  -Math.abs(comissaoFinal),                  // 15 Tarifa de venda (comissão real Shopee)
                   '',                                       // 16 ADS
                   account.nome,                             // 17 conta
-                  uf,                                       // 18 Estado
+                  uf,                                       // 18 Estado (Tiny)
                 ]);
 
                 allDbRows.push({
                   numero_pedido: String(numEcom || orderId),
                   data: parseTinyDate(dp.data_pedido).slice(0,10),
                   conta: account.nome,
-                  conta_id: account.id, // Tiny accounts also have ID in table
+                  conta_id: account.id,
                   sku: sku,
                   quantidade: qtd,
                   valor_total: receita,
@@ -698,7 +782,12 @@ Deno.serve(async (req) => {
                   frete: Math.abs(frete),
                   marketplace: platLabel,
                   origem: account.nome,
-                  payload: { situacao: dp.situacao, ecommerce: dp.ecommerce }
+                  payload: {
+                    situacao: dp.situacao,
+                    ecommerce: dp.ecommerce,
+                    shopee_escrow: escrowIncome ? true : false,
+                    tarifa: Math.abs(tarifa),
+                  }
                 });
               }
             }
@@ -734,7 +823,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      const msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}`;
+      const hybridLabel = platLower === 'shopee' && shopeeAccount ? ' (HYBRID: Tiny+Shopee API)' : '';
+      const msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}${hybridLabel}`;
       console.log(`[SYNC] ${msg}`);
       return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: allRows.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
