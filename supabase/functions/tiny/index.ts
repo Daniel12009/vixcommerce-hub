@@ -108,20 +108,39 @@ function getTodayBR(): string {
 }
 
 // Fetch order details from Tiny
-async function fetchOrderDetail(token: string, orderId: string): Promise<any> {
+async function fetchOrderDetail(token: string, orderId: string, tentativa = 1): Promise<any> {
   const form = new URLSearchParams({
     token,
     id: orderId,
     formato: 'json',
   });
 
-  const res = await fetch(`${TINY_API}/pedido.obter.php`, {
-    method: 'POST',
-    body: form,
-  });
+  try {
+    const res = await fetch(`${TINY_API}/pedido.obter.php`, {
+      method: 'POST',
+      body: form,
+    });
+    const data = await res.json();
 
-  const data = await res.json();
-  return data?.retorno?.pedido || null;
+    if (data?.retorno?.status === 'Erro') {
+      if (tentativa <= 5) {
+        console.warn(`[TINY API] Servidor negou o detalhe do pedido ${orderId}. Castigo de 5 segundos...`);
+        await new Promise(r => setTimeout(r, 5000));
+        return fetchOrderDetail(token, orderId, tentativa + 1);
+      }
+      return null;
+    }
+
+    // Delay de 2 segundos para respeitar a API (conforme script Python original)
+    await new Promise(r => setTimeout(r, 2000));
+    return data?.retorno?.pedido || null;
+  } catch (e) {
+    if (tentativa <= 5) {
+      await new Promise(r => setTimeout(r, 5000));
+      return fetchOrderDetail(token, orderId, tentativa + 1);
+    }
+    return null;
+  }
 }
 
 // Search orders from Tiny with patient retry mode
