@@ -749,7 +749,7 @@ Deno.serve(async (req) => {
       const startPage = reqBody.page || 1;
       const startOffset = reqBody.offset || 0;
       const sheetMode = reqBody.sheetMode || 'write';
-      const MAX_PRODUCTS_PER_CALL = 10; // Process max 10 products per invocation to stay under timeout
+      const MAX_PRODUCTS_PER_CALL = 30; // Process 30 products per invocation (approx 45s)
 
       const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
       const SHEET_TAB = 'ESTOQUE-TINY';

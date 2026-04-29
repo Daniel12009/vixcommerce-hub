@@ -248,31 +248,41 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
   let sheetMode = (page === 1 && offset === 0) ? 'write' : 'append';
   let totalSkus = resumeTotal;
 
-  // Simple loop - same as the manual test browser loop
   try {
-    while (true) {
-      if (await isPaused()) {
-        log.push('🛑 Interrompido por STOP-LOCAL');
-        break;
-      }
-      log.push(`Estoque Tiny: pag ${page}, offset ${offset}...`);
-      const r = await invokeFunction('tiny', {
-        action: 'sync_estoque_tiny',
-        page,
-        offset,
-        sheetMode,
-      });
-      totalSkus += r.skus || 0;
+    if (await isPaused()) {
+      log.push('🛑 Interrompido por STOP-LOCAL');
+      return log;
+    }
+    
+    log.push(`Estoque Tiny: pag ${page}, offset ${offset}...`);
+    const r = await invokeFunction('tiny', {
+      action: 'sync_estoque_tiny',
+      page,
+      offset,
+      sheetMode,
+    });
+    totalSkus += r.skus || 0;
 
-      if (!r.hasMore) {
-        log.push(`Estoque Tiny: ${totalSkus} SKUs sincronizados`);
-        break;
-      }
-
-      page = r.nextPage;
-      offset = r.nextOffset || 0;
-      sheetMode = 'append';
-      await new Promise(resolve => setTimeout(resolve, 600));
+    if (!r.hasMore) {
+      log.push(`Estoque Tiny: Concluído! ${totalSkus} SKUs sincronizados`);
+    } else {
+      log.push(`[TINY ESTOQUE] Continua em background (Pág ${r.nextPage}, Offset ${r.nextOffset}). ${totalSkus} SKUs até agora.`);
+      
+      // Fire and forget self invocation to avoid timeout
+      fetch(`${SUPABASE_URL}/functions/v1/daily-sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SERVICE_KEY}`
+        },
+        body: JSON.stringify({ 
+          module: 'tiny_estoque', 
+          auto_chain: true, 
+          resume_page: r.nextPage, 
+          resume_offset: r.nextOffset, 
+          resume_total: totalSkus 
+        })
+      }).catch(e => console.error('Erro ao acorrentar tiny_estoque:', e));
     }
   } catch (e: any) {
     log.push(`ERRO Estoque Tiny (pag ${page}): ${e.message}`);
