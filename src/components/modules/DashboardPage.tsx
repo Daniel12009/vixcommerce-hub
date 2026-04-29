@@ -573,11 +573,11 @@ export function DashboardPage() {
 
   const { comprasItems, estoqueItems, estoqueFullItems, estoqueTinyItems } = useSheetsData();
 
-  // Top SKUs do dia com média real dos últimos 15 dias do SQL + comparativo de ontem
+  // Top SKUs do dia com média real dos últimos 15 dias do SQL + comparativo de ontem (filtrado)
   const topSkus = useMemo(() => {
     const map = new Map<string, { sku: string; vendas: number; faturamento: number; vendasOntem: number; faturamentoOntem: number; vmd: number; vmdFaturamento: number }>();
-    const ontemVendas: Record<string, number> = yesterdaySnapshot?.por_sku_vendas || {};
-    const ontemFat: Record<string, number> = yesterdaySnapshot?.por_sku_faturamento || {};
+    const ontemVendas: Record<string, number> = filteredYesterday?.por_sku_vendas || {};
+    const ontemFat: Record<string, number> = filteredYesterday?.por_sku_faturamento || {};
 
     paidOrders.forEach(o => {
       o.items.forEach(item => {
@@ -599,8 +599,24 @@ export function DashboardPage() {
         map.set(sku, cur);
       });
     });
+
+    // Garante que SKUs que venderam ontem (filtrado) também apareçam no comparativo
+    Object.keys(ontemVendas).forEach(sku => {
+      if (!map.has(sku)) {
+        map.set(sku, {
+          sku,
+          vendas: 0,
+          faturamento: 0,
+          vendasOntem: Number(ontemVendas[sku]) || 0,
+          faturamentoOntem: Number(ontemFat[sku]) || 0,
+          vmd: vmdSqlBySku.get(sku) || 0,
+          vmdFaturamento: vmdFatBySku.get(sku) || 0,
+        });
+      }
+    });
+
     return [...map.values()];
-  }, [paidOrders, vmdSqlBySku, vmdFatBySku, yesterdaySnapshot]);
+  }, [paidOrders, vmdSqlBySku, vmdFatBySku, filteredYesterday]);
 
   const topSkusByVendas = useMemo(() => 
     [...topSkus].sort((a, b) => b.vendas - a.vendas).slice(0, 10)
