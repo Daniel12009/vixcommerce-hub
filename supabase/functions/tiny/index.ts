@@ -745,8 +745,10 @@ Deno.serve(async (req) => {
               }
               if (!ecommerce) debugInfo.sem_ecommerce++;
 
-              // Filtrar apenas marketplace desejado
-              if (!ecommerce.includes(platLower)) continue;
+              // Filtrar apenas marketplace desejado (incluindo "monaco" caso o nome no Tiny tenha sido alterado)
+              if (!ecommerce.includes(platLower) && !ecommerce.includes('monaco')) {
+                continue;
+              }
               debugInfo.pedidos_shopee++;
 
               // Buscar detalhes do Tiny
