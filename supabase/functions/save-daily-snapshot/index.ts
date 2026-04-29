@@ -62,6 +62,10 @@ Deno.serve(async (req) => {
     // chave: `${hora}||${plataforma}||${canal}||${conta}`
     const detalhadoMap = new Map<string, { hora: string; plataforma: string; canal: string; conta: string; faturamento: number; pedidos: number }>();
 
+    // Detalhamento por SKU + plataforma + canal + conta (para gráficos Top SKUs filtrados)
+    // chave: `${sku}||${plataforma}||${canal}||${conta}`
+    const detalhadoSkuMap = new Map<string, { sku: string; plataforma: string; canal: string; conta: string; vendas: number; faturamento: number }>();
+
     // Replica classifyCanal do front (simplificado): drop = drop_shipping/dropshipping; full = fulfillment; outros default
     const classifyCanal = (o: any): string => {
       const tipo = String(o.logistic_type || o.shipping?.logistic?.type || '').toLowerCase();
@@ -111,8 +115,20 @@ Deno.serve(async (req) => {
         const fat = qty * (Number(it.unit_price) || 0);
         porSkuVendas[sk] = (porSkuVendas[sk] || 0) + qty;
         porSkuFat[sk] = (porSkuFat[sk] || 0) + fat;
+
+        // Detalhamento SKU x filtros
+        const skuKey = `${sk}||${plataforma}||${canal}||${c}`;
+        const existingSku = detalhadoSkuMap.get(skuKey);
+        if (existingSku) {
+          existingSku.vendas += qty;
+          existingSku.faturamento += fat;
+        } else {
+          detalhadoSkuMap.set(skuKey, { sku: sk, plataforma, canal, conta: c, vendas: qty, faturamento: fat });
+        }
       });
     });
+
+    const vendasDetalhadasSku = Array.from(detalhadoSkuMap.values());
 
     const vendasDetalhadas = Array.from(detalhadoMap.values());
 
@@ -136,6 +152,7 @@ Deno.serve(async (req) => {
         por_sku_vendas: porSkuVendas,
         por_sku_faturamento: porSkuFat,
         vendas_detalhadas: vendasDetalhadas,
+        vendas_detalhadas_sku: vendasDetalhadasSku,
       }, { onConflict: 'data_referencia' });
 
     if (error) throw error;
