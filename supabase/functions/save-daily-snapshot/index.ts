@@ -62,6 +62,10 @@ Deno.serve(async (req) => {
     // chave: `${hora}||${plataforma}||${canal}||${conta}`
     const detalhadoMap = new Map<string, { hora: string; plataforma: string; canal: string; conta: string; faturamento: number; pedidos: number }>();
 
+    // Detalhamento por SKU + plataforma + canal + conta (para gráficos Top SKUs filtrados)
+    // chave: `${sku}||${plataforma}||${canal}||${conta}`
+    const detalhadoSkuMap = new Map<string, { sku: string; plataforma: string; canal: string; conta: string; vendas: number; faturamento: number }>();
+
     // Replica classifyCanal do front (simplificado): drop = drop_shipping/dropshipping; full = fulfillment; outros default
     const classifyCanal = (o: any): string => {
       const tipo = String(o.logistic_type || o.shipping?.logistic?.type || '').toLowerCase();
