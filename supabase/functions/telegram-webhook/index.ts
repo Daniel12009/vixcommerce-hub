@@ -265,16 +265,50 @@ async function controlar_robo(params: any, supabase: any): Promise<string> {
   }
   
   const newMode = acao === 'ativar' ? 'active' : 'learning';
-  let query = supabase.from('ml_bot_config').update({ mode: newMode });
-  if (seller_id) query = query.eq('seller_id', seller_id);
-  // Se seller_id nao existir, precisa de um .is('seller_id', null) ou sem filtro. Sem filtro recusa no supabase se não tiver .neq('id', 0)
-  // Segurança para dar update em todas as linhas sem where
-  if (!seller_id) query = query.gt('seller_id', 0); // ou algo global
   
-  const { error } = await query;
-  if (error) return `Erro ao alterar o modo do bot: ${error.message}`;
+  // Update ML bots
+  let queryML = supabase.from('ml_bot_config').update({ mode: newMode });
+  if (seller_id) queryML = queryML.eq('seller_id', seller_id);
+  else queryML = queryML.gt('id', 0); // Update all
   
-  return `Robô ML ${acao === 'ativar' ? 'ativado (active)' : 'pausado (learning)'} ${seller_id ? 'para o seller ' + seller_id : 'para todas as contas'}.`;
+  const { error: errML } = await queryML;
+  
+  // Update Shopee bots (if table exists)
+  try {
+    let queryShopee = supabase.from('shopee_bot_config').update({ mode: newMode });
+    if (seller_id) queryShopee = queryShopee.eq('seller_id', seller_id);
+    else queryShopee = queryShopee.gt('id', 0);
+    await queryShopee;
+  } catch {}
+
+  if (errML) return `Erro ao alterar o modo do bot: ${errML.message}`;
+  
+  return `Robôs ${acao === 'ativar' ? 'ativados (active)' : 'pausados (learning)'} ${seller_id ? 'para o seller ' + seller_id : 'para todas as contas'}.`;
+}
+
+async function stopLocal(supabase: any): Promise<string> {
+  // 1. Pause all bots
+  await supabase.from('ml_bot_config').update({ mode: 'learning' }).gt('id', 0);
+  try {
+    await supabase.from('shopee_bot_config').update({ mode: 'learning' }).gt('id', 0);
+  } catch {}
+  
+  // 2. Set a flag in app_data for daily-sync to check
+  await supabase.from('app_data').upsert({ 
+    data_key: 'system_pause_flag', 
+    data_value: { paused: true, paused_at: new Date().toISOString() } 
+  }, { onConflict: 'data_key' });
+
+  return "🛑 COMANDO STOP-LOCAL RECEBIDO.\n\nTodos os robôs de resposta (ML e Shopee) foram colocados em modo LEARNING (Pausados).\nSincronizações em andamento podem continuar até o fim, mas novas não serão iniciadas se checarem a flag de pausa.";
+}
+
+async function startLocal(supabase: any): Promise<string> {
+  // 1. Clear pause flag
+  await supabase.from('app_data').update({ 
+    data_value: { paused: false, resumed_at: new Date().toISOString() } 
+  }).eq('data_key', 'system_pause_flag');
+
+  return "✅ COMANDO START-LOCAL RECEBIDO.\n\nA flag de pausa global foi removida. Note que os robôs individuais (ML/Shopee) continuam em modo LEARNING até que você os ative manualmente ou peça para eu ativar.";
 }
 
 /* =======================================================
@@ -326,6 +360,17 @@ Pergunta: ${userMessage}`,
   let maxIterations = 3 
 
   while (maxIterations-- > 0) {
+    // Check for kill switch INSIDE the loop
+    const { data: pauseFlag } = await supabase
+      .from('app_data')
+      .select('data_value')
+      .eq('data_key', 'system_pause_flag')
+      .maybeSingle();
+      
+    if (pauseFlag?.data_value?.paused) {
+      return "🛑 PROCESSAMENTO INTERROMPIDO PELO COMANDO STOP-LOCAL.";
+    }
+
     const toolUseBlocks = (response.content || []).filter((b: any) => b.type === 'tool_use')
     if (!toolUseBlocks.length) break
 
@@ -387,9 +432,21 @@ serve(async (req) => {
       return new Response('ok', { status: 200 })
     }
 
-    await sendTelegram(chatId, '⏳ Acionando IA para estruturar sua resposta...')
-
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
+
+    if (text.toUpperCase() === 'STOP-LOCAL') {
+      const msg = await stopLocal(supabase)
+      await sendTelegram(chatId, msg)
+      return new Response('ok', { status: 200 })
+    }
+
+    if (text.toUpperCase() === 'START-LOCAL') {
+      const msg = await startLocal(supabase)
+      await sendTelegram(chatId, msg)
+      return new Response('ok', { status: 200 })
+    }
+
+    await sendTelegram(chatId, '⏳ Acionando IA para estruturar sua resposta...')
 
     try {
       const finalAnswer = await processWithTools(text, supabase, chatId)

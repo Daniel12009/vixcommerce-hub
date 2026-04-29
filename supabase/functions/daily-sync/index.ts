@@ -147,6 +147,15 @@ async function getEnabledModules(): Promise<Record<string, boolean>> {
   return {};
 }
 
+async function isPaused(): Promise<boolean> {
+  try {
+    const pauseRows = await restGet('app_data?data_key=eq.system_pause_flag&select=data_value');
+    return pauseRows.length > 0 && !!pauseRows[0].data_value?.paused;
+  } catch {
+    return false;
+  }
+}
+
 // â”â”â” MODULE HANDLERS â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
 async function runMLModule(moduleKey: string, action: string, extraParams: Record<string, any>, dIni: string): Promise<string[]> {
@@ -241,6 +250,10 @@ async function runTinyEstoque(resumePage = 1, resumeOffset = 0, resumeTotal = 0)
   // Simple loop - same as the manual test browser loop
   try {
     while (true) {
+      if (await isPaused()) {
+        log.push('🛑 Interrompido por STOP-LOCAL');
+        break;
+      }
       log.push(`Estoque Tiny: pag ${page}, offset ${offset}...`);
       const r = await invokeFunction('tiny', {
         action: 'sync_estoque_tiny',
@@ -469,6 +482,20 @@ Deno.serve(async (req) => {
   const dIniBR = getYesterdayBR_DDMMYYYY();
   const runDate = getTodayBR();
 
+  // Check for system pause flag (kill switch)
+  try {
+    const pauseRows = await restGet('app_data?data_key=eq.system_pause_flag&select=data_value');
+    if (pauseRows.length > 0 && pauseRows[0].data_value?.paused) {
+      const msg = `⚠️ Sincronização BLOQUEADA pela flag STOP-LOCAL (Pausada em: ${pauseRows[0].data_value.paused_at})`;
+      console.log(msg);
+      return new Response(JSON.stringify({ sucesso: false, message: msg, paused: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } catch (e) {
+    console.warn('Erro ao checar pause flag:', e);
+  }
+
   // If no module specified, run ALL enabled modules sequentially (manual/legacy mode)
   if (!targetModule) {
     const modules = await getEnabledModules();
@@ -482,6 +509,10 @@ Deno.serve(async (req) => {
     }
 
     for (const key of enabledKeys) {
+      if (await isPaused()) {
+        allLog.push('🛑 Sincronização interrompida pelo comando STOP-LOCAL.');
+        break;
+      }
       const moduleLog = await executeModule(key, dIni, dIniBR, runDate);
       allLog.push(...moduleLog);
     }

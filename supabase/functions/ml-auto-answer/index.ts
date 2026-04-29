@@ -209,6 +209,26 @@ serve(async (req) => {
     (Deno.env.get('EXTERNAL_DB_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!
   )
 
+  // Check for system pause flag (kill switch)
+  try {
+    const { data: pauseFlag } = await supabase
+      .from('app_data')
+      .select('data_value')
+      .eq('data_key', 'system_pause_flag')
+      .maybeSingle();
+      
+    if (pauseFlag?.data_value?.paused) {
+      return new Response(JSON.stringify({ 
+        ok: false, 
+        message: `Robô pausado pelo comando STOP-LOCAL (${pauseFlag.data_value.paused_at})` 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } catch (e) {
+    console.warn('Erro ao checar pause flag:', e);
+  }
+
   try {
     const { data: pending } = await supabase
       .from('ml_questions_queue')
@@ -225,6 +245,18 @@ serve(async (req) => {
     let manualCount = 0
 
     for (const question of pending ?? []) {
+      // Check for kill switch INSIDE the loop
+      const { data: pf } = await supabase
+        .from('app_data')
+        .select('data_value')
+        .eq('data_key', 'system_pause_flag')
+        .maybeSingle();
+      
+      if (pf?.data_value?.paused) {
+        log(`[BOT] 🛑 INTERRUPÇÃO POR STOP-LOCAL.`);
+        break;
+      }
+
       log(`[BOT] Processing question ${question.id} for seller ${question.seller_id}...`);
       
       const { data: templates, error: tErr } = await supabase
