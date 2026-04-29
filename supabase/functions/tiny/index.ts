@@ -712,6 +712,7 @@ Deno.serve(async (req) => {
 
       const allRows: any[][] = [];
       const allDbRows: any[] = [];
+      const debugInfo: any = { contas_tiny: accounts.length, total_pedidos: 0, pedidos_shopee: 0, cancelados: 0, sem_ecommerce: 0, ecommerce_samples: [] as string[], date_from, date_to, platLower };
 
       for (const account of accounts) {
         try {
@@ -738,8 +739,15 @@ Deno.serve(async (req) => {
               const numEcom = (pedido.numero_ecommerce || '').toString();
               const ecommerce = (pedido.ecommerce || pedido.nome_ecommerce || '').toString().toLowerCase();
 
+              debugInfo.total_pedidos++;
+              if (debugInfo.ecommerce_samples.length < 10 && ecommerce) {
+                debugInfo.ecommerce_samples.push(`${ecommerce} (num:${numEcom.substring(0,10)})`);
+              }
+              if (!ecommerce) debugInfo.sem_ecommerce++;
+
               // Filtrar apenas marketplace desejado
               if (!ecommerce.includes(platLower)) continue;
+              debugInfo.pedidos_shopee++;
 
               // Buscar detalhes do Tiny
               const orderId = pedido.id || pedido.numero;
@@ -892,7 +900,7 @@ Deno.serve(async (req) => {
       const hybridLabel = platLower === 'shopee' && shopeeAccount ? ' (HYBRID: Tiny+Shopee API)' : '';
       const msg = `${platLabel}: ${allRows.length} linhas escritas em ${sheetTab}${hybridLabel}`;
       console.log(`[SYNC] ${msg}`);
-      return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: allRows.length }), {
+      return new Response(JSON.stringify({ mensagem: msg, linhas_escritas: allRows.length, debug: debugInfo }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

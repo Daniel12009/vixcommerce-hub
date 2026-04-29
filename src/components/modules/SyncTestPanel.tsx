@@ -908,6 +908,9 @@ function ManualTestSection() {
           toast.success('Ciclo completo executado!');
         } else {
           addLog(`✅ ${result.mensagem || 'Concluído com sucesso'}`, 'ok');
+          if (result.debug) {
+            addLog(`🔍 DEBUG: ${JSON.stringify(result.debug)}`, 'running');
+          }
           toast.success(result.mensagem || 'Sucesso!');
         }
       }
