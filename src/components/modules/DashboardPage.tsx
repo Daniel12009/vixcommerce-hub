@@ -499,7 +499,16 @@ export function DashboardPage() {
       }
     }
 
-    return { vendas_por_hora, por_conta: porConta, por_sku_vendas: porSkuVendas, por_sku_faturamento: porSkuFat, sem_detalhe: false };
+    const result = { vendas_por_hora, por_conta: porConta, por_sku_vendas: porSkuVendas, por_sku_faturamento: porSkuFat, sem_detalhe: false };
+    console.log('[Dashboard] filteredYesterday:', {
+      filtros: { plataforma: filterPlataforma, canal: filterCanal, conta: filterConta },
+      detalheTotal: detalhe.length,
+      detalheFiltrado: filt.length,
+      contas: Object.keys(porConta).length,
+      skus: Object.keys(porSkuVendas).length,
+      totalFat: Object.values(porConta).reduce((s, v) => s + (Number(v) || 0), 0),
+    });
+    return result;
   }, [yesterdaySnapshot, filterPlataforma, filterCanal, filterConta]);
 
   // Faturamento por Conta (Bar) — inclui comparativo com ontem
