@@ -228,9 +228,12 @@ export function DashboardPage() {
       const dateStr = yesterday.toISOString().split('T')[0];
 
       // Invalida cache se a data de "ontem" mudou (virou o dia) OU se o cache está incompleto
+      // (sem por_conta, sem vendas_detalhadas, ou sem vendas_detalhadas_sku quando deveria ter)
       const cacheIncompleto = _cachedYesterday && (
         !_cachedYesterday.por_conta ||
-        Object.keys(_cachedYesterday.por_conta || {}).length === 0
+        Object.keys(_cachedYesterday.por_conta || {}).length === 0 ||
+        !Array.isArray(_cachedYesterday.vendas_detalhadas) ||
+        _cachedYesterday.vendas_detalhadas.length === 0
       );
       const needsYesterdayFetch = !_cachedYesterday || _cachedYesterdayDate !== dateStr || cacheIncompleto;
 
