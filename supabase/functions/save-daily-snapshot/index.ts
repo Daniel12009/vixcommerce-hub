@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
     const spOffset = -3 * 60;
     const now = new Date();
     const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
-    const dateRef = localNow.toISOString().split('T')[0];
+    const dateRef = dataRefOverride || localNow.toISOString().split('T')[0];
 
     console.log(`[Snapshot] Saving snapshot for ${dateRef}. Total: R$ ${totalFat.toFixed(2)}`);
 
