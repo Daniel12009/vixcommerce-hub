@@ -227,13 +227,12 @@ export function DashboardPage() {
       yesterday.setUTCDate(yesterday.getUTCDate() - 1);
       const dateStr = yesterday.toISOString().split('T')[0];
 
-      // Invalida cache se a data de "ontem" mudou (virou o dia) OU se o cache está incompleto
-      // (sem por_conta, sem vendas_detalhadas, ou sem vendas_detalhadas_sku quando deveria ter)
+      // Invalida cache só se a data virou OU se está realmente sem dados (sem por_conta).
+      // Snapshots antigos sem `vendas_detalhadas` são válidos — o fallback em filteredYesterday
+      // usa vendas_por_hora/por_conta/por_sku_vendas quando não há filtro ativo.
       const cacheIncompleto = _cachedYesterday && (
         !_cachedYesterday.por_conta ||
-        Object.keys(_cachedYesterday.por_conta || {}).length === 0 ||
-        !Array.isArray(_cachedYesterday.vendas_detalhadas) ||
-        _cachedYesterday.vendas_detalhadas.length === 0
+        Object.keys(_cachedYesterday.por_conta || {}).length === 0
       );
       const needsYesterdayFetch = !_cachedYesterday || _cachedYesterdayDate !== dateStr || cacheIncompleto;
 
