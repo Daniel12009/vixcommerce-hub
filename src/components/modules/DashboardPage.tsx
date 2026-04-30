@@ -186,45 +186,52 @@ export function DashboardPage() {
       _cachedOrders = allFetched;
 
       // Salva/atualiza snapshot do dia atual a cada refresh do Dashboard
-      const paidForSnapshot = allFetched.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
-      const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
-      for (let h = 0; h <= 23; h++) {
-        const label = `${String(h).padStart(2, '0')}h`;
-        horaMap.set(label, { hora: label, faturamento: 0, pedidos: 0 });
-      }
-      const porContaSnap: Record<string, number> = {};
-      const porSkuVendasSnap: Record<string, number> = {};
-      const porSkuFatSnap: Record<string, number> = {};
-      paidForSnapshot.forEach(o => {
-        const label = `${String(getBRTHour(o.date_created)).padStart(2, '0')}h`;
-        const cur = horaMap.get(label);
-        if (cur) {
-          cur.faturamento += o.total_amount || 0;
-          cur.pedidos += 1;
+      // Salva snapshot do dia atual — bloco isolado em try/catch para não derrubar o resto
+      // do fluxo (busca do snapshot de ontem) caso uma data inválida vinda dos marketplaces
+      // gere "Invalid time value".
+      try {
+        const paidForSnapshot = allFetched.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
+        const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
+        for (let h = 0; h <= 23; h++) {
+          const label = `${String(h).padStart(2, '0')}h`;
+          horaMap.set(label, { hora: label, faturamento: 0, pedidos: 0 });
         }
-        const c = (o.conta || 'Outros').toString();
-        porContaSnap[c] = (porContaSnap[c] || 0) + (Number(o.total_amount) || 0);
-        (o.items || []).forEach((it: any) => {
-          const skuRaw = it.sku || '';
-          if (!skuRaw) return;
-          const sk = canonicalSku(skuRaw);
-          const qty = Number(it.quantity) || 0;
-          const fat = qty * (Number(it.unit_price) || 0);
-          porSkuVendasSnap[sk] = (porSkuVendasSnap[sk] || 0) + qty;
-          porSkuFatSnap[sk] = (porSkuFatSnap[sk] || 0) + fat;
+        const porContaSnap: Record<string, number> = {};
+        const porSkuVendasSnap: Record<string, number> = {};
+        const porSkuFatSnap: Record<string, number> = {};
+        paidForSnapshot.forEach(o => {
+          const label = `${String(getBRTHour(o.date_created)).padStart(2, '0')}h`;
+          const cur = horaMap.get(label);
+          if (cur) {
+            cur.faturamento += o.total_amount || 0;
+            cur.pedidos += 1;
+          }
+          const c = (o.conta || 'Outros').toString();
+          porContaSnap[c] = (porContaSnap[c] || 0) + (Number(o.total_amount) || 0);
+          (o.items || []).forEach((it: any) => {
+            const skuRaw = it.sku || '';
+            if (!skuRaw) return;
+            const sk = canonicalSku(skuRaw);
+            const qty = Number(it.quantity) || 0;
+            const fat = qty * (Number(it.unit_price) || 0);
+            porSkuVendasSnap[sk] = (porSkuVendasSnap[sk] || 0) + qty;
+            porSkuFatSnap[sk] = (porSkuFatSnap[sk] || 0) + fat;
+          });
         });
-      });
-      (supabase as any).from('daily_sales_snapshots').upsert({
-        data_referencia: getBRTDateStr(),
-        vendas_por_hora: Array.from(horaMap.values()),
-        total_faturamento: paidForSnapshot.reduce((s, o) => s + (o.total_amount || 0), 0),
-        total_pedidos: paidForSnapshot.length,
-        por_conta: porContaSnap,
-        por_sku_vendas: porSkuVendasSnap,
-        por_sku_faturamento: porSkuFatSnap,
-      }, { onConflict: 'data_referencia' }).then(({ error }: any) => {
-        if (error) console.warn('Erro ao salvar snapshot do dashboard:', error);
-      });
+        (supabase as any).from('daily_sales_snapshots').upsert({
+          data_referencia: getBRTDateStr(),
+          vendas_por_hora: Array.from(horaMap.values()),
+          total_faturamento: paidForSnapshot.reduce((s, o) => s + (o.total_amount || 0), 0),
+          total_pedidos: paidForSnapshot.length,
+          por_conta: porContaSnap,
+          por_sku_vendas: porSkuVendasSnap,
+          por_sku_faturamento: porSkuFatSnap,
+        }, { onConflict: 'data_referencia' }).then(({ error }: any) => {
+          if (error) console.warn('Erro ao salvar snapshot do dashboard:', error);
+        });
+      } catch (snapErr: any) {
+        console.warn('[Dashboard] Falha ao montar snapshot do dia (ignorada):', snapErr?.message || snapErr);
+      }
       
       // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
