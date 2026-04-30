@@ -242,10 +242,18 @@ export function DashboardPage() {
           .maybeSingle();
 
         if (snap) {
+          console.log('[Dashboard] Snapshot ontem carregado:', dateStr, {
+            total: snap.total_faturamento,
+            contas: Object.keys(snap.por_conta || {}).length,
+            skus: Object.keys(snap.por_sku_vendas || {}).length,
+            detalhe: Array.isArray(snap.vendas_detalhadas) ? snap.vendas_detalhadas.length : 0,
+            detalheSku: Array.isArray(snap.vendas_detalhadas_sku) ? snap.vendas_detalhadas_sku.length : 0,
+          });
           setYesterdaySnapshot(snap);
           _cachedYesterday = snap;
           _cachedYesterdayDate = dateStr;
         } else {
+          console.warn('[Dashboard] Sem snapshot para', dateStr, '— tentando fallback vendas_items');
           // Fallback: monta o snapshot a partir de vendas_items (planilha Vendas)
           try {
             const yDD = String(yesterday.getUTCDate()).padStart(2, '0');
@@ -491,7 +499,16 @@ export function DashboardPage() {
       }
     }
 
-    return { vendas_por_hora, por_conta: porConta, por_sku_vendas: porSkuVendas, por_sku_faturamento: porSkuFat, sem_detalhe: false };
+    const result = { vendas_por_hora, por_conta: porConta, por_sku_vendas: porSkuVendas, por_sku_faturamento: porSkuFat, sem_detalhe: false };
+    console.log('[Dashboard] filteredYesterday:', {
+      filtros: { plataforma: filterPlataforma, canal: filterCanal, conta: filterConta },
+      detalheTotal: detalhe.length,
+      detalheFiltrado: filt.length,
+      contas: Object.keys(porConta).length,
+      skus: Object.keys(porSkuVendas).length,
+      totalFat: Object.values(porConta).reduce((s, v) => s + (Number(v) || 0), 0),
+    });
+    return result;
   }, [yesterdaySnapshot, filterPlataforma, filterCanal, filterConta]);
 
   // Faturamento por Conta (Bar) — inclui comparativo com ontem
