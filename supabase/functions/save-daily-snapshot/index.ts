@@ -16,7 +16,12 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('[Snapshot] Starting daily sales snapshot...');
+    // Aceita { data_referencia: 'YYYY-MM-DD' } no body para regenerar snapshot retroativo
+    let bodyJson: any = {};
+    try { bodyJson = await req.json(); } catch { /* sem body */ }
+    const dataRefOverride: string | null = typeof bodyJson?.data_referencia === 'string' ? bodyJson.data_referencia : null;
+
+    console.log('[Snapshot] Starting daily sales snapshot...', dataRefOverride ? `(override: ${dataRefOverride})` : '');
 
     const fetchFunc = async (name: string, action: string) => {
       const res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
