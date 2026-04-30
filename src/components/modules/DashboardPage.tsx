@@ -100,11 +100,18 @@ const getBRTDateStr = (date = new Date()) => {
   return `${y}-${m}-${d}`;
 };
 
-const getBRTHour = (iso: string) => {
-  const h = Number(new Intl.DateTimeFormat('pt-BR', {
-    timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false,
-  }).formatToParts(new Date(iso)).find(p => p.type === 'hour')?.value || 0);
-  return h === 24 ? 0 : h;
+const getBRTHour = (iso: string): number => {
+  if (!iso) return 0;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 0;
+  try {
+    const h = Number(new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false,
+    }).formatToParts(d).find(p => p.type === 'hour')?.value || 0);
+    return h === 24 ? 0 : h;
+  } catch {
+    return d.getHours();
+  }
 };
 
 // Module-level cache — survives component unmount/remount during navigation
