@@ -1062,7 +1062,12 @@ export function DashboardPage() {
                 <tbody>
                   {todosPedidosDia.map((o) => (
                     <tr key={o.id} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
-                      <td className="py-2.5 px-3">{new Date(o.date_created).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+                      <td className="py-2.5 px-3">{(() => {
+                        const d = o.date_created ? new Date(o.date_created) : null;
+                        return d && !isNaN(d.getTime())
+                          ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                          : '--:--';
+                      })()}</td>
                       <td className="py-2.5 px-3">
                         <span className="inline-flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[o.plataforma || ''] || '#999' }} />
