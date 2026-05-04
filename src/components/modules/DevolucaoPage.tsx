@@ -34,20 +34,22 @@ const parseDate = (str: string): Date | null => {
     }
   }
 
-  // Serial Excel/Sheets (apenas para ranges plausíveis: 2020-01-01 ≈ 43831, 2030-12-31 ≈ 47848)
+  // Serial Excel/Sheets: range apertado 2024-01-01 (45292) até hoje + 30d
   if (!d || isNaN(d.getTime())) {
     const num = Number(s);
-    if (!isNaN(num) && num >= 43800 && num <= 47900) {
+    const todaySerial = Math.floor(Date.now() / 86400000) + 25569 + 30;
+    if (!isNaN(num) && num >= 45292 && num <= todaySerial) {
       d = new Date((num - 25569) * 86400000);
       d.setHours(12, 0, 0, 0);
     }
   }
 
-  // Validação final: ano deve estar entre 2020 e 2030
+  // Validação final: ano deve estar entre 2024 e ano atual
   if (d && !isNaN(d.getTime())) {
     const y = d.getFullYear();
-    if (y < 2020 || y > 2030) {
-      console.warn(`[Devolucao] Data fora do range 2020-2030 descartada: "${str}" -> ${d.toISOString()}`);
+    const currentYear = new Date().getFullYear();
+    if (y < 2024 || y > currentYear) {
+      console.warn(`[Devolucao] Data fora do range válido descartada: "${str}" -> ${d.toISOString()}`);
       return null;
     }
     return d;
