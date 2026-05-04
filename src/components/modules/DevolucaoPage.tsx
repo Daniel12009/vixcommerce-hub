@@ -832,28 +832,86 @@ export function DevolucaoPage() {
         <div className="space-y-6">
           {/* Cards de Variação Mensal */}
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {[...monthlyEvolution].reverse().map(m => (
-              <div key={m.monthKey} className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-foreground capitalize">{m.label}</span>
-                  <div className={`flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${m.varQtd > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                    {m.varQtd > 0 ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    {Math.abs(Math.round(m.varQtd))}%
+            {[...monthlyEvolution].reverse().map(m => {
+              const isOpen = expandedMonth === m.monthKey;
+              return (
+                <button
+                  key={m.monthKey}
+                  onClick={() => setExpandedMonth(isOpen ? null : m.monthKey)}
+                  className={`text-left bg-card border rounded-xl p-4 flex flex-col gap-3 transition-all hover:border-primary hover:shadow-md ${isOpen ? 'border-primary ring-2 ring-primary/20' : 'border-border'}`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-foreground capitalize">{m.label}</span>
+                    <div className={`flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${m.varQtd > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                      {m.varQtd > 0 ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      {Math.abs(Math.round(m.varQtd))}%
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Devoluções</p>
+                      <p className="text-lg font-bold text-foreground">{m.qtd}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
+                      <p className="text-lg font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-primary font-medium flex items-center gap-1">
+                    {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {isOpen ? 'Ocultar detalhes' : 'Ver detalhes'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Detalhes do mês expandido */}
+          {expandedMonth && monthDetails && (
+            <div className="bg-card border border-primary/40 rounded-xl p-5 space-y-4 animate-in fade-in slide-in-from-top-2">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Detalhes — {monthlyEvolution.find(m => m.monthKey === expandedMonth)?.label} · {monthDetails.total} devoluções
+                </h3>
+                <button onClick={() => setExpandedMonth(null)} className="text-xs text-muted-foreground hover:text-foreground">Fechar ✕</button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Top SKUs Devolvidos</p>
+                  <div className="space-y-1.5">
+                    {monthDetails.topSkus.map((s, idx) => (
+                      <div key={s.sku} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-muted/40">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-muted-foreground font-medium w-5">{idx + 1}</span>
+                          <span className="font-mono font-semibold text-foreground truncate">{s.sku}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="font-bold text-foreground">{s.total}</span>
+                          <span className="text-muted-foreground">{formatBRL(s.valor)}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {monthDetails.topSkus.length === 0 && <p className="text-xs text-muted-foreground">Sem dados</p>}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Devoluções</p>
-                    <p className="text-lg font-bold text-foreground">{m.qtd}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
-                    <p className="text-lg font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Principais Motivos</p>
+                  <div className="space-y-1.5">
+                    {monthDetails.topMotivos.map((m, idx) => (
+                      <div key={m.motivo} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-muted/40">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-muted-foreground font-medium w-5">{idx + 1}</span>
+                          <span className="text-foreground truncate" title={m.motivo}>{m.motivo}</span>
+                        </div>
+                        <span className="font-bold text-foreground shrink-0">{m.total}</span>
+                      </div>
+                    ))}
+                    {monthDetails.topMotivos.length === 0 && <p className="text-xs text-muted-foreground">Sem dados</p>}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
 
           {/* Gráfico de Composição Mensal */}
           <div className="bg-card border border-border rounded-xl p-5">
