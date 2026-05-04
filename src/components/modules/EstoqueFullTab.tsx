@@ -44,7 +44,7 @@ export function EstoqueFullTab() {
   const [filterStatus, setFilterStatus] = useState<FullRowStatus | 'all'>('all');
   const [filterConta, setFilterConta] = useState<string>('all');
   const [sortField, setSortField] = useState<keyof FullRow>('status');
-  const [sortDir, setSortDir] = useState<'desc' | 'desc'>('desc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const normalizeConta = (s: string) => {
     if (!s) return '';
@@ -61,7 +61,7 @@ export function EstoqueFullTab() {
     const map = new Map<string, number>();
     if (!vendas7dItems) return map;
     
-    const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase().replace(/\s/g, '') : '';
+    const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase() : '';
 
     vendas7dItems.forEach(item => {
       if (!item.sku) return;
@@ -80,7 +80,7 @@ export function EstoqueFullTab() {
     const MAIN_ACCOUNTS = ['VIAFLIX', 'GS', 'MONACO'];
     const tinyMap = new Map<string, number>();
     
-    const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase().replace(/\s/g, '') : '';
+    const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase() : '';
 
     (estoqueTinyItems || [])
       .filter(i => i.sku && i.sku.toUpperCase() !== 'SKU') // Filter out header row
