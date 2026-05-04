@@ -111,55 +111,6 @@ export function DevolucaoPage() {
     if (filterSetor !== 'all') result = result.filter(i => i.setor === filterSetor);
     if (filterSituacao !== 'all') result = result.filter(i => i.situacaoMercadoria === filterSituacao);
     if (filterPlataforma !== 'all') result = result.filter(i => i.plataforma === filterPlataforma);
-    // Date filter — handles: dd/mm/yyyy, yyyy-mm-dd, mm/dd/yyyy, serial numbers
-    const parseDate = (str: string): Date | null => {
-      if (!str) return null;
-      const s = str.trim();
-      let d: Date | null = null;
-
-      // 1. Formatos DD/MM/YYYY, DD-MM-YYYY, D/M/YYYY ou DD/MM/YY
-      const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
-      if (dmyMatch) {
-        let year = +dmyMatch[3];
-        if (year < 100) year += 2000; // Converte YY para 20YY
-        const month = dmyMatch[2].padStart(2, '0');
-        const day = dmyMatch[1].padStart(2, '0');
-        // Usamos T12:00:00-03:00 para garantir que a data caia no dia correto em BRT
-        d = new Date(`${year}-${month}-${day}T12:00:00-03:00`);
-      }
-      
-      // 2. Formatos YYYY-MM-DD ou YYYY/MM/DD
-      if (!d || isNaN(d.getTime())) {
-        const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-        if (isoMatch) {
-          const month = isoMatch[2].padStart(2, '0');
-          const day = isoMatch[3].padStart(2, '0');
-          d = new Date(`${isoMatch[1]}-${month}-${day}T12:00:00-03:00`);
-        }
-      }
-
-      // 3. Número Serial (Excel/Google Sheets)
-      if (!d || isNaN(d.getTime())) {
-        const num = Number(s);
-        if (!isNaN(num) && num > 30000 && num < 60000) {
-          d = new Date((num - 25569) * 86400000);
-          // Ajusta para o meio do dia para evitar problemas de borda de fuso
-          d.setHours(12, 0, 0, 0);
-        }
-      }
-
-      // 4. Tentativa nativa final
-      if (!d || isNaN(d.getTime())) {
-        const native = new Date(s);
-        if (!isNaN(native.getTime())) d = native;
-      }
-
-      if (d && !isNaN(d.getTime())) return d;
-
-      // Log de diagnóstico para valores que falharam
-      console.warn(`[Devolucao] Falha ao converter data: "${str}"`);
-      return null;
-    };
     if (periodDays !== 'custom' && periodDays !== 'all') {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - periodDays);
