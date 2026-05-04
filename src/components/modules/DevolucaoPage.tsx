@@ -887,7 +887,7 @@ export function DevolucaoPage() {
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">% Fat.</p>
                       <p className="text-sm font-bold text-foreground">
-                        {m.pctFaturamento != null ? `${m.pctFaturamento.toFixed(2)}%` : '—'}
+                        {m.pctFaturamento != null ? `${m.pctFaturamento.toFixed(1)}%` : '—'}
                       </p>
                     </div>
                   </div>
