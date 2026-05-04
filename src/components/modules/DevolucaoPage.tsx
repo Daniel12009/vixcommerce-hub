@@ -20,7 +20,7 @@ const SITUACAO_COLORS: Record<string, string> = {
   'NÃO VENDÁVEL': 'bg-red-500/10 text-red-400',
 };
 
-type TabId = 'resumo' | 'devolucoes';
+type TabId = 'resumo' | 'devolucoes' | 'evolucao';
 
 export function DevolucaoPage() {
   const { devolucaoItems, refreshModule, refreshingModule } = useSheetsData();
@@ -274,6 +274,49 @@ export function DevolucaoPage() {
     else { setSortCol(col); setSortDir('desc'); }
   };
 
+  // Evolução Mensal Logic
+  const monthlyEvolution = useMemo(() => {
+    const map = new Map<string, { 
+      monthKey: string; 
+      label: string; 
+      qtd: number; 
+      reembolso: number; 
+      custo: number; 
+    }>();
+    
+    // Filtramos apenas por status/setor/plataforma, ignorando o filtro de data fixo
+    let baseItems = items;
+    if (filterStatus !== 'all') baseItems = baseItems.filter(i => i.statusDevolucao === filterStatus);
+    if (filterSetor !== 'all') baseItems = baseItems.filter(i => i.setor === filterSetor);
+    if (filterSituacao !== 'all') baseItems = baseItems.filter(i => i.situacaoMercadoria === filterSituacao);
+    if (filterPlataforma !== 'all') baseItems = baseItems.filter(i => i.plataforma === filterPlataforma);
+
+    baseItems.forEach(i => {
+      const d = parseDate(i.dataReembolso);
+      if (!d) return;
+      
+      const month = d.getMonth();
+      const year = d.getFullYear();
+      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+      
+      const cur = map.get(key) || { monthKey: key, label, qtd: 0, reembolso: 0, custo: 0 };
+      cur.qtd += 1;
+      cur.reembolso += i.valorReembolso;
+      cur.custo += i.totalCustoMercadoria;
+      map.set(key, cur);
+    });
+
+    const sorted = [...map.values()].sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+    
+    return sorted.map((m, idx) => {
+      const prev = sorted[idx - 1];
+      const varQtd = prev && prev.qtd > 0 ? ((m.qtd - prev.qtd) / prev.qtd) * 100 : 0;
+      const varReembolso = prev && prev.reembolso > 0 ? ((m.reembolso - prev.reembolso) / prev.reembolso) * 100 : 0;
+      return { ...m, varQtd, varReembolso };
+    }).slice(-12); // Exibir últimos 12 meses
+  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma]);
+
   const SortIcon = ({ col }: { col: string }) => {
     if (sortCol !== col) return null;
     return sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-0.5" /> : <ChevronDown className="w-3 h-3 inline ml-0.5" />;
@@ -282,6 +325,7 @@ export function DevolucaoPage() {
   const tabs: { id: TabId; label: string }[] = [
     { id: 'resumo', label: 'Resumo' },
     { id: 'devolucoes', label: 'Devoluções' },
+    { id: 'evolucao', label: 'Evolução Mensal' },
   ];
 
   return (
@@ -755,6 +799,70 @@ export function DevolucaoPage() {
               <span className="text-xs text-muted-foreground">Total reembolso: <b className="text-foreground">{formatBRL(totalReembolso)}</b></span>
             </div>
           )}
+        </div>
+      )}
+      {activeTab === 'evolucao' && (
+        <div className="space-y-6">
+          {/* Cards de Variação Mensal */}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {[...monthlyEvolution].reverse().map(m => (
+              <div key={m.monthKey} className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold text-foreground capitalize">{m.label}</span>
+                  <div className={`flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${m.varQtd > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                    {m.varQtd > 0 ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {Math.abs(Math.round(m.varQtd))}%
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Devoluções</p>
+                    <p className="text-lg font-bold text-foreground">{m.qtd}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
+                    <p className="text-lg font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Gráfico de Composição Mensal */}
+          <div className="bg-card border border-border rounded-xl p-5">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-sm font-semibold text-foreground">Performance Temporal de Devoluções</h3>
+              <div className="flex gap-4 text-[10px] font-medium text-muted-foreground">
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Qtd</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Reembolso</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Custo</div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={400}>
+              <ComposedChart data={monthlyEvolution}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                  formatter={(v: number, name: string) => [
+                    name === 'qtd' ? v : formatBRL(v),
+                    name === 'qtd' ? 'Qtd Devoluções' : name === 'reembolso' ? 'Valor Reembolso' : 'Custo Mercadoria'
+                  ]}
+                />
+                <Bar yAxisId="left" dataKey="qtd" name="qtd" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
+                <Area yAxisId="right" type="monotone" dataKey="reembolso" name="reembolso" fill="url(#colorReembolso)" stroke="#f59e0b" strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="custo" name="custo" stroke="#f43f5e" strokeWidth={2} dot={{ r: 4, fill: '#f43f5e' }} />
+                <defs>
+                  <linearGradient id="colorReembolso" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>
