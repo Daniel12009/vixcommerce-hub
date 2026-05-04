@@ -13,8 +13,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { GraficosTab } from './GraficosTab';
-import { PerformanceAdsTab } from './PerformanceAdsTab';
 import { StatusAnunciosTab } from './StatusAnunciosTab';
+import { EstoqueFullTab } from './EstoqueFullTab';
+import { PerformanceAdsTab } from './PerformanceAdsTab';
 import { CalculadoraTab } from './CalculadoraTab';
 import { CatalogExperienceTab } from './CatalogExperienceTab';
 import { AccordionTaskRow, AccordionTriggerButton } from './AccordionTaskRow';
@@ -794,6 +795,7 @@ export function AtualizarDadosPage() {
           <TabsTrigger value="pedidos">Vendas / Pedidos</TabsTrigger>
           <TabsTrigger value="ads">Performance Anúncios</TabsTrigger>
           <TabsTrigger value="status-anuncios">Status Anúncios</TabsTrigger>
+          <TabsTrigger value="anuncios-full">📦 Anúncios Full</TabsTrigger>
           <TabsTrigger value="perf-ads">Performance ADS</TabsTrigger>
           <TabsTrigger value="experiencia">🛡️ Experiência de Compra</TabsTrigger>
           <TabsTrigger value="calculadora">🧮 Calculadora</TabsTrigger>
@@ -1488,6 +1490,11 @@ export function AtualizarDadosPage() {
         {/* Tab: Status Anúncios */}
         <TabsContent value="status-anuncios">
           <StatusAnunciosTab />
+        </TabsContent>
+
+        {/* Tab: Anúncios Full */}
+        <TabsContent value="anuncios-full">
+          <EstoqueFullTab />
         </TabsContent>
       </Tabs>
     </div>
