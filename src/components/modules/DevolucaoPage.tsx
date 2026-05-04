@@ -877,20 +877,20 @@ export function DevolucaoPage() {
                       {Math.abs(Math.round(m.varQtd))}%
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">Devoluções</p>
-                      <p className="text-lg font-bold text-foreground">{m.qtd}</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[10px] text-muted-foreground uppercase">Devoluções</span>
+                      <span className="text-base font-bold text-foreground">{m.qtd}</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[10px] text-muted-foreground uppercase">Reembolso</span>
+                      <span className="text-sm font-semibold text-foreground">{formatBRL(m.reembolso)}</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">% Fat.</p>
-                      <p className="text-sm font-bold text-foreground">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[10px] text-muted-foreground uppercase">% Faturamento</span>
+                      <span className="text-sm font-semibold text-foreground">
                         {m.pctFaturamento != null ? `${m.pctFaturamento.toFixed(1)}%` : '—'}
-                      </p>
+                      </span>
                     </div>
                   </div>
                   <div className="text-[10px] text-primary font-medium flex items-center gap-1">
