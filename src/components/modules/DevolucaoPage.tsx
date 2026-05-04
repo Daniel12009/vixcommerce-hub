@@ -311,6 +311,39 @@ export function DevolucaoPage() {
     }).slice(-12); // Exibir últimos 12 meses
   }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma]);
 
+  // Detalhes do mês expandido (top SKUs + top motivos)
+  const monthDetails = useMemo(() => {
+    if (!expandedMonth) return null;
+    let baseItems = items;
+    if (filterStatus !== 'all') baseItems = baseItems.filter(i => i.statusDevolucao === filterStatus);
+    if (filterSetor !== 'all') baseItems = baseItems.filter(i => i.setor === filterSetor);
+    if (filterSituacao !== 'all') baseItems = baseItems.filter(i => i.situacaoMercadoria === filterSituacao);
+    if (filterPlataforma !== 'all') baseItems = baseItems.filter(i => i.plataforma === filterPlataforma);
+    const monthItems = baseItems.filter(i => {
+      const d = parseDate(i.dataReembolso);
+      if (!d) return false;
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return k === expandedMonth;
+    });
+    const skuMap = new Map<string, { sku: string; total: number; valor: number }>();
+    const motivoMap = new Map<string, { motivo: string; total: number }>();
+    monthItems.forEach(i => {
+      const sku = i.skuProduto || 'Sem SKU';
+      const cs = skuMap.get(sku) || { sku, total: 0, valor: 0 };
+      cs.total += 1; cs.valor += i.valorReembolso;
+      skuMap.set(sku, cs);
+      const m = i.novoMotivo || i.motivo || 'Não informado';
+      const cm = motivoMap.get(m) || { motivo: m, total: 0 };
+      cm.total += 1;
+      motivoMap.set(m, cm);
+    });
+    return {
+      topSkus: [...skuMap.values()].sort((a, b) => b.total - a.total).slice(0, 10),
+      topMotivos: [...motivoMap.values()].sort((a, b) => b.total - a.total).slice(0, 8),
+      total: monthItems.length,
+    };
+  }, [expandedMonth, items, filterStatus, filterSetor, filterSituacao, filterPlataforma]);
+
   const SortIcon = ({ col }: { col: string }) => {
     if (sortCol !== col) return null;
     return sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-0.5" /> : <ChevronDown className="w-3 h-3 inline ml-0.5" />;
