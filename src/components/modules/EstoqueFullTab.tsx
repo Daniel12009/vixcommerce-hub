@@ -75,14 +75,11 @@ export function EstoqueFullTab() {
   }, [vendas7dItems]);
 
   const mergedData = useMemo<FullRow[]>(() => {
-    // Debug: Log unique account names and Tiny sample
-    if (estoqueFullItems && estoqueFullItems.length > 0) {
-      const rawContas = [...new Set(estoqueFullItems.map(i => i.conta))];
-      console.log('[AnunciosFull] Contas brutas no estoque_full:', rawContas);
-    }
-    if (estoqueTinyItems) {
-      console.log('[AnunciosFull] Tiny items sample:', estoqueTinyItems.slice(0, 5));
-    }
+    // DEBUG LOGS REQUESTED BY USER
+    console.log('[DEBUG Tiny] Total items:', estoqueTinyItems?.length);
+    console.log('[DEBUG Tiny] Primeiros 3 registros completos:', JSON.stringify(estoqueTinyItems?.slice(0, 3), null, 2));
+    console.log('[DEBUG Tiny] Chaves do primeiro registro:', estoqueTinyItems?.[0] ? Object.keys(estoqueTinyItems[0]) : 'VAZIO');
+    console.log('[DEBUG Full] Primeiros 3 registros completos:', JSON.stringify(estoqueFullItems?.slice(0, 3), null, 2));
 
     const MAIN_ACCOUNTS = ['VIAFLIX', 'GS', 'MONACO'];
     const tinyMap = new Map<string, number>();
