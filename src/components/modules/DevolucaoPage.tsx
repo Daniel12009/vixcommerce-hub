@@ -968,7 +968,7 @@ export function DevolucaoPage() {
                   formatter={(v: any, name: string) => {
                     if (name === 'qtd') return [v, 'Qtd Devoluções'];
                     if (name === 'reembolso') return [formatBRL(Number(v)), 'Valor Reembolso'];
-                    if (name === 'pctFaturamento') return [v == null ? '—' : `${Number(v).toFixed(2)}% do faturamento`, '% Faturamento'];
+                    if (name === 'pctFaturamento') return [v == null ? '—' : `${Number(v).toFixed(1)}% do faturamento`, '% Faturamento'];
                     return [v, name];
                   }}
                 />
