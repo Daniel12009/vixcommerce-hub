@@ -19,28 +19,28 @@ Deno.serve(async (req) => {
     // Aceita { data_referencia: 'YYYY-MM-DD' } no body para regenerar snapshot retroativo
     let bodyJson: any = {};
     try { bodyJson = await req.json(); } catch { /* sem body */ }
-    const dataRefOverride: string | null = typeof bodyJson?.data_referencia === 'string' ? bodyJson.data_referencia : null;
+    const dateRefOverride: string | null = (typeof bodyJson?.data_referencia === 'string' ? bodyJson.data_referencia : null) || (typeof bodyJson?.date_override === 'string' ? bodyJson.date_override : null);
 
-    console.log('[Snapshot] Starting daily sales snapshot...', dataRefOverride ? `(override: ${dataRefOverride})` : '');
+    console.log('[Snapshot] Starting daily sales snapshot...', dateRefOverride ? `(override: ${dateRefOverride})` : '');
 
-    const fetchFunc = async (name: string, action: string) => {
+    const fetchFunc = async (name: string, action: string, date_override: string | null) => {
       const res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${supabaseKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, date_override }),
       });
       if (!res.ok) throw new Error(`${name} failed: ${await res.text()}`);
       return res.json();
     };
 
     const [mlData, shopeeData, tinyData, mktData] = await Promise.all([
-      fetchFunc('mercado-livre', 'get_today_orders').catch(e => ({ orders: [], error: e.message })),
-      fetchFunc('shopee', 'get_today_orders').catch(e => ({ orders: [], error: e.message })),
-      fetchFunc('tiny', 'get_today_orders').catch(e => ({ orders: [], error: e.message })),
-      fetchFunc('tiny', 'get_marketplace_orders').catch(e => ({ orders: [], error: e.message })),
+      fetchFunc('mercado-livre', 'get_today_orders', dateRefOverride).catch(e => ({ orders: [], error: e.message })),
+      fetchFunc('shopee', 'get_today_orders', dateRefOverride).catch(e => ({ orders: [], error: e.message })),
+      fetchFunc('tiny', 'get_today_orders', dateRefOverride).catch(e => ({ orders: [], error: e.message })),
+      fetchFunc('tiny', 'get_marketplace_orders', dateRefOverride).catch(e => ({ orders: [], error: e.message })),
     ]);
 
     const allOrders = [
@@ -94,7 +94,11 @@ Deno.serve(async (req) => {
       porConta[c] = (porConta[c] || 0) + (Number(o.total_amount) || 0);
 
       // Agrega detalhado
-      const plataforma = String(o.plataforma || '').toLowerCase() || 'outros';
+      const rawPlat = String(o.plataforma || '').toLowerCase().trim();
+      const plataforma = rawPlat.includes('mercado') ? 'mercadolivre' 
+                       : rawPlat.includes('shopee') ? 'shopee'
+                       : rawPlat.includes('tiny') ? 'tiny'
+                       : rawPlat || 'outros';
       const canal = classifyCanal(o);
       const dkey = `${h}||${plataforma}||${canal}||${c}`;
       const existing = detalhadoMap.get(dkey);

@@ -691,7 +691,7 @@ function ManualTestSection() {
         addLog('Lendo aba ADS da Planilha Mestra...', 'running');
         const sheetData = await callEdgeFunction('google-sheets', {
           action: 'read',
-          spreadsheetId: '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms',
+          spreadsheetId: '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w',
           range: 'ADS!A2:O'
         });
 

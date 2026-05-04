@@ -397,8 +397,9 @@ Deno.serve(async (req: Request) => {
     
     if (action === 'sync_vendas_marketplace') {
       const { date_from, date_to, spreadsheet_id, sheet_name } = reqBody;
-      const dateFromStr = date_from || new Date(Date.now() - 7 * 86400000).toLocaleDateString('pt-BR');
-      const dateToStr = date_to || new Date().toLocaleDateString('pt-BR');
+      const defaultYesterday = new Date(Date.now() - 86400000).toLocaleDateString('pt-BR');
+      const dateFromStr = date_from || defaultYesterday;
+      const dateToStr = date_to || defaultYesterday;
 
       // Helper function to parse DD/MM/YYYY into Unix timestamp
       const parseDateToUnix = (dateStr, endOfDay = false) => {
@@ -413,8 +414,22 @@ Deno.serve(async (req: Request) => {
         return Math.floor(Date.now() / 1000);
       };
 
-      const timeFrom = parseDateToUnix(dateFromStr, false);
-      const timeTo = parseDateToUnix(dateToStr, true);
+      // São Paulo (UTC-3)
+      const spOffset = -3 * 60;
+      let timeFrom: number;
+      let timeTo: number;
+
+      if (date_override) {
+        // date_override format: YYYY-MM-DD
+        const [y, m, d] = date_override.split('-').map(Number);
+        const start = new Date(Date.UTC(y, m - 1, d, 3, 0, 0)); // 00:00 BRT
+        const end = new Date(Date.UTC(y, m - 1, d, 26, 59, 59, 999)); // 23:59:59 BRT
+        timeFrom = Math.floor(start.getTime() / 1000);
+        timeTo = Math.floor(end.getTime() / 1000);
+      } else {
+        timeFrom = parseDateToUnix(dateFromStr, false);
+        timeTo = parseDateToUnix(dateToStr, true);
+      }
 
       const accountsRes = await supabaseFetch('/shopee_accounts?ativo=eq.true');
       const accounts = await accountsRes.json();
@@ -555,7 +570,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const sheetTab = sheet_name || 'Shopee_Vendas';
-      const sheetId = spreadsheet_id || '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
+      const sheetId = spreadsheet_id || '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w';
 
       // Salvar na Planilha Google
       if (allRows.length > 0) {

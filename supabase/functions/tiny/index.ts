@@ -270,7 +270,7 @@ const DELIVERY_MAP: Record<string, string> = {
   temu: 'Temu Logistics',
 };
 
-const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
+const PLANILHA_MESTRA = '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -282,6 +282,7 @@ Deno.serve(async (req) => {
     const { action } = reqBody;
 
     if (action === 'get_today_orders') {
+      const { account_id, date_override } = reqBody;
       const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
       const accounts = await accountsRes.json();
 
@@ -291,7 +292,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      const today = getTodayBR();
+      let targetDate = getTodayBR();
+      if (date_override) {
+        const [y, m, d] = date_override.split('-');
+        targetDate = `${d}/${m}/${y}`;
+        console.log(`[TINY] get_today_orders: using date_override ${date_override} -> ${targetDate}`);
+      }
+
       const allOrders: any[] = [];
 
       for (const account of accounts) {
@@ -300,7 +307,7 @@ Deno.serve(async (req) => {
           let hasMore = true;
 
           while (hasMore) {
-            const data = await searchOrders(account.api_token, today, today, pagina);
+            const data = await searchOrders(account.api_token, targetDate, targetDate, pagina);
 
             if (data?.retorno?.status === 'Erro') {
               // No orders found is not an error
@@ -531,6 +538,7 @@ Deno.serve(async (req) => {
 
     // Fetch marketplace orders from Tiny (TikTok, Shein, Amazon, etc.)
     if (action === 'get_marketplace_orders') {
+      const { date_override } = reqBody;
       const accountsRes = await supabaseFetch('/tiny_accounts?ativo=eq.true');
       const accounts = await accountsRes.json();
 
@@ -540,7 +548,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      const today = getTodayBR();
+      let targetDate = getTodayBR();
+      if (date_override) {
+        const [y, m, d] = date_override.split('-');
+        targetDate = `${d}/${m}/${y}`;
+        console.log(`[TINY] get_marketplace_orders: using date_override ${date_override} -> ${targetDate}`);
+      }
+
       const allOrders: any[] = [];
 
       // Marketplaces to look for (not covered by direct APIs)
@@ -552,7 +566,7 @@ Deno.serve(async (req) => {
           let hasMore = true;
 
           while (hasMore) {
-            const data = await searchOrders(account.api_token, today, today, pagina);
+            const data = await searchOrders(account.api_token, targetDate, targetDate, pagina);
 
             if (data?.retorno?.status === 'Erro') {
               if (data.retorno?.codigo_erro === '2') { hasMore = false; break; }
@@ -954,7 +968,7 @@ Deno.serve(async (req) => {
       const sheetMode = reqBody.sheetMode || 'write';
       const MAX_PRODUCTS_PER_CALL = 30; // Process 30 products per invocation (approx 45s)
 
-      const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
+      const PLANILHA_MESTRA = '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w';
       const SHEET_TAB = 'ESTOQUE-TINY';
 
       // Step 1: Fetch product list for the current page

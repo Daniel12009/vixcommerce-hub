@@ -195,7 +195,7 @@ async function invokeSheets(spreadsheetId: string, range: string, values: any[][
   return res.json();
 }
 
-const PLANILHA_MESTRA = '1lMq5aeInwwv7st8-Rf-S8NYQJaQKkSbSD7PjtFhtPms';
+const PLANILHA_MESTRA = '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w';
 
 // ═══════════════════════════════════════════════════════════════════
 // UTILITÁRIOS — equivalentes exatos às funções Python
@@ -442,17 +442,11 @@ async function processarVendaMLSingle(
         valor_total: valor_total_item,
         comissao: Math.abs(fee_total_neg),
         custo_envio: Math.abs(custo_calc),
-        frete: 0,
-        impostos: 0,
-        ads: 0,
-        cmv: 0,
-        liquido: 0,
-        devolucao: 0,
-        margem: '',
-        comprador: '',
+        ads_valor: 0,
         origem: 'Mercado Livre',
-        pedido_origem: `Mercado Livre|${account.nome}`,
+        marketplace: 'Mercado Livre',
         status_pedido: venda.status || '',
+        estado: estado || 'Não Identificado'
       });
     }
 
@@ -481,6 +475,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'get_today_orders') {
+      const { account_id, date_override } = body;
       // Get all active accounts or specific one
       let accountsRes;
       if (account_id) {
@@ -496,14 +491,27 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Get today's date range in São Paulo time (UTC-3)
-      const now = new Date();
-      const spOffset = -3 * 60; // São Paulo UTC-3
-      const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
-      const todayStart = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate(), 0, 0, 0);
-      // Convert back to UTC for API
-      const dateFrom = new Date(todayStart.getTime() - (spOffset + now.getTimezoneOffset()) * 60000).toISOString();
-      const dateTo = now.toISOString();
+      // São Paulo UTC-3
+      const spOffset = -3 * 60; 
+
+      let dateFrom: string;
+      let dateTo: string;
+
+      if (date_override) {
+        // date_override format: YYYY-MM-DD
+        const [y, m, d] = date_override.split('-').map(Number);
+        const start = new Date(Date.UTC(y, m - 1, d, 3, 0, 0)); // 00:00 BRT
+        const end = new Date(Date.UTC(y, m - 1, d, 26, 59, 59, 999)); // 23:59:59 BRT do mesmo dia
+        dateFrom = start.toISOString();
+        dateTo = end.toISOString();
+        console.log(`[ML] get_today_orders: using date_override ${date_override} -> ${dateFrom} to ${dateTo}`);
+      } else {
+        const now = new Date();
+        const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
+        const todayStart = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate(), 0, 0, 0);
+        dateFrom = new Date(todayStart.getTime() - (spOffset + now.getTimezoneOffset()) * 60000).toISOString();
+        dateTo = now.toISOString();
+      }
 
       const allOrders: any[] = [];
 
@@ -1678,21 +1686,27 @@ Deno.serve(async (req) => {
       }
 
       if (loteLinhas.length > 0) {
-        // Descobre a primeira linha vazia da coluna P (lendo P:P) e escreve com 'write' (PUT) ali.
-        // NUNCA apaga linhas. NUNCA mexe em A-O (que tem fórmulas).
+        // 1) Descobre primeira linha vazia da coluna P
         let proximaLinha = 2;
         try {
-          const leitura = await invokeGsFunction('read', { spreadsheetId: sheetId, range: `${sheetTab}!P:P` });
+          const leitura = await invokeFunction('google-sheets', { 
+            action: 'read',
+            spreadsheetId: sheetId, 
+            range: `${sheetTab}!P:P` 
+          });
           const valoresP: any[][] = leitura?.values || [];
-          // Primeira linha vazia = quantidade de linhas com conteúdo + 1
           proximaLinha = valoresP.length + 1;
           if (proximaLinha < 2) proximaLinha = 2;
         } catch (e) {
           console.warn('[SYNC VENDAS] Falha lendo P:P, usando linha 2 como fallback', e);
         }
+
         const ultimaLinha = proximaLinha + loteLinhas.length - 1;
         const writeRange = `${sheetTab}!P${proximaLinha}:AH${ultimaLinha}`;
+        
         console.log(`[SYNC VENDAS] Escrevendo ${loteLinhas.length} linhas em ${writeRange}`);
+        
+        // 2) Escreve com action 'write' (PUT — não append, não dedup)
         await invokeSheets(sheetId, writeRange, loteLinhas, 'write');
       }
 

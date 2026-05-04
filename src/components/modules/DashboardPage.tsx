@@ -185,53 +185,23 @@ export function DashboardPage() {
       setOrders(allFetched);
       _cachedOrders = allFetched;
 
-      // Salva/atualiza snapshot do dia atual a cada refresh do Dashboard
-      // Salva snapshot do dia atual — bloco isolado em try/catch para não derrubar o resto
-      // do fluxo (busca do snapshot de ontem) caso uma data inválida vinda dos marketplaces
-      // gere "Invalid time value".
+      // Solicita a gravação do snapshot detalhado no servidor (centralizado)
       try {
-        const paidForSnapshot = allFetched.filter(o => ['paid', 'partially_paid', 'payment_in_process', 'payment_required'].includes(o.status));
-        const horaMap = new Map<string, { hora: string; faturamento: number; pedidos: number }>();
-        for (let h = 0; h <= 23; h++) {
-          const label = `${String(h).padStart(2, '0')}h`;
-          horaMap.set(label, { hora: label, faturamento: 0, pedidos: 0 });
-        }
-        const porContaSnap: Record<string, number> = {};
-        const porSkuVendasSnap: Record<string, number> = {};
-        const porSkuFatSnap: Record<string, number> = {};
-        paidForSnapshot.forEach(o => {
-          const label = `${String(getBRTHour(o.date_created)).padStart(2, '0')}h`;
-          const cur = horaMap.get(label);
-          if (cur) {
-            cur.faturamento += o.total_amount || 0;
-            cur.pedidos += 1;
-          }
-          const c = (o.conta || 'Outros').toString();
-          porContaSnap[c] = (porContaSnap[c] || 0) + (Number(o.total_amount) || 0);
-          (o.items || []).forEach((it: any) => {
-            const skuRaw = it.sku || '';
-            if (!skuRaw) return;
-            const sk = canonicalSku(skuRaw);
-            const qty = Number(it.quantity) || 0;
-            const fat = qty * (Number(it.unit_price) || 0);
-            porSkuVendasSnap[sk] = (porSkuVendasSnap[sk] || 0) + qty;
-            porSkuFatSnap[sk] = (porSkuFatSnap[sk] || 0) + fat;
+        supabase.functions.invoke('save-daily-snapshot', { body: { action: 'save_snapshot' } })
+          .then(({ error }: any) => {
+            if (error) console.warn('[Dashboard] Erro ao disparar snapshot no servidor:', error);
           });
-        });
-        (supabase as any).from('daily_sales_snapshots').upsert({
-          data_referencia: getBRTDateStr(),
-          vendas_por_hora: Array.from(horaMap.values()),
-          total_faturamento: paidForSnapshot.reduce((s, o) => s + (o.total_amount || 0), 0),
-          total_pedidos: paidForSnapshot.length,
-          por_conta: porContaSnap,
-          por_sku_vendas: porSkuVendasSnap,
-          por_sku_faturamento: porSkuFatSnap,
-        }, { onConflict: 'data_referencia' }).then(({ error }: any) => {
-          if (error) console.warn('Erro ao salvar snapshot do dashboard:', error);
-        });
-      } catch (snapErr: any) {
-        console.warn('[Dashboard] Falha ao montar snapshot do dia (ignorada):', snapErr?.message || snapErr);
+      } catch (err) {
+        console.warn('[Dashboard] Falha ao invocar save-daily-snapshot:', err);
       }
+
+      // Salva no cache do Dashboard (leitura instantânea)
+      const cacheKey = `today_${filterPlataforma}_${filterCanal}_${filterConta}`;
+      (supabase as any).from('dashboard_cache').upsert({
+        cache_key: cacheKey,
+        data: allFetched,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'cache_key' }).catch((err: any) => console.warn('Erro ao gravar cache:', err));
       
       // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
@@ -346,22 +316,39 @@ export function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterPlataforma, filterCanal, filterConta]);
 
   useEffect(() => {
-    // If we have cached data, just do a background refresh
-    if (_cachedOrders && _cachedOrders.length > 0) {
-      fetchOrders(true); // background refresh — no loading spinner
-    } else {
-      fetchOrders(false); // first load — show spinner
-    }
-    // Set up auto-refresh every 5 min (only if not already running)
+    // 1. Tenta carregar do cache do banco imediatamente
+    const loadCache = async () => {
+      const cacheKey = `today_${filterPlataforma}_${filterCanal}_${filterConta}`;
+      const { data } = await (supabase as any)
+        .from('dashboard_cache')
+        .select('data, updated_at')
+        .eq('cache_key', cacheKey)
+        .maybeSingle();
+
+      if (data && data.data) {
+        console.log('[Dashboard] Cache carregado:', cacheKey, data.updated_at);
+        setOrders(data.data);
+        setLastRefresh(new Date(data.updated_at).toLocaleString('pt-BR'));
+        setLoading(false);
+      }
+    };
+
+    loadCache().then(() => {
+      // 2. Busca dados novos em background
+      fetchOrders(true);
+    });
+
+    // Set up auto-refresh every 5 min
     if (_refreshInterval) clearInterval(_refreshInterval);
     _refreshInterval = setInterval(() => fetchOrders(true), 5 * 60 * 1000);
+
     return () => {
-      // Don't clear interval on unmount — let it keep refreshing in background
+      // Mantém rodando em background
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, filterPlataforma, filterCanal, filterConta]);
 
   // Filters
   const filteredOrders = useMemo(() => {
@@ -780,7 +767,38 @@ export function DashboardPage() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Atualizando...' : 'Atualizar'}
+          {loading ? 'Atualizar' : 'Atualizar'}
+        </button>
+
+        <button
+          onClick={async () => {
+            const todayBRTStr = getBRTDateStr();
+            const [yy, mm, dd] = todayBRTStr.split('-').map(Number);
+            const yesterday = new Date(Date.UTC(yy, mm - 1, dd));
+            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+            
+            if (!confirm(`Deseja regravar o snapshot detalhado de ontem (${yesterdayStr})? Isso levará alguns segundos.`)) return;
+            
+            setLoading(true);
+            try {
+              const { error } = await supabase.functions.invoke('save-daily-snapshot', {
+                body: { action: 'save_snapshot', date_override: yesterdayStr }
+              });
+              if (error) throw error;
+              alert('Snapshot de ontem regravado com sucesso!');
+              fetchOrders(false);
+            } catch (err: any) {
+              alert('Erro ao regravar snapshot: ' + err.message);
+            } finally {
+              setLoading(false);
+            }
+          }}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-colors disabled:opacity-50"
+        >
+          <Clock className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Regravar Ontem
         </button>
 
         <div className="h-5 w-px bg-border" />

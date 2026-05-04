@@ -73,20 +73,50 @@ export function DevolucaoPage() {
     const parseDate = (str: string): Date | null => {
       if (!str) return null;
       const s = str.trim();
-      // dd/mm/yyyy
-      const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (dmyMatch) return new Date(+dmyMatch[3], +dmyMatch[2] - 1, +dmyMatch[1]);
-      // yyyy-mm-dd
-      const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (isoMatch) return new Date(+isoMatch[1], +isoMatch[2] - 1, +isoMatch[3]);
-      // Serial number (Excel/Sheets)
-      const num = Number(s);
-      if (!isNaN(num) && num > 30000 && num < 60000) {
-        return new Date((num - 25569) * 86400000);
+      let d: Date | null = null;
+
+      // 1. Formatos DD/MM/YYYY, DD-MM-YYYY, D/M/YYYY ou DD/MM/YY
+      const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+      if (dmyMatch) {
+        let year = +dmyMatch[3];
+        if (year < 100) year += 2000; // Converte YY para 20YY
+        const month = dmyMatch[2].padStart(2, '0');
+        const day = dmyMatch[1].padStart(2, '0');
+        // Usamos T12:00:00-03:00 para garantir que a data caia no dia correto em BRT
+        d = new Date(`${year}-${month}-${day}T12:00:00-03:00`);
       }
-      // Try native parse as last resort
-      const native = new Date(s);
-      return isNaN(native.getTime()) ? null : native;
+      
+      // 2. Formatos YYYY-MM-DD ou YYYY/MM/DD
+      if (!d || isNaN(d.getTime())) {
+        const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        if (isoMatch) {
+          const month = isoMatch[2].padStart(2, '0');
+          const day = isoMatch[3].padStart(2, '0');
+          d = new Date(`${isoMatch[1]}-${month}-${day}T12:00:00-03:00`);
+        }
+      }
+
+      // 3. Número Serial (Excel/Google Sheets)
+      if (!d || isNaN(d.getTime())) {
+        const num = Number(s);
+        if (!isNaN(num) && num > 30000 && num < 60000) {
+          d = new Date((num - 25569) * 86400000);
+          // Ajusta para o meio do dia para evitar problemas de borda de fuso
+          d.setHours(12, 0, 0, 0);
+        }
+      }
+
+      // 4. Tentativa nativa final
+      if (!d || isNaN(d.getTime())) {
+        const native = new Date(s);
+        if (!isNaN(native.getTime())) d = native;
+      }
+
+      if (d && !isNaN(d.getTime())) return d;
+
+      // Log de diagnóstico para valores que falharam
+      console.warn(`[Devolucao] Falha ao converter data: "${str}"`);
+      return null;
     };
     if (periodDays !== 'custom' && periodDays !== 'all') {
       const cutoff = new Date();
@@ -98,14 +128,14 @@ export function DevolucaoPage() {
       });
     } else if (periodDays === 'custom') {
       if (dateFrom) {
-        const from = new Date(dateFrom + 'T00:00:00');
+        const from = new Date(dateFrom + 'T00:00:00-03:00');
         result = result.filter(i => {
           const d = parseDate(i.dataPlanilha);
           return d ? d >= from : false;
         });
       }
       if (dateTo) {
-        const to = new Date(dateTo + 'T23:59:59');
+        const to = new Date(dateTo + 'T23:59:59-03:00');
         result = result.filter(i => {
           const d = parseDate(i.dataPlanilha);
           return d ? d <= to : false;
