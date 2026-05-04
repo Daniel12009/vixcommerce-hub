@@ -7,6 +7,48 @@ import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { formatBRL } from '@/lib/utils-vix';
 import { toast } from 'sonner';
 
+// Parse date strings: dd/mm/yyyy, yyyy-mm-dd, serial numbers, etc.
+const parseDate = (str: string): Date | null => {
+  if (!str) return null;
+  const s = str.trim();
+  let d: Date | null = null;
+
+  const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+  if (dmyMatch) {
+    let year = +dmyMatch[3];
+    if (year < 100) year += 2000;
+    const month = dmyMatch[2].padStart(2, '0');
+    const day = dmyMatch[1].padStart(2, '0');
+    d = new Date(`${year}-${month}-${day}T12:00:00-03:00`);
+  }
+
+  if (!d || isNaN(d.getTime())) {
+    const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      const month = isoMatch[2].padStart(2, '0');
+      const day = isoMatch[3].padStart(2, '0');
+      d = new Date(`${isoMatch[1]}-${month}-${day}T12:00:00-03:00`);
+    }
+  }
+
+  if (!d || isNaN(d.getTime())) {
+    const num = Number(s);
+    if (!isNaN(num) && num > 30000 && num < 60000) {
+      d = new Date((num - 25569) * 86400000);
+      d.setHours(12, 0, 0, 0);
+    }
+  }
+
+  if (!d || isNaN(d.getTime())) {
+    const native = new Date(s);
+    if (!isNaN(native.getTime())) d = native;
+  }
+
+  if (d && !isNaN(d.getTime())) return d;
+  console.warn(`[Devolucao] Falha ao converter data: "${str}"`);
+  return null;
+};
+
 const COLORS = ['#6366f1', '#ef4444', '#22c55e', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6', '#8b5cf6', '#f97316', '#06b6d4'];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -109,7 +151,6 @@ export function DevolucaoPage() {
     if (filterSetor !== 'all') result = result.filter(i => i.setor === filterSetor);
     if (filterSituacao !== 'all') result = result.filter(i => i.situacaoMercadoria === filterSituacao);
     if (filterPlataforma !== 'all') result = result.filter(i => i.plataforma === filterPlataforma);
-
     if (periodDays !== 'custom' && periodDays !== 'all') {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - periodDays);
