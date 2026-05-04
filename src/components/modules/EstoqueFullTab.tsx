@@ -44,7 +44,7 @@ export function EstoqueFullTab() {
   const [filterStatus, setFilterStatus] = useState<FullStatus | 'all'>('all');
   const [filterConta, setFilterConta] = useState<string>('all');
   const [sortField, setSortField] = useState<keyof FullRow>('status');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sortDir, setSortDir] = useState<'desc' | 'desc'>('desc'); // Default desc for status
 
   // Helper for normalization (sync with EstoquePage)
   const CONTA_ALIASES: Record<string, string> = {
@@ -77,7 +77,6 @@ export function EstoqueFullTab() {
       map.set(key, (map.get(key) || 0) + qty);
     });
 
-    // Convert total to daily average
     const vmdMap = new Map<string, number>();
     map.forEach((total, key) => vmdMap.set(key, total / 7));
     return vmdMap;
@@ -85,41 +84,79 @@ export function EstoqueFullTab() {
 
   // Merge Data
   const mergedData = useMemo<FullRow[]>(() => {
-    if (!estoqueFullItems) return [];
-
+    // 1. Build Tiny Map
     const tinyMap = new Map<string, number>();
     (estoqueTinyItems || []).forEach(i => {
       const sku = (i.sku || '').trim().toUpperCase();
       if (sku) tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(i.quantidade || 0));
     });
 
-    // Build per (SKU x Account) rows
-    return estoqueFullItems.map(item => {
+    // 2. Build Full Data Map (deduplicated by SKU + Conta)
+    const fullDataMap = new Map<string, { fullML: number; entradaPendente: number; conta: string; sku: string }>();
+    (estoqueFullItems || []).forEach(item => {
       const sku = (item.sku || '').trim().toUpperCase();
-      const rawConta = item.conta || '';
-      const normConta = normalizeConta(rawConta);
-      const fullML = Number(item.aptasParaVenda || 0);
-      const entradaPendente = Number(item.entradaPendente || 0);
-      const tinyLocal = tinyMap.get(sku) || 0;
-      const vmd = vmdBySkuAndConta.get(`${sku}||${normConta}`) || 0;
-      const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
+      const normConta = normalizeConta(item.conta || 'VIAFLIX');
+      const key = `${sku}||${normConta}`;
+      
+      const current = fullDataMap.get(key) || { fullML: 0, entradaPendente: 0, conta: normConta, sku };
+      current.fullML += Number(item.aptasParaVenda || 0);
+      current.entradaPendente += Number(item.entradaPendente || 0);
+      fullDataMap.set(key, current);
+    });
 
+    // 3. Collect all unique SKUs that are only in Tiny
+    const skusInFull = new Set<string>();
+    fullDataMap.forEach(v => skusInFull.add(v.sku));
+
+    const rows: FullRow[] = [];
+
+    // Add rows from Full (deduplicated)
+    fullDataMap.forEach((data, key) => {
+      const { sku, conta, fullML, entradaPendente } = data;
+      const tinyLocal = tinyMap.get(sku) || 0;
+      const vmd = vmdBySkuAndConta.get(`${sku}||${conta}`) || 0;
+      const coberturaDias = vmd > 0 ? Number((Math.max(0, fullML) / vmd).toFixed(1)) : 999;
+
+      // Status Rule: Use Math.max(0, fullML) for classification
+      const statusFullML = Math.max(0, fullML);
       let status: FullStatus = 'INATIVO';
-      if (fullML > 0) status = 'ATIVO';
+      if (statusFullML > 0) status = 'ATIVO';
       else if (entradaPendente > 0) status = 'ENVIANDO';
       else if (tinyLocal > 0) status = 'SEM ENVIO FULL';
 
-      return {
+      rows.push({
         sku,
-        conta: normConta,
-        fullML,
+        conta,
+        fullML, // Keep real value (could be negative) for display
         entradaPendente,
         tinyLocal,
         vmd,
         coberturaDias,
         status
-      };
+      });
     });
+
+    // Add SKUs that ONLY exist in Tiny (Bug 1)
+    tinyMap.forEach((qty, sku) => {
+      if (!skusInFull.has(sku)) {
+        // For SKUs only in Tiny, we default to showing them for the primary account context if needed,
+        // or just once as 'LOCAL'. Let's use 'VIAFLIX' as default or empty if preferred.
+        // The user wants them to appear normally. Let's use '' for conta to denote "Local only".
+        const status: FullStatus = qty > 0 ? 'SEM ENVIO FULL' : 'INATIVO';
+        rows.push({
+          sku,
+          conta: 'LOCAL',
+          fullML: 0,
+          entradaPendente: 0,
+          tinyLocal: qty,
+          vmd: vmdBySkuAndConta.get(`${sku}||VIAFLIX`) || vmdBySkuAndConta.get(`${sku}||GS`) || vmdBySkuAndConta.get(`${sku}||MONACO`) || 0,
+          coberturaDias: 0,
+          status
+        });
+      }
+    });
+
+    return rows;
   }, [estoqueFullItems, estoqueTinyItems, vmdBySkuAndConta]);
 
   // Stats
@@ -130,7 +167,7 @@ export function EstoqueFullTab() {
       enviando: mergedData.filter(i => i.status === 'ENVIANDO').length,
       semEnvio: mergedData.filter(i => i.status === 'SEM ENVIO FULL').length,
       inativos: mergedData.filter(i => i.status === 'INATIVO').length,
-      totalFull: mergedData.reduce((acc, i) => acc + i.fullML, 0),
+      totalFull: mergedData.reduce((acc, i) => acc + Math.max(0, i.fullML), 0),
       lastUpdate: localStorage.getItem('vix_estoque_full_data_time') || '---'
     };
   }, [mergedData]);
@@ -178,15 +215,6 @@ export function EstoqueFullTab() {
     if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-30" />;
     return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />;
   };
-
-  if (!estoqueFullItems) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 bg-card/50 border border-border rounded-2xl animate-fade-in">
-        <Package className="w-12 h-12 text-muted-foreground opacity-20 mb-4" />
-        <p className="text-muted-foreground">Aguardando importação de dados de estoque...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -241,6 +269,7 @@ export function EstoqueFullTab() {
             <option value="VIAFLIX">VIAFLIX</option>
             <option value="GS">GS</option>
             <option value="MONACO">MONACO</option>
+            <option value="LOCAL">LOCAL (Só Tiny)</option>
           </select>
         </div>
       </div>
