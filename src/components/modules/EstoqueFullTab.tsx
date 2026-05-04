@@ -12,13 +12,12 @@ import {
   LayoutGrid,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown,
-  Zap
+  ArrowDown
 } from 'lucide-react';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { KpiCard } from '@/components/shared/KpiCard';
 
-type FullRowStatus = 'ATIVO' | 'PARCIAL' | 'ENVIANDO' | 'SEM ENVIO FULL' | 'INATIVO';
+type FullRowStatus = 'ATIVO' | 'ENVIANDO' | 'SEM ENVIO FULL' | 'INATIVO';
 
 interface FullRow {
   sku: string;
@@ -33,7 +32,6 @@ interface FullRow {
 
 const STATUS_CONFIG: Record<FullRowStatus, { label: string; icon: any; color: string; bg: string; border: string }> = {
   'ATIVO': { label: 'ATIVO', icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-  'PARCIAL': { label: 'PARCIAL', icon: Zap, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   'ENVIANDO': { label: 'ENVIANDO', icon: Truck, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
   'SEM ENVIO FULL': { label: 'SEM ENVIO FULL', icon: AlertTriangle, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
   'INATIVO': { label: 'INATIVO', icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' }
@@ -91,12 +89,6 @@ export function EstoqueFullTab() {
       fullDataMap.set(key, current);
     });
 
-    // Tracking SKUs that have ATIVO status (fullML > 0) in at least one account
-    const skusWithActiveAccount = new Set<string>();
-    fullDataMap.forEach(v => {
-      if (v.fullML > 0) skusWithActiveAccount.add(v.sku);
-    });
-
     const skusInFull = new Set<string>();
     fullDataMap.forEach(v => skusInFull.add(v.sku));
 
@@ -115,8 +107,6 @@ export function EstoqueFullTab() {
         status = 'ATIVO';
       } else if (entradaPendente > 0) {
         status = 'ENVIANDO';
-      } else if (skusWithActiveAccount.has(sku)) {
-        status = 'PARCIAL';
       } else if (tinyLocal > 0) {
         status = 'SEM ENVIO FULL';
       }
@@ -126,11 +116,10 @@ export function EstoqueFullTab() {
       });
     });
 
-    // Tiny only SKUs
+    // SKUs only in Tiny
     tinyMap.forEach((qty, sku) => {
       if (!skusInFull.has(sku)) {
-        const hasActiveAccount = skusWithActiveAccount.has(sku);
-        const status: FullRowStatus = hasActiveAccount ? 'PARCIAL' : (qty > 0 ? 'SEM ENVIO FULL' : 'INATIVO');
+        const status: FullRowStatus = qty > 0 ? 'SEM ENVIO FULL' : 'INATIVO';
         rows.push({
           sku, conta: 'LOCAL', fullML: 0, entradaPendente: 0, tinyLocal: qty,
           vmd: vmdBySkuAndConta.get(`${sku}||VIAFLIX`) || 0,
@@ -146,7 +135,6 @@ export function EstoqueFullTab() {
     return {
       total: mergedData.length,
       ativos: mergedData.filter(i => i.status === 'ATIVO').length,
-      parcial: mergedData.filter(i => i.status === 'PARCIAL').length,
       enviando: mergedData.filter(i => i.status === 'ENVIANDO').length,
       semEnvio: mergedData.filter(i => i.status === 'SEM ENVIO FULL').length,
       inativos: mergedData.filter(i => i.status === 'INATIVO').length,
@@ -165,7 +153,7 @@ export function EstoqueFullTab() {
     });
 
     return [...filtered].sort((a, b) => {
-      const order: Record<FullRowStatus, number> = { 'INATIVO': 0, 'SEM ENVIO FULL': 1, 'ENVIANDO': 2, 'PARCIAL': 3, 'ATIVO': 4 };
+      const order: Record<FullRowStatus, number> = { 'INATIVO': 0, 'SEM ENVIO FULL': 1, 'ENVIANDO': 2, 'ATIVO': 3 };
       if (sortField === 'status') {
         const valA = order[a.status];
         const valB = order[b.status];
@@ -195,12 +183,12 @@ export function EstoqueFullTab() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
         <KpiCard title="Ativos" value={stats.ativos.toLocaleString()} icon={CheckCircle} valueColor="text-emerald-400" delay={0} />
-        <KpiCard title="Parcial" value={stats.parcial.toLocaleString()} icon={Zap} valueColor="text-orange-400" delay={50} />
-        <KpiCard title="Enviando" value={stats.enviando.toLocaleString()} icon={Truck} valueColor="text-blue-400" delay={100} />
-        <KpiCard title="Sem Envio" value={stats.semEnvio.toLocaleString()} icon={AlertTriangle} valueColor="text-yellow-400" delay={150} />
-        <KpiCard title="Inativos" value={stats.inativos.toLocaleString()} icon={XCircle} valueColor="text-red-400" delay={200} />
+        <KpiCard title="Enviando" value={stats.enviando.toLocaleString()} icon={Truck} valueColor="text-blue-400" delay={50} />
+        <KpiCard title="Sem Envio" value={stats.semEnvio.toLocaleString()} icon={AlertTriangle} valueColor="text-yellow-400" delay={100} />
+        <KpiCard title="Inativos" value={stats.inativos.toLocaleString()} icon={XCircle} valueColor="text-red-400" delay={150} />
+        <KpiCard title="Unid. Full" value={stats.totalFull.toLocaleString()} icon={LayoutGrid} delay={200} />
         <KpiCard title="Último Upload" value={stats.lastUpdate} icon={Clock} delay={250} />
       </div>
 
@@ -211,7 +199,7 @@ export function EstoqueFullTab() {
             className="w-full pl-10 pr-4 py-2 rounded-xl bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 transition-colors" />
         </div>
         <div className="flex flex-wrap items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border">
-          {(['all', 'ATIVO', 'PARCIAL', 'ENVIANDO', 'SEM ENVIO FULL', 'INATIVO'] as const).map(s => (
+          {(['all', 'ATIVO', 'ENVIANDO', 'SEM ENVIO FULL', 'INATIVO'] as const).map(s => (
             <button key={s} onClick={() => setFilterStatus(s)}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${filterStatus === s ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
               {s === 'all' ? 'TODOS' : s}
