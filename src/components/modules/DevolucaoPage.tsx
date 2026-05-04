@@ -6,6 +6,7 @@ import { KpiCard } from '@/components/shared/KpiCard';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { formatBRL } from '@/lib/utils-vix';
 import { toast } from 'sonner';
+import { useVendasFromDB } from '@/hooks/useVendasFromDB';
 
 // Parse date strings: dd/mm/yyyy, yyyy-mm-dd, serial numbers, etc.
 const parseDate = (str: string): Date | null => {
