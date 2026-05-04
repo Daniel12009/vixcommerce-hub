@@ -101,6 +101,24 @@ export function DevolucaoPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+
+  // Faturamento mensal — busca 24 meses pra trás para casar com a evolução
+  const fatRangeIni = useMemo(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 24); d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const fatRangeFim = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const { data: faturamentoData } = useVendasFromDB(fatRangeIni, fatRangeFim);
+  const faturamentoPorMes = useMemo(() => {
+    const map = new Map<string, number>();
+    (faturamentoData || []).forEach(item => {
+      const d = parseDate(item.data);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      map.set(key, (map.get(key) || 0) + Number(item.faturamento_bruto || 0));
+    });
+    return map;
+  }, [faturamentoData]);
   const [periodDays, setPeriodDays] = useState<number | 'custom' | 'all'>(30);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
