@@ -10,41 +10,48 @@ import { toast } from 'sonner';
 // Parse date strings: dd/mm/yyyy, yyyy-mm-dd, serial numbers, etc.
 const parseDate = (str: string): Date | null => {
   if (!str) return null;
-  const s = str.trim();
+  const s = String(str).trim();
   let d: Date | null = null;
 
+  // DD/MM/YYYY ou DD/MM/YY (assume 20YY se 2 dígitos)
   const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
   if (dmyMatch) {
+    const day = +dmyMatch[1];
+    const month = +dmyMatch[2];
     let year = +dmyMatch[3];
-    if (year < 100) year += 2000;
-    const month = dmyMatch[2].padStart(2, '0');
-    const day = dmyMatch[1].padStart(2, '0');
-    d = new Date(`${year}-${month}-${day}T12:00:00-03:00`);
-  }
-
-  if (!d || isNaN(d.getTime())) {
-    const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (isoMatch) {
-      const month = isoMatch[2].padStart(2, '0');
-      const day = isoMatch[3].padStart(2, '0');
-      d = new Date(`${isoMatch[1]}-${month}-${day}T12:00:00-03:00`);
+    if (year < 100) year = 2000 + year;
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      d = new Date(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00-03:00`);
     }
   }
 
+  // ISO YYYY-MM-DD
+  if (!d || isNaN(d.getTime())) {
+    const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      d = new Date(`${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}T12:00:00-03:00`);
+    }
+  }
+
+  // Serial Excel/Sheets (apenas para ranges plausíveis: 2020-01-01 ≈ 43831, 2030-12-31 ≈ 47848)
   if (!d || isNaN(d.getTime())) {
     const num = Number(s);
-    if (!isNaN(num) && num > 30000 && num < 60000) {
+    if (!isNaN(num) && num >= 43800 && num <= 47900) {
       d = new Date((num - 25569) * 86400000);
       d.setHours(12, 0, 0, 0);
     }
   }
 
-  if (!d || isNaN(d.getTime())) {
-    const native = new Date(s);
-    if (!isNaN(native.getTime())) d = native;
+  // Validação final: ano deve estar entre 2020 e 2030
+  if (d && !isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    if (y < 2020 || y > 2030) {
+      console.warn(`[Devolucao] Data fora do range 2020-2030 descartada: "${str}" -> ${d.toISOString()}`);
+      return null;
+    }
+    return d;
   }
 
-  if (d && !isNaN(d.getTime())) return d;
   console.warn(`[Devolucao] Falha ao converter data: "${str}"`);
   return null;
 };
