@@ -58,9 +58,12 @@ export function EstoqueFullTab() {
   const vmdBySkuAndConta = useMemo(() => {
     const map = new Map<string, number>();
     if (!vendas7dItems) return map;
+    
+    const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase().replace(/\s/g, '') : '';
+
     vendas7dItems.forEach(item => {
       if (!item.sku) return;
-      const sku = item.sku.trim().toUpperCase();
+      const sku = cleanSku(item.sku);
       const normConta = normalizeConta(item.conta || '');
       const qty = Number(item.quantidade || 0);
       const key = `${sku}||${normConta}`;
@@ -72,16 +75,23 @@ export function EstoqueFullTab() {
   }, [vendas7dItems]);
 
   const mergedData = useMemo<FullRow[]>(() => {
-    // Debug: Log unique account names from raw data
+    // Debug: Log unique account names and Tiny sample
     if (estoqueFullItems && estoqueFullItems.length > 0) {
       const rawContas = [...new Set(estoqueFullItems.map(i => i.conta))];
       console.log('[AnunciosFull] Contas brutas no estoque_full:', rawContas);
     }
+    if (estoqueTinyItems) {
+      console.log('[AnunciosFull] Tiny items sample:', estoqueTinyItems.slice(0, 5));
+    }
 
     const MAIN_ACCOUNTS = ['VIAFLIX', 'GS', 'MONACO'];
     const tinyMap = new Map<string, number>();
+    
+    // Robust SKU normalization helper
+    const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase().replace(/\s/g, '') : '';
+
     (estoqueTinyItems || []).forEach(i => {
-      const sku = (i.sku || '').trim().toUpperCase();
+      const sku = cleanSku(i.sku);
       if (sku) tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(i.quantidade || 0));
     });
 
@@ -90,7 +100,7 @@ export function EstoqueFullTab() {
     const allSkus = new Set<string>([...tinyMap.keys()]);
 
     (estoqueFullItems || []).forEach(item => {
-      const sku = (item.sku || '').trim().toUpperCase();
+      const sku = cleanSku(item.sku);
       if (!sku) return;
       allSkus.add(sku);
 
