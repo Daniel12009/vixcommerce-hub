@@ -62,6 +62,46 @@ export function DevolucaoPage() {
   const situacaoOptions = useMemo(() => [...new Set(items.map(i => i.situacaoMercadoria).filter(Boolean))], [items]);
   const plataformaOptions = useMemo(() => [...new Set(items.map(i => i.plataforma).filter(Boolean))], [items]);
 
+  // 1. Definição do parseDate fora do useMemo para reuso
+  const parseDate = useCallback((str: string): Date | null => {
+    if (!str) return null;
+    const s = String(str).trim();
+    let d: Date | null = null;
+
+    // Regex para DD/MM/YY ou DD/MM/YYYY
+    const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+    if (dmyMatch) {
+      let year = +dmyMatch[3];
+      if (year < 100) year += 2000;
+      d = new Date(`${year}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}T12:00:00-03:00`);
+    }
+    
+    if (!d || isNaN(d.getTime())) {
+      const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (isoMatch) d = new Date(`${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}T12:00:00-03:00`);
+    }
+
+    if (!d || isNaN(d.getTime())) {
+      const num = Number(s);
+      if (!isNaN(num) && num > 43831 && num < 60000) {
+        d = new Date((num - 25569) * 86400000);
+        d.setHours(12, 0, 0, 0);
+      }
+    }
+
+    if (d && !isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      if (year < 2020 || year > 2030) {
+        console.warn(`[Devolucao] Data fora do range (2020-2030): "${str}" -> Ano ${year}`);
+        return null;
+      }
+      return d;
+    }
+    return null;
+  }, []);
+
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+
   // Filtered items
   const filtered = useMemo(() => {
     let result = items;
@@ -69,55 +109,7 @@ export function DevolucaoPage() {
     if (filterSetor !== 'all') result = result.filter(i => i.setor === filterSetor);
     if (filterSituacao !== 'all') result = result.filter(i => i.situacaoMercadoria === filterSituacao);
     if (filterPlataforma !== 'all') result = result.filter(i => i.plataforma === filterPlataforma);
-    // Date filter — handles: dd/mm/yyyy, yyyy-mm-dd, mm/dd/yyyy, serial numbers
-    const parseDate = (str: string): Date | null => {
-      if (!str) return null;
-      const s = str.trim();
-      let d: Date | null = null;
 
-      // 1. Formatos DD/MM/YYYY, DD-MM-YYYY, D/M/YYYY ou DD/MM/YY
-      const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
-      if (dmyMatch) {
-        let year = +dmyMatch[3];
-        if (year < 100) year += 2000; // Converte YY para 20YY
-        const month = dmyMatch[2].padStart(2, '0');
-        const day = dmyMatch[1].padStart(2, '0');
-        // Usamos T12:00:00-03:00 para garantir que a data caia no dia correto em BRT
-        d = new Date(`${year}-${month}-${day}T12:00:00-03:00`);
-      }
-      
-      // 2. Formatos YYYY-MM-DD ou YYYY/MM/DD
-      if (!d || isNaN(d.getTime())) {
-        const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-        if (isoMatch) {
-          const month = isoMatch[2].padStart(2, '0');
-          const day = isoMatch[3].padStart(2, '0');
-          d = new Date(`${isoMatch[1]}-${month}-${day}T12:00:00-03:00`);
-        }
-      }
-
-      // 3. Número Serial (Excel/Google Sheets)
-      if (!d || isNaN(d.getTime())) {
-        const num = Number(s);
-        if (!isNaN(num) && num > 30000 && num < 60000) {
-          d = new Date((num - 25569) * 86400000);
-          // Ajusta para o meio do dia para evitar problemas de borda de fuso
-          d.setHours(12, 0, 0, 0);
-        }
-      }
-
-      // 4. Tentativa nativa final
-      if (!d || isNaN(d.getTime())) {
-        const native = new Date(s);
-        if (!isNaN(native.getTime())) d = native;
-      }
-
-      if (d && !isNaN(d.getTime())) return d;
-
-      // Log de diagnóstico para valores que falharam
-      console.warn(`[Devolucao] Falha ao converter data: "${str}"`);
-      return null;
-    };
     if (periodDays !== 'custom' && periodDays !== 'all') {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - periodDays);
@@ -163,7 +155,7 @@ export function DevolucaoPage() {
       return sortDir === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
     });
     return result;
-  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma, search, sortCol, sortDir, periodDays, dateFrom, dateTo]);
+  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma, search, sortCol, sortDir, periodDays, dateFrom, dateTo, parseDate]);
 
   // KPIs
   const totalDevolucoes = filtered.length;
@@ -281,9 +273,18 @@ export function DevolucaoPage() {
       label: string; 
       qtd: number; 
       reembolso: number; 
-      custo: number; 
+      faturamento: number; 
     }>();
     
+    // Consolidar Faturamento por Mês (usando marketplaceDiaItems)
+    const fatMap = new Map<string, number>();
+    (marketplaceDiaItems || []).forEach(i => {
+      const d = parseDate(i.data);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      fatMap.set(key, (fatMap.get(key) || 0) + i.faturamentoBruto);
+    });
+
     // Filtramos apenas por status/setor/plataforma, ignorando o filtro de data fixo
     let baseItems = items;
     if (filterStatus !== 'all') baseItems = baseItems.filter(i => i.statusDevolucao === filterStatus);
@@ -300,22 +301,64 @@ export function DevolucaoPage() {
       const key = `${year}-${String(month + 1).padStart(2, '0')}`;
       const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
       
-      const cur = map.get(key) || { monthKey: key, label, qtd: 0, reembolso: 0, custo: 0 };
+      const cur = map.get(key) || { 
+        monthKey: key, 
+        label, 
+        qtd: 0, 
+        reembolso: 0, 
+        faturamento: fatMap.get(key) || 0 
+      };
       cur.qtd += 1;
       cur.reembolso += i.valorReembolso;
-      cur.custo += i.totalCustoMercadoria;
       map.set(key, cur);
     });
 
     const sorted = [...map.values()].sort((a, b) => a.monthKey.localeCompare(b.monthKey));
     
-    return sorted.map((m, idx) => {
-      const prev = sorted[idx - 1];
+    return sorted.map((m, idx, arr) => {
+      const prev = arr[idx - 1];
       const varQtd = prev && prev.qtd > 0 ? ((m.qtd - prev.qtd) / prev.qtd) * 100 : 0;
-      const varReembolso = prev && prev.reembolso > 0 ? ((m.reembolso - prev.reembolso) / prev.reembolso) * 100 : 0;
-      return { ...m, varQtd, varReembolso };
+      const pctFaturamento = m.faturamento > 0 ? (m.reembolso / m.faturamento) * 100 : 0;
+      return { ...m, varQtd, pctFaturamento };
     }).slice(-12); // Exibir últimos 12 meses
-  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma]);
+  }, [items, marketplaceDiaItems, filterStatus, filterSetor, filterSituacao, filterPlataforma, parseDate]);
+
+  const monthlySkuRanking = useMemo(() => {
+    if (!selectedMonth) return [];
+    const map = new Map<string, { sku: string; qtd: number; valor: number }>();
+    
+    // Aplicamos os mesmos filtros de plataforma/setor para o ranking
+    let baseItems = items;
+    if (filterStatus !== 'all') baseItems = baseItems.filter(i => i.statusDevolucao === filterStatus);
+    if (filterSetor !== 'all') baseItems = baseItems.filter(i => i.setor === filterSetor);
+    if (filterSituacao !== 'all') baseItems = baseItems.filter(i => i.situacaoMercadoria === filterSituacao);
+    if (filterPlataforma !== 'all') baseItems = baseItems.filter(i => i.plataforma === filterPlataforma);
+
+    baseItems.forEach(i => {
+      const d = parseDate(i.dataReembolso);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (key !== selectedMonth) return;
+      
+      const sku = i.skuProduto || 'Sem SKU';
+      const cur = map.get(sku) || { sku, qtd: 0, valor: 0 };
+      cur.qtd += i.quantidade;
+      cur.valor += i.valorReembolso;
+      map.set(sku, cur);
+    });
+
+    const totalMonth = [...map.values()].reduce((s, x) => s + x.qtd, 0);
+    return [...map.values()]
+      .sort((a, b) => b.qtd - a.qtd)
+      .slice(0, 15)
+      .map(x => ({ ...x, pct: totalMonth > 0 ? (x.qtd / totalMonth) * 100 : 0 }));
+  }, [items, selectedMonth, filterStatus, filterSetor, filterSituacao, filterPlataforma, parseDate]);
+
+  const selectedMonthLabel = useMemo(() => {
+    if (!selectedMonth) return '';
+    const m = monthlyEvolution.find(x => x.monthKey === selectedMonth);
+    return m ? m.label : selectedMonth;
+  }, [selectedMonth, monthlyEvolution]);
 
   const SortIcon = ({ col }: { col: string }) => {
     if (sortCol !== col) return null;
@@ -806,7 +849,13 @@ export function DevolucaoPage() {
           {/* Cards de Variação Mensal */}
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {[...monthlyEvolution].reverse().map(m => (
-              <div key={m.monthKey} className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
+              <div 
+                key={m.monthKey} 
+                onClick={() => setSelectedMonth(selectedMonth === m.monthKey ? null : m.monthKey)}
+                className={`bg-card border rounded-xl p-4 flex flex-col gap-3 cursor-pointer transition-all ${
+                  selectedMonth === m.monthKey ? 'border-primary ring-1 ring-primary shadow-lg scale-[1.02]' : 'border-border hover:border-primary/50'
+                }`}
+              >
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-bold text-foreground capitalize">{m.label}</span>
                   <div className={`flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${m.varQtd > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
@@ -820,8 +869,8 @@ export function DevolucaoPage() {
                     <p className="text-lg font-bold text-foreground">{m.qtd}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
-                    <p className="text-lg font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">% Faturamento</p>
+                    <p className="text-lg font-bold text-foreground">{m.pctFaturamento.toFixed(2)}%</p>
                   </div>
                 </div>
               </div>
@@ -831,37 +880,79 @@ export function DevolucaoPage() {
           {/* Gráfico de Composição Mensal */}
           <div className="bg-card border border-border rounded-xl p-5">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-sm font-semibold text-foreground">Performance Temporal de Devoluções</h3>
-              <div className="flex gap-4 text-[10px] font-medium text-muted-foreground">
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Qtd</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Reembolso</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Custo</div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {selectedMonth ? `SKUs com mais devoluções — ${selectedMonthLabel}` : 'Performance Temporal de Devoluções'}
+                </h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {selectedMonth ? 'Ranking de produtos com mais volume de devoluções no mês' : 'Comparativo mensal de volume e taxa sobre faturamento'}
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                {selectedMonth && (
+                  <button 
+                    onClick={() => setSelectedMonth(null)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-[10px] font-bold hover:text-foreground hover:bg-muted/80 transition-all border border-border"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Voltar para Histórico
+                  </button>
+                )}
+                <div className="flex gap-4 text-[10px] font-medium text-muted-foreground">
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Qtd</div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500" /> {selectedMonth ? 'Valor' : '% Fat'}</div>
+                </div>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={400}>
-              <ComposedChart data={monthlyEvolution}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <Tooltip
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
-                  formatter={(v: number, name: string) => [
-                    name === 'qtd' ? v : formatBRL(v),
-                    name === 'qtd' ? 'Qtd Devoluções' : name === 'reembolso' ? 'Valor Reembolso' : 'Custo Mercadoria'
-                  ]}
-                />
-                <Bar yAxisId="left" dataKey="qtd" name="qtd" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
-                <Area yAxisId="right" type="monotone" dataKey="reembolso" name="reembolso" fill="url(#colorReembolso)" stroke="#f59e0b" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="custo" name="custo" stroke="#f43f5e" strokeWidth={2} dot={{ r: 4, fill: '#f43f5e' }} />
-                <defs>
-                  <linearGradient id="colorReembolso" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-              </ComposedChart>
-            </ResponsiveContainer>
+
+            {selectedMonth ? (
+              <ResponsiveContainer width="100%" height={450}>
+                <BarChart data={monthlySkuRanking} layout="vertical" margin={{ left: 100 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis dataKey="sku" type="category" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} width={90} />
+                  <Tooltip
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                    formatter={(v: number, name: string) => [
+                      name === 'qtd' ? v : formatBRL(v),
+                      name === 'qtd' ? 'Quantidade' : 'Valor Reembolso'
+                    ]}
+                  />
+                  <Bar dataKey="qtd" name="qtd" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <ComposedChart 
+                  data={monthlyEvolution}
+                  onClick={(data) => {
+                    if (data && data.activePayload && data.activePayload[0]) {
+                      setSelectedMonth(data.activePayload[0].payload.monthKey);
+                    }
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                    formatter={(v: number, name: string) => [
+                      name === 'qtd' ? v : `${v.toFixed(2)}%`,
+                      name === 'qtd' ? 'Qtd Devoluções' : '% do Faturamento'
+                    ]}
+                  />
+                  <Bar yAxisId="left" dataKey="qtd" name="qtd" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
+                  <Area yAxisId="right" type="monotone" dataKey="pctFaturamento" name="pctFaturamento" fill="url(#colorReembolso)" stroke="#f59e0b" strokeWidth={2} />
+                  <defs>
+                    <linearGradient id="colorReembolso" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       )}
