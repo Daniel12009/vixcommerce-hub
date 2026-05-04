@@ -34,20 +34,22 @@ const parseDate = (str: string): Date | null => {
     }
   }
 
-  // Serial Excel/Sheets (apenas para ranges plausíveis: 2020-01-01 ≈ 43831, 2030-12-31 ≈ 47848)
+  // Serial Excel/Sheets: range apertado 2024-01-01 (45292) até hoje + 30d
   if (!d || isNaN(d.getTime())) {
     const num = Number(s);
-    if (!isNaN(num) && num >= 43800 && num <= 47900) {
+    const todaySerial = Math.floor(Date.now() / 86400000) + 25569 + 30;
+    if (!isNaN(num) && num >= 45292 && num <= todaySerial) {
       d = new Date((num - 25569) * 86400000);
       d.setHours(12, 0, 0, 0);
     }
   }
 
-  // Validação final: ano deve estar entre 2020 e 2030
+  // Validação final: ano deve estar entre 2024 e ano atual
   if (d && !isNaN(d.getTime())) {
     const y = d.getFullYear();
-    if (y < 2020 || y > 2030) {
-      console.warn(`[Devolucao] Data fora do range 2020-2030 descartada: "${str}" -> ${d.toISOString()}`);
+    const currentYear = new Date().getFullYear();
+    if (y < 2024 || y > currentYear) {
+      console.warn(`[Devolucao] Data fora do range válido descartada: "${str}" -> ${d.toISOString()}`);
       return null;
     }
     return d;
@@ -875,20 +877,20 @@ export function DevolucaoPage() {
                       {Math.abs(Math.round(m.varQtd))}%
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">Devoluções</p>
-                      <p className="text-lg font-bold text-foreground">{m.qtd}</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[10px] text-muted-foreground uppercase">Devoluções</span>
+                      <span className="text-base font-bold text-foreground">{m.qtd}</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
-                      <p className="text-sm font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[10px] text-muted-foreground uppercase">Reembolso</span>
+                      <span className="text-sm font-semibold text-foreground">{formatBRL(m.reembolso)}</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">% Fat.</p>
-                      <p className="text-sm font-bold text-foreground">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[10px] text-muted-foreground uppercase">% Faturamento</span>
+                      <span className="text-sm font-semibold text-foreground">
                         {m.pctFaturamento != null ? `${m.pctFaturamento.toFixed(1)}%` : '—'}
-                      </p>
+                      </span>
                     </div>
                   </div>
                   <div className="text-[10px] text-primary font-medium flex items-center gap-1">
