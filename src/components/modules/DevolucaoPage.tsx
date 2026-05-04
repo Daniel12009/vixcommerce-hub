@@ -92,6 +92,7 @@ export function DevolucaoPage() {
   const [sortCol, setSortCol] = useState<string>('dataPlanilha');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const [periodDays, setPeriodDays] = useState<number | 'custom' | 'all'>(30);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
