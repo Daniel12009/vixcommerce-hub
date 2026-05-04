@@ -954,8 +954,7 @@ export function DevolucaoPage() {
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-semibold text-foreground">Performance Temporal de Devoluções</h3>
               <div className="flex gap-4 text-[10px] font-medium text-muted-foreground">
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Qtd</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Reembolso</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Qtd Devoluções</div>
                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> % Faturamento</div>
               </div>
             </div>
@@ -963,26 +962,18 @@ export function DevolucaoPage() {
               <ComposedChart data={monthlyEvolution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} label={{ value: 'Qtd', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' } }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => `${v}%`} />
                 <Tooltip
                   contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
                   formatter={(v: any, name: string) => {
                     if (name === 'qtd') return [v, 'Qtd Devoluções'];
-                    if (name === 'reembolso') return [formatBRL(Number(v)), 'Valor Reembolso'];
-                    if (name === 'pctFaturamento') return [v == null ? '—' : `${Number(v).toFixed(1)}% do faturamento`, '% Faturamento'];
+                    if (name === 'pctFaturamento') return [v == null ? '—' : `${Number(v).toFixed(1)}%`, '% Faturamento'];
                     return [v, name];
                   }}
                 />
                 <Bar yAxisId="left" dataKey="qtd" name="qtd" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
-                <Area yAxisId="left" type="monotone" dataKey="reembolso" name="reembolso" fill="url(#colorReembolso)" stroke="#f59e0b" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="pctFaturamento" name="pctFaturamento" stroke="#f43f5e" strokeWidth={2} dot={{ r: 4, fill: '#f43f5e' }} connectNulls />
-                <defs>
-                  <linearGradient id="colorReembolso" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
+                <Line yAxisId="right" type="monotone" dataKey="pctFaturamento" name="pctFaturamento" stroke="#f43f5e" strokeWidth={2.5} dot={{ r: 4, fill: '#f43f5e' }} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
