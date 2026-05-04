@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Package, 
   CheckCircle, 
@@ -7,187 +7,183 @@ import {
   Search, 
   Filter, 
   Truck, 
-  RefreshCw, 
-  Loader2, 
-  ChevronDown, 
-  ChevronRight, 
-  ExternalLink,
+  TrendingUp, 
   Clock,
-  LayoutGrid
+  LayoutGrid,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { formatBRL } from '@/lib/utils-vix';
+import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { KpiCard } from '@/components/shared/KpiCard';
 
-interface EstoqueFullItem {
+type FullStatus = 'ATIVO' | 'ENVIANDO' | 'SEM ENVIO FULL' | 'INATIVO';
+
+interface FullRow {
   sku: string;
   conta: string;
-  aptasParaVenda: number;
+  fullML: number;
   entradaPendente: number;
-  statusAnuncio?: string;
-  item_id?: string;
+  tinyLocal: number;
+  vmd: number;
+  coberturaDias: number;
+  status: FullStatus;
 }
 
-interface AdItem {
-  item_id: string;
-  title: string;
-  status: string;
-  logistic_type: string;
-  seller_custom_field?: string;
-  variations?: any[];
-  permalink?: string;
-  thumbnail?: string;
-  conta: string;
-}
-
-interface JoinedItem extends EstoqueFullItem {
-  adStatusML?: string;
-  adTitle?: string;
-  adLink?: string;
-  adThumbnail?: string;
-  calculatedStatus: 'ATIVO' | 'INATIVO' | 'SEM ANÚNCIO';
-}
+const STATUS_CONFIG: Record<FullStatus, { label: string; icon: any; color: string; bg: string; border: string }> = {
+  'ATIVO': { label: 'ATIVO', icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  'ENVIANDO': { label: 'ENVIANDO', icon: Truck, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+  'SEM ENVIO FULL': { label: 'SEM ENVIO FULL', icon: AlertTriangle, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
+  'INATIVO': { label: 'INATIVO', icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' }
+};
 
 export function EstoqueFullTab() {
-  const [estoqueItems, setEstoqueItems] = useState<EstoqueFullItem[]>([]);
-  const [adsItems, setAdsItems] = useState<AdItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<string>('');
-  const [expandedSku, setExpandedSku] = useState<string | null>(null);
+  const { estoqueFullItems, estoqueTinyItems, vendas7dItems } = useSheetsData();
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<FullStatus | 'all'>('all');
+  const [filterConta, setFilterConta] = useState<string>('all');
+  const [sortField, setSortField] = useState<keyof FullRow>('status');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  // Helper for normalization (sync with EstoquePage)
+  const CONTA_ALIASES: Record<string, string> = {
+    'GSTORNEIRAS': 'GS',
+    'DECARIONTORNEIRAS': 'MONACO',
+    'VIAFLIX': 'VIAFLIX',
+    'VIAFIX': 'VIAFLIX'
+  };
   
-  // Filters
-  const [filterSku, setFilterSku] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'ATIVO' | 'INATIVO' | 'SEM ANÚNCIO'>('all');
-  const [filterConta, setFilterConta] = useState('all');
-
-  const fetchData = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      // 1. Fetch Manual Stock from app_data
-      const { data: appData, error: appError } = await supabase
-        .from('app_data')
-        .select('data_value, updated_at')
-        .eq('data_key', 'estoque_full_data')
-        .single();
-
-      if (appError && appError.code !== 'PGRST116') throw appError;
-
-      const rawStock = (appData?.data_value as any[]) || [];
-      setEstoqueItems(rawStock);
-      if (appData?.updated_at) {
-        setLastUpdate(new Date(appData.updated_at).toLocaleString('pt-BR'));
-      }
-
-      // 2. Fetch Ads Status from Mercado Livre Edge Function
-      const now = new Date();
-      const to = now.toISOString().split('T')[0];
-      const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      const { data: mlData, error: mlError } = await supabase.functions.invoke('mercado-livre', { 
-        body: { action: 'get_ads_data', date_from: from, date_to: to } 
-      });
-
-      if (mlError) throw new Error(mlError.message);
-      
-      const allAds = (mlData?.items || []) as AdItem[];
-      // Filter only fulfillment ads for the main cross-reference
-      const fullAds = allAds.filter(ad => ad.logistic_type === 'fulfillment');
-      setAdsItems(fullAds);
-
-      if (!silent) toast.success('Dados sincronizados com sucesso');
-    } catch (err: any) {
-      console.error('[EstoqueFullTab] Error:', err);
-      toast.error(`Erro ao carregar dados: ${err.message}`);
-    } finally {
-      setLoading(false);
+  const normalizeConta = (s: string) => {
+    if (!s) return '';
+    const base = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    for (const [key, val] of Object.entries(CONTA_ALIASES)) {
+      if (base.includes(key)) return val;
     }
-  }, []);
+    return base;
+  };
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Calculate VMD
+  const vmdBySkuAndConta = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!vendas7dItems) return map;
 
-  // Join Data Logic
-  const joinedData = useMemo(() => {
-    // Create a map of ads by SKU for fast lookup
-    const adsBySku = new Map<string, AdItem>();
-    adsItems.forEach(ad => {
-      // Check main SKU
-      const mainSku = ad.seller_custom_field?.trim().toUpperCase();
-      if (mainSku) adsBySku.set(mainSku, ad);
-      
-      // Check variation SKUs
-      if (ad.variations && Array.isArray(ad.variations)) {
-        ad.variations.forEach(v => {
-          const vSku = v.attribute_combinations?.find((a: any) => a.id === 'SELLER_SKU')?.value_name?.trim().toUpperCase();
-          if (vSku) adsBySku.set(vSku, ad);
-        });
-      }
+    vendas7dItems.forEach(item => {
+      if (!item.sku) return;
+      const sku = item.sku.trim().toUpperCase();
+      const normConta = normalizeConta(item.conta || '');
+      const qty = Number(item.quantidade || 0);
+      const key = `${sku}||${normConta}`;
+      map.set(key, (map.get(key) || 0) + qty);
     });
 
-    const result: JoinedItem[] = estoqueItems.map(item => {
-      const sku = item.sku.trim().toUpperCase();
-      const ad = adsBySku.get(sku);
-      
-      let calculatedStatus: 'ATIVO' | 'INATIVO' | 'SEM ANÚNCIO' = 'SEM ANÚNCIO';
-      
-      if (ad) {
-        const isActive = ad.status === 'active' && item.aptasParaVenda > 0;
-        calculatedStatus = isActive ? 'ATIVO' : 'INATIVO';
-      }
+    // Convert total to daily average
+    const vmdMap = new Map<string, number>();
+    map.forEach((total, key) => vmdMap.set(key, total / 7));
+    return vmdMap;
+  }, [vendas7dItems]);
+
+  // Merge Data
+  const mergedData = useMemo<FullRow[]>(() => {
+    if (!estoqueFullItems) return [];
+
+    const tinyMap = new Map<string, number>();
+    (estoqueTinyItems || []).forEach(i => {
+      const sku = (i.sku || '').trim().toUpperCase();
+      if (sku) tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(i.quantidade || 0));
+    });
+
+    // Build per (SKU x Account) rows
+    return estoqueFullItems.map(item => {
+      const sku = (item.sku || '').trim().toUpperCase();
+      const rawConta = item.conta || '';
+      const normConta = normalizeConta(rawConta);
+      const fullML = Number(item.aptasParaVenda || 0);
+      const entradaPendente = Number(item.entradaPendente || 0);
+      const tinyLocal = tinyMap.get(sku) || 0;
+      const vmd = vmdBySkuAndConta.get(`${sku}||${normConta}`) || 0;
+      const coberturaDias = vmd > 0 ? Number((fullML / vmd).toFixed(1)) : 999;
+
+      let status: FullStatus = 'INATIVO';
+      if (fullML > 0) status = 'ATIVO';
+      else if (entradaPendente > 0) status = 'ENVIANDO';
+      else if (tinyLocal > 0) status = 'SEM ENVIO FULL';
 
       return {
-        ...item,
-        adStatusML: ad?.status,
-        adTitle: ad?.title,
-        adLink: ad?.permalink,
-        adThumbnail: ad?.thumbnail,
-        calculatedStatus
+        sku,
+        conta: normConta,
+        fullML,
+        entradaPendente,
+        tinyLocal,
+        vmd,
+        coberturaDias,
+        status
       };
     });
-
-    // Sorting: ATIVO first, then Qty desc
-    return result.sort((a, b) => {
-      const statusOrder = { 'ATIVO': 0, 'INATIVO': 1, 'SEM ANÚNCIO': 2 };
-      if (statusOrder[a.calculatedStatus] !== statusOrder[b.calculatedStatus]) {
-        return statusOrder[a.calculatedStatus] - statusOrder[b.calculatedStatus];
-      }
-      return b.aptasParaVenda - a.aptasParaVenda;
-    });
-  }, [estoqueItems, adsItems]);
-
-  // Filtered Data
-  const filteredData = useMemo(() => {
-    return joinedData.filter(item => {
-      const matchesSku = !filterSku || item.sku.toLowerCase().includes(filterSku.toLowerCase());
-      const matchesStatus = filterStatus === 'all' || item.calculatedStatus === filterStatus;
-      const matchesConta = filterConta === 'all' || item.conta === filterConta;
-      return matchesSku && matchesStatus && matchesConta;
-    });
-  }, [joinedData, filterSku, filterStatus, filterConta]);
-
-  // Unique Accounts for dropdown
-  const uniqueContas = useMemo(() => {
-    return [...new Set(estoqueItems.map(i => i.conta))].filter(Boolean).sort();
-  }, [estoqueItems]);
+  }, [estoqueFullItems, estoqueTinyItems, vmdBySkuAndConta]);
 
   // Stats
   const stats = useMemo(() => {
     return {
-      totalSkus: joinedData.length,
-      ativos: joinedData.filter(i => i.calculatedStatus === 'ATIVO').length,
-      inativos: joinedData.filter(i => i.calculatedStatus === 'INATIVO').length,
-      semAnuncio: joinedData.filter(i => i.calculatedStatus === 'SEM ANÚNCIO').length,
-      totalAptas: joinedData.reduce((acc, i) => acc + (i.aptasParaVenda || 0), 0)
+      total: mergedData.length,
+      ativos: mergedData.filter(i => i.status === 'ATIVO').length,
+      enviando: mergedData.filter(i => i.status === 'ENVIANDO').length,
+      semEnvio: mergedData.filter(i => i.status === 'SEM ENVIO FULL').length,
+      inativos: mergedData.filter(i => i.status === 'INATIVO').length,
+      totalFull: mergedData.reduce((acc, i) => acc + i.fullML, 0),
+      lastUpdate: localStorage.getItem('vix_estoque_full_data_time') || '---'
     };
-  }, [joinedData]);
+  }, [mergedData]);
 
-  if (loading && joinedData.length === 0) {
+  // Filtered & Sorted
+  const displayData = useMemo(() => {
+    const term = searchTerm.trim().toUpperCase();
+    const filtered = mergedData.filter(row => {
+      if (term && !row.sku.includes(term)) return false;
+      if (filterStatus !== 'all' && row.status !== filterStatus) return false;
+      if (filterConta !== 'all' && row.conta !== filterConta) return false;
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const statusOrder: Record<FullStatus, number> = { 'INATIVO': 0, 'SEM ENVIO FULL': 1, 'ENVIANDO': 2, 'ATIVO': 3 };
+      
+      if (sortField === 'status') {
+        const valA = statusOrder[a.status];
+        const valB = statusOrder[b.status];
+        if (valA !== valB) return sortDir === 'asc' ? valA - valB : valB - valA;
+        return b.fullML - a.fullML; // Tie-break
+      }
+
+      const valA = a[sortField];
+      const valB = b[sortField];
+
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return sortDir === 'asc' ? Number(valA) - Number(valB) : Number(valB) - Number(valA);
+    });
+  }, [mergedData, searchTerm, filterStatus, filterConta, sortField, sortDir]);
+
+  const toggleSort = (field: keyof FullRow) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir(field === 'sku' || field === 'conta' ? 'asc' : 'desc');
+    }
+  };
+
+  const sortIcon = (field: keyof FullRow) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-30" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />;
+  };
+
+  if (!estoqueFullItems) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-card/50 border border-border rounded-2xl">
-        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground animate-pulse">Sincronizando estoque e anúncios...</p>
+      <div className="flex flex-col items-center justify-center py-20 bg-card/50 border border-border rounded-2xl animate-fade-in">
+        <Package className="w-12 h-12 text-muted-foreground opacity-20 mb-4" />
+        <p className="text-muted-foreground">Aguardando importação de dados de estoque...</p>
       </div>
     );
   }
@@ -195,30 +191,31 @@ export function EstoqueFullTab() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard title="Total SKUs no Full" value={stats.totalSkus.toLocaleString()} icon={Package} delay={0} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3">
+        <KpiCard title="Total SKUs" value={stats.total.toLocaleString()} icon={Package} delay={0} />
         <KpiCard title="Ativos" value={stats.ativos.toLocaleString()} icon={CheckCircle} valueColor="text-emerald-400" delay={50} />
-        <KpiCard title="Inativos" value={stats.inativos.toLocaleString()} icon={XCircle} valueColor="text-red-400" delay={100} />
-        <KpiCard title="Sem Anúncio ML" value={stats.semAnuncio.toLocaleString()} icon={AlertTriangle} valueColor="text-yellow-400" delay={150} />
-        <KpiCard title="Unidades Aptas" value={stats.totalAptas.toLocaleString()} icon={LayoutGrid} delay={200} />
-        <KpiCard title="Último Upload" value={lastUpdate || '---'} icon={Clock} delay={250} />
+        <KpiCard title="Enviando" value={stats.enviando.toLocaleString()} icon={Truck} valueColor="text-blue-400" delay={100} />
+        <KpiCard title="Sem Envio" value={stats.semEnvio.toLocaleString()} icon={AlertTriangle} valueColor="text-yellow-400" delay={150} />
+        <KpiCard title="Inativos" value={stats.inativos.toLocaleString()} icon={XCircle} valueColor="text-red-400" delay={200} />
+        <KpiCard title="Unid. Full" value={stats.totalFull.toLocaleString()} icon={LayoutGrid} delay={250} />
+        <KpiCard title="Último Upload" value={stats.lastUpdate} icon={Clock} delay={300} />
       </div>
 
       {/* Filters Row */}
-      <div className="flex flex-wrap items-center gap-4 bg-card border border-border p-4 rounded-2xl">
-        <div className="relative flex-1 min-w-[240px]">
+      <div className="flex flex-wrap items-center gap-4 bg-card border border-border p-4 rounded-2xl shadow-sm">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input 
             type="text" 
-            placeholder="Buscar por SKU..."
-            value={filterSku}
-            onChange={e => setFilterSku(e.target.value)}
+            placeholder="Buscar SKU..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-xl bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 transition-colors"
           />
         </div>
 
-        <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border">
-          {(['all', 'ATIVO', 'INATIVO', 'SEM ANÚNCIO'] as const).map(s => (
+        <div className="flex flex-wrap items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border">
+          {(['all', 'ATIVO', 'ENVIANDO', 'SEM ENVIO FULL', 'INATIVO'] as const).map(s => (
             <button
               key={s}
               onClick={() => setFilterStatus(s)}
@@ -238,136 +235,62 @@ export function EstoqueFullTab() {
           <select
             value={filterConta}
             onChange={e => setFilterConta(e.target.value)}
-            className="bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50"
+            className="bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 cursor-pointer"
           >
             <option value="all">Todas as Contas</option>
-            {uniqueContas.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            <option value="VIAFLIX">VIAFLIX</option>
+            <option value="GS">GS</option>
+            <option value="MONACO">MONACO</option>
           </select>
         </div>
-
-        <button 
-          onClick={() => fetchData(false)} 
-          disabled={loading}
-          className="p-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-          title="Atualizar dados"
-        >
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-        </button>
       </div>
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/50 border-b border-border">
-                <th className="w-10" />
-                <th className="text-left py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">SKU</th>
-                <th className="text-left py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Conta</th>
-                <th className="text-center py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status Sistema</th>
-                <th className="text-right py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Aptas Venda</th>
-                <th className="text-right py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Entrada Pendente</th>
-                <th className="text-center py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status ML</th>
+                <th className="text-left py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('sku')}>SKU {sortIcon('sku')}</th>
+                <th className="text-left py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('conta')}>Conta {sortIcon('conta')}</th>
+                <th className="text-right py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('fullML')}>Full {sortIcon('fullML')}</th>
+                <th className="text-right py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('entradaPendente')}>Entrada {sortIcon('entradaPendente')}</th>
+                <th className="text-right py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('tinyLocal')}>Tiny Local {sortIcon('tinyLocal')}</th>
+                <th className="text-right py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('vmd')}>VMD {sortIcon('vmd')}</th>
+                <th className="text-right py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('coberturaDias')}>Cobertura {sortIcon('coberturaDias')}</th>
+                <th className="text-center py-4 px-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort('status')}>Status {sortIcon('status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {filteredData.map((item, idx) => (
-                <React.Fragment key={`${item.sku}-${item.conta}-${idx}`}>
-                  <tr 
-                    onClick={() => setExpandedSku(expandedSku === item.sku ? null : item.sku)}
-                    className={`hover:bg-primary/5 transition-colors cursor-pointer ${expandedSku === item.sku ? 'bg-primary/5' : ''}`}
-                  >
-                    <td className="py-4 px-2 text-center">
-                      {expandedSku === item.sku ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+              {displayData.map((row, idx) => {
+                const config = STATUS_CONFIG[row.status];
+                const Icon = config.icon;
+                return (
+                  <tr key={`${row.sku}-${row.conta}-${idx}`} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-4 px-4 font-mono text-xs font-semibold text-primary">{row.sku}</td>
+                    <td className="py-4 px-4 text-xs text-muted-foreground">{row.conta}</td>
+                    <td className={`py-4 px-4 text-right font-bold ${row.fullML <= 0 ? 'text-red-400' : 'text-foreground'}`}>{row.fullML.toLocaleString()}</td>
+                    <td className="py-4 px-4 text-right text-muted-foreground">{row.entradaPendente > 0 ? row.entradaPendente.toLocaleString() : '—'}</td>
+                    <td className="py-4 px-4 text-right text-muted-foreground">{row.tinyLocal > 0 ? row.tinyLocal.toLocaleString() : '—'}</td>
+                    <td className="py-4 px-4 text-right text-muted-foreground">{row.vmd.toFixed(1)}</td>
+                    <td className={`py-4 px-4 text-right font-medium ${row.coberturaDias < 10 ? 'text-red-400' : row.coberturaDias < 20 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                      {row.coberturaDias >= 999 ? '∞' : `${row.coberturaDias}d`}
                     </td>
-                    <td className="py-4 px-4 font-mono text-xs font-medium text-foreground">{item.sku}</td>
-                    <td className="py-4 px-4 text-xs text-muted-foreground">{item.conta}</td>
                     <td className="py-4 px-4 text-center">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                        item.calculatedStatus === 'ATIVO' 
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                          : item.calculatedStatus === 'INATIVO'
-                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                          : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                      }`}>
-                        {item.calculatedStatus}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-right font-semibold text-foreground">{item.aptasParaVenda.toLocaleString()}</td>
-                    <td className="py-4 px-4 text-right text-muted-foreground">{item.entradaPendente.toLocaleString()}</td>
-                    <td className="py-4 px-4 text-center">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium ${
-                        item.adStatusML === 'active' 
-                          ? 'text-emerald-400' 
-                          : item.adStatusML ? 'text-red-400' : 'text-muted-foreground'
-                      }`}>
-                        {item.adStatusML || '---'}
-                      </span>
+                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${config.bg} ${config.color} ${config.border}`}>
+                        <Icon className="w-3 h-3" />
+                        {config.label}
+                      </div>
                     </td>
                   </tr>
-                  
-                  {/* Expanded Content */}
-                  {expandedSku === item.sku && (
-                    <tr className="bg-muted/30 border-t border-border/10">
-                      <td colSpan={7} className="px-10 py-6">
-                        <div className="flex gap-6 animate-in slide-in-from-top-2 duration-300">
-                          {item.adThumbnail && (
-                            <img 
-                              src={item.adThumbnail} 
-                              alt={item.adTitle} 
-                              className="w-20 h-20 rounded-xl border border-border object-cover bg-white"
-                            />
-                          )}
-                          <div className="flex-1 space-y-4">
-                            <div>
-                              <h4 className="text-sm font-semibold text-foreground mb-1">{item.adTitle || 'Anúncio não localizado'}</h4>
-                              <p className="text-xs text-muted-foreground flex items-center gap-2">
-                                <Package className="w-3 h-3" /> SKU: {item.sku} 
-                                {item.item_id && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">ID: {item.item_id}</span>}
-                              </p>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Status Planilha</p>
-                                <p className="text-xs text-foreground font-medium">{item.statusAnuncio || '---'}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Entrada Pendente</p>
-                                <p className="text-xs text-foreground font-medium">{item.entradaPendente.toLocaleString()} unidades</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Status ML</p>
-                                <p className="text-xs text-foreground font-medium uppercase">{item.adStatusML || 'N/A'}</p>
-                              </div>
-                              <div className="space-y-1 flex items-end">
-                                {item.adLink && (
-                                  <a 
-                                    href={item.adLink} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
-                                  >
-                                    Ver no Mercado Livre <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
       
-      {filteredData.length === 0 && (
+      {displayData.length === 0 && (
         <div className="text-center py-20 bg-card border border-border rounded-2xl">
           <Search className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-muted-foreground font-medium">Nenhum SKU encontrado com estes filtros</p>
