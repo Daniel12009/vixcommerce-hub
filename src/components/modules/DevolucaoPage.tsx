@@ -875,14 +875,20 @@ export function DevolucaoPage() {
                       {Math.abs(Math.round(m.varQtd))}%
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">Devoluções</p>
                       <p className="text-lg font-bold text-foreground">{m.qtd}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
-                      <p className="text-lg font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                      <p className="text-sm font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">% Fat.</p>
+                      <p className="text-sm font-bold text-foreground">
+                        {m.pctFaturamento != null ? `${m.pctFaturamento.toFixed(2)}%` : '—'}
+                      </p>
                     </div>
                   </div>
                   <div className="text-[10px] text-primary font-medium flex items-center gap-1">
