@@ -6,45 +6,53 @@ import { KpiCard } from '@/components/shared/KpiCard';
 import { useSheetsData } from '@/contexts/SheetsDataContext';
 import { formatBRL } from '@/lib/utils-vix';
 import { toast } from 'sonner';
+import { useVendasFromDB } from '@/hooks/useVendasFromDB';
 
 // Parse date strings: dd/mm/yyyy, yyyy-mm-dd, serial numbers, etc.
 const parseDate = (str: string): Date | null => {
   if (!str) return null;
-  const s = str.trim();
+  const s = String(str).trim();
   let d: Date | null = null;
 
+  // DD/MM/YYYY ou DD/MM/YY (assume 20YY se 2 dígitos)
   const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
   if (dmyMatch) {
+    const day = +dmyMatch[1];
+    const month = +dmyMatch[2];
     let year = +dmyMatch[3];
-    if (year < 100) year += 2000;
-    const month = dmyMatch[2].padStart(2, '0');
-    const day = dmyMatch[1].padStart(2, '0');
-    d = new Date(`${year}-${month}-${day}T12:00:00-03:00`);
-  }
-
-  if (!d || isNaN(d.getTime())) {
-    const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (isoMatch) {
-      const month = isoMatch[2].padStart(2, '0');
-      const day = isoMatch[3].padStart(2, '0');
-      d = new Date(`${isoMatch[1]}-${month}-${day}T12:00:00-03:00`);
+    if (year < 100) year = 2000 + year;
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      d = new Date(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00-03:00`);
     }
   }
 
+  // ISO YYYY-MM-DD
+  if (!d || isNaN(d.getTime())) {
+    const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      d = new Date(`${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}T12:00:00-03:00`);
+    }
+  }
+
+  // Serial Excel/Sheets (apenas para ranges plausíveis: 2020-01-01 ≈ 43831, 2030-12-31 ≈ 47848)
   if (!d || isNaN(d.getTime())) {
     const num = Number(s);
-    if (!isNaN(num) && num > 30000 && num < 60000) {
+    if (!isNaN(num) && num >= 43800 && num <= 47900) {
       d = new Date((num - 25569) * 86400000);
       d.setHours(12, 0, 0, 0);
     }
   }
 
-  if (!d || isNaN(d.getTime())) {
-    const native = new Date(s);
-    if (!isNaN(native.getTime())) d = native;
+  // Validação final: ano deve estar entre 2020 e 2030
+  if (d && !isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    if (y < 2020 || y > 2030) {
+      console.warn(`[Devolucao] Data fora do range 2020-2030 descartada: "${str}" -> ${d.toISOString()}`);
+      return null;
+    }
+    return d;
   }
 
-  if (d && !isNaN(d.getTime())) return d;
   console.warn(`[Devolucao] Falha ao converter data: "${str}"`);
   return null;
 };
@@ -93,6 +101,24 @@ export function DevolucaoPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+
+  // Faturamento mensal — busca 24 meses pra trás para casar com a evolução
+  const fatRangeIni = useMemo(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 24); d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const fatRangeFim = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const { data: faturamentoData } = useVendasFromDB(fatRangeIni, fatRangeFim);
+  const faturamentoPorMes = useMemo(() => {
+    const map = new Map<string, number>();
+    (faturamentoData || []).forEach(item => {
+      const d = parseDate(item.data);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      map.set(key, (map.get(key) || 0) + Number(item.faturamento_bruto || 0));
+    });
+    return map;
+  }, [faturamentoData]);
   const [periodDays, setPeriodDays] = useState<number | 'custom' | 'all'>(30);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -307,9 +333,11 @@ export function DevolucaoPage() {
       const prev = sorted[idx - 1];
       const varQtd = prev && prev.qtd > 0 ? ((m.qtd - prev.qtd) / prev.qtd) * 100 : 0;
       const varReembolso = prev && prev.reembolso > 0 ? ((m.reembolso - prev.reembolso) / prev.reembolso) * 100 : 0;
-      return { ...m, varQtd, varReembolso };
-    }).slice(-12); // Exibir últimos 12 meses
-  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma]);
+      const fatMes = faturamentoPorMes.get(m.monthKey) || 0;
+      const pctFaturamento = fatMes > 0 ? (m.reembolso / fatMes) * 100 : null;
+      return { ...m, varQtd, varReembolso, faturamento: fatMes, pctFaturamento };
+    }).slice(-12);
+  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma, faturamentoPorMes]);
 
   // Detalhes do mês expandido (top SKUs + top motivos)
   const monthDetails = useMemo(() => {
@@ -847,14 +875,20 @@ export function DevolucaoPage() {
                       {Math.abs(Math.round(m.varQtd))}%
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">Devoluções</p>
                       <p className="text-lg font-bold text-foreground">{m.qtd}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">Reembolso</p>
-                      <p className="text-lg font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                      <p className="text-sm font-bold text-foreground">{formatBRL(m.reembolso)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">% Fat.</p>
+                      <p className="text-sm font-bold text-foreground">
+                        {m.pctFaturamento != null ? `${m.pctFaturamento.toFixed(2)}%` : '—'}
+                      </p>
                     </div>
                   </div>
                   <div className="text-[10px] text-primary font-medium flex items-center gap-1">
@@ -920,7 +954,7 @@ export function DevolucaoPage() {
               <div className="flex gap-4 text-[10px] font-medium text-muted-foreground">
                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Qtd</div>
                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Reembolso</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Custo</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> % Faturamento</div>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={400}>
@@ -928,17 +962,19 @@ export function DevolucaoPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => `${v}%`} />
                 <Tooltip
                   contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
-                  formatter={(v: number, name: string) => [
-                    name === 'qtd' ? v : formatBRL(v),
-                    name === 'qtd' ? 'Qtd Devoluções' : name === 'reembolso' ? 'Valor Reembolso' : 'Custo Mercadoria'
-                  ]}
+                  formatter={(v: any, name: string) => {
+                    if (name === 'qtd') return [v, 'Qtd Devoluções'];
+                    if (name === 'reembolso') return [formatBRL(Number(v)), 'Valor Reembolso'];
+                    if (name === 'pctFaturamento') return [v == null ? '—' : `${Number(v).toFixed(2)}% do faturamento`, '% Faturamento'];
+                    return [v, name];
+                  }}
                 />
                 <Bar yAxisId="left" dataKey="qtd" name="qtd" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
-                <Area yAxisId="right" type="monotone" dataKey="reembolso" name="reembolso" fill="url(#colorReembolso)" stroke="#f59e0b" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="custo" name="custo" stroke="#f43f5e" strokeWidth={2} dot={{ r: 4, fill: '#f43f5e' }} />
+                <Area yAxisId="left" type="monotone" dataKey="reembolso" name="reembolso" fill="url(#colorReembolso)" stroke="#f59e0b" strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="pctFaturamento" name="pctFaturamento" stroke="#f43f5e" strokeWidth={2} dot={{ r: 4, fill: '#f43f5e' }} connectNulls />
                 <defs>
                   <linearGradient id="colorReembolso" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
