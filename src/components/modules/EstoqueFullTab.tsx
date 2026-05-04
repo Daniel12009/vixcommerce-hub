@@ -48,7 +48,9 @@ export function EstoqueFullTab() {
 
   const normalizeConta = (s: string) => {
     if (!s) return '';
-    const base = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // Strip parentheses and normalize
+    const clean = s.replace(/[()]/g, '').trim().toUpperCase();
+    const base = clean.replace(/[^A-Z0-9]/g, '');
     if (base.includes('VIAFLIX') || base.includes('VIAFIX')) return 'VIAFLIX';
     if (base.includes('GSTORNEIRAS') || base.includes('GS')) return 'GS';
     if (base.includes('MONACO') || base.includes('DECARION')) return 'MONACO';
@@ -75,22 +77,17 @@ export function EstoqueFullTab() {
   }, [vendas7dItems]);
 
   const mergedData = useMemo<FullRow[]>(() => {
-    // DEBUG LOGS REQUESTED BY USER
-    console.log('[DEBUG Tiny] Total items:', estoqueTinyItems?.length);
-    console.log('[DEBUG Tiny] Primeiros 3 registros completos:', JSON.stringify(estoqueTinyItems?.slice(0, 3), null, 2));
-    console.log('[DEBUG Tiny] Chaves do primeiro registro:', estoqueTinyItems?.[0] ? Object.keys(estoqueTinyItems[0]) : 'VAZIO');
-    console.log('[DEBUG Full] Primeiros 3 registros completos:', JSON.stringify(estoqueFullItems?.slice(0, 3), null, 2));
-
     const MAIN_ACCOUNTS = ['VIAFLIX', 'GS', 'MONACO'];
     const tinyMap = new Map<string, number>();
     
-    // Robust SKU normalization helper
     const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase().replace(/\s/g, '') : '';
 
-    (estoqueTinyItems || []).forEach(i => {
-      const sku = cleanSku(i.sku);
-      if (sku) tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(i.quantidade || 0));
-    });
+    (estoqueTinyItems || [])
+      .filter(i => i.sku && i.sku.toUpperCase() !== 'SKU') // Filter out header row
+      .forEach(i => {
+        const sku = cleanSku(i.sku);
+        if (sku) tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(i.quantidade || 0));
+      });
 
     // 1. Group existing Full data by SKU and Account
     const fullDataBySku = new Map<string, Map<string, { fullML: number; entradaPendente: number }>>();
