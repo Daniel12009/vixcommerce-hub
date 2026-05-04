@@ -72,58 +72,95 @@ export function EstoqueFullTab() {
   }, [vendas7dItems]);
 
   const mergedData = useMemo<FullRow[]>(() => {
+    // Debug: Log unique account names from raw data
+    if (estoqueFullItems && estoqueFullItems.length > 0) {
+      const rawContas = [...new Set(estoqueFullItems.map(i => i.conta))];
+      console.log('[AnunciosFull] Contas brutas no estoque_full:', rawContas);
+    }
+
+    const MAIN_ACCOUNTS = ['VIAFLIX', 'GS', 'MONACO'];
     const tinyMap = new Map<string, number>();
     (estoqueTinyItems || []).forEach(i => {
       const sku = (i.sku || '').trim().toUpperCase();
       if (sku) tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(i.quantidade || 0));
     });
 
-    const fullDataMap = new Map<string, { fullML: number; entradaPendente: number; conta: string; sku: string }>();
+    // 1. Group existing Full data by SKU and Account
+    const fullDataBySku = new Map<string, Map<string, { fullML: number; entradaPendente: number }>>();
+    const allSkus = new Set<string>([...tinyMap.keys()]);
+
     (estoqueFullItems || []).forEach(item => {
       const sku = (item.sku || '').trim().toUpperCase();
-      const normConta = normalizeConta(item.conta || 'VIAFLIX');
-      const key = `${sku}||${normConta}`;
-      const current = fullDataMap.get(key) || { fullML: 0, entradaPendente: 0, conta: normConta, sku };
+      if (!sku) return;
+      allSkus.add(sku);
+
+      const normConta = normalizeConta(item.conta || '');
+      if (!normConta) return;
+
+      const skuMap = fullDataBySku.get(sku) || new Map<string, { fullML: number; entradaPendente: number }>();
+      const current = skuMap.get(normConta) || { fullML: 0, entradaPendente: 0 };
+      
       current.fullML += Number(item.aptasParaVenda || 0);
       current.entradaPendente += Number(item.entradaPendente || 0);
-      fullDataMap.set(key, current);
+      
+      skuMap.set(normConta, current);
+      fullDataBySku.set(sku, skuMap);
     });
-
-    const skusInFull = new Set<string>();
-    fullDataMap.forEach(v => skusInFull.add(v.sku));
 
     const rows: FullRow[] = [];
 
-    fullDataMap.forEach((data) => {
-      const { sku, conta, fullML, entradaPendente } = data;
+    // 2. Iterate through all unique SKUs and ensure rows for VIAFLIX, GS, MONACO
+    allSkus.forEach(sku => {
+      const skuFullData = fullDataBySku.get(sku);
       const tinyLocal = tinyMap.get(sku) || 0;
-      const vmd = vmdBySkuAndConta.get(`${sku}||${conta}`) || 0;
-      const coberturaDias = vmd > 0 ? Number((Math.max(0, fullML) / vmd).toFixed(1)) : 999;
 
-      let status: FullRowStatus = 'INATIVO';
-      const statusFullML = Math.max(0, fullML);
-      
-      if (statusFullML > 0) {
-        status = 'ATIVO';
-      } else if (entradaPendente > 0) {
-        status = 'ENVIANDO';
-      } else if (tinyLocal > 0) {
-        status = 'SEM ENVIO FULL';
-      }
+      // Ensure the 3 main accounts exist for every SKU
+      MAIN_ACCOUNTS.forEach(conta => {
+        const fullData = skuFullData?.get(conta) || { fullML: 0, entradaPendente: 0 };
+        const vmd = vmdBySkuAndConta.get(`${sku}||${conta}`) || 0;
+        const coberturaDias = vmd > 0 ? Number((Math.max(0, fullData.fullML) / vmd).toFixed(1)) : 999;
 
-      rows.push({
-        sku, conta, fullML, entradaPendente, tinyLocal, vmd, coberturaDias, status
-      });
-    });
+        let status: FullRowStatus = 'INATIVO';
+        const statusFullML = Math.max(0, fullData.fullML);
+        
+        if (statusFullML > 0) {
+          status = 'ATIVO';
+        } else if (fullData.entradaPendente > 0) {
+          status = 'ENVIANDO';
+        } else if (tinyLocal > 0) {
+          status = 'SEM ENVIO FULL';
+        }
 
-    // SKUs only in Tiny
-    tinyMap.forEach((qty, sku) => {
-      if (!skusInFull.has(sku)) {
-        const status: FullRowStatus = qty > 0 ? 'SEM ENVIO FULL' : 'INATIVO';
         rows.push({
-          sku, conta: 'LOCAL', fullML: 0, entradaPendente: 0, tinyLocal: qty,
-          vmd: vmdBySkuAndConta.get(`${sku}||VIAFLIX`) || 0,
-          coberturaDias: 0, status
+          sku,
+          conta,
+          fullML: fullData.fullML,
+          entradaPendente: fullData.entradaPendente,
+          tinyLocal,
+          vmd,
+          coberturaDias,
+          status
+        });
+      });
+
+      // Also add any other accounts that might exist for this SKU but aren't in MAIN_ACCOUNTS
+      if (skuFullData) {
+        skuFullData.forEach((fullData, conta) => {
+          if (!MAIN_ACCOUNTS.includes(conta)) {
+             const vmd = vmdBySkuAndConta.get(`${sku}||${conta}`) || 0;
+             const coberturaDias = vmd > 0 ? Number((Math.max(0, fullData.fullML) / vmd).toFixed(1)) : 999;
+             let status: FullRowStatus = 'INATIVO';
+             const statusFullML = Math.max(0, fullData.fullML);
+             
+             if (statusFullML > 0) status = 'ATIVO';
+             else if (fullData.entradaPendente > 0) status = 'ENVIANDO';
+             else if (tinyLocal > 0) status = 'SEM ENVIO FULL';
+
+             rows.push({
+               sku, conta, fullML: fullData.fullML, entradaPendente: fullData.entradaPendente,
+               tinyLocal, vmd, coberturaDias, status
+             });
+          }
         });
       }
     });
