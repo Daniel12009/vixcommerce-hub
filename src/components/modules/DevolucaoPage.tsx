@@ -333,9 +333,11 @@ export function DevolucaoPage() {
       const prev = sorted[idx - 1];
       const varQtd = prev && prev.qtd > 0 ? ((m.qtd - prev.qtd) / prev.qtd) * 100 : 0;
       const varReembolso = prev && prev.reembolso > 0 ? ((m.reembolso - prev.reembolso) / prev.reembolso) * 100 : 0;
-      return { ...m, varQtd, varReembolso };
-    }).slice(-12); // Exibir últimos 12 meses
-  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma]);
+      const fatMes = faturamentoPorMes.get(m.monthKey) || 0;
+      const pctFaturamento = fatMes > 0 ? (m.reembolso / fatMes) * 100 : null;
+      return { ...m, varQtd, varReembolso, faturamento: fatMes, pctFaturamento };
+    }).slice(-12);
+  }, [items, filterStatus, filterSetor, filterSituacao, filterPlataforma, faturamentoPorMes]);
 
   // Detalhes do mês expandido (top SKUs + top motivos)
   const monthDetails = useMemo(() => {
