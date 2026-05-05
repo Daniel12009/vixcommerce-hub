@@ -54,7 +54,12 @@ Deno.serve(async (req: Request) => {
             if (cursor) params.cursor = cursor;
 
             const listData = await shopeeFetch(account, '/api/v2/order/get_order_list', params);
-            const orderSns = (listData.response?.order_list || []).map((o: any) => o.order_sn);
+            const listEntries = (listData.response?.order_list || []);
+            const orderSns = listEntries.map((o: any) => o.order_sn);
+            const ctMap = new Map<string, number>();
+            for (const e of listEntries) {
+              if (e.create_time) ctMap.set(e.order_sn, e.create_time);
+            }
 
             if (orderSns.length === 0) {
               hasMore = false;
@@ -67,22 +72,25 @@ Deno.serve(async (req: Request) => {
               response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,create_time',
             });
 
-            const orders = (detailData.response?.order_list || []).map((o: any) => ({
-              id: o.order_sn,
-              status: mapShopeeStatus(o.order_status),
-              date_created: new Date(o.create_time * 1000).toISOString(),
-              total_amount: o.total_amount || 0,
-              buyer: o.buyer_username || 'N/A',
-              items: (o.item_list || []).map((item: any) => ({
-                title: item.item_name || '',
-                sku: item.model_sku || item.item_sku || '',
-                quantity: item.model_quantity_purchased || 1,
-                unit_price: item.model_discounted_price || item.model_original_price || 0,
-              })),
-              conta: `Shopee|${account.nome}`,
-              plataforma: 'shopee',
-              account_id: account.id,
-            }));
+            const orders = (detailData.response?.order_list || []).map((o: any) => {
+              const ct = o.create_time || ctMap.get(o.order_sn) || 0;
+              return {
+                id: o.order_sn,
+                status: mapShopeeStatus(o.order_status),
+                date_created: ct ? new Date(ct * 1000).toISOString() : '',
+                total_amount: o.total_amount || 0,
+                buyer: o.buyer_username || 'N/A',
+                items: (o.item_list || []).map((item: any) => ({
+                  title: item.item_name || '',
+                  sku: item.model_sku || item.item_sku || '',
+                  quantity: item.model_quantity_purchased || 1,
+                  unit_price: item.model_discounted_price || item.model_original_price || 0,
+                })),
+                conta: `Shopee|${account.nome}`,
+                plataforma: 'shopee',
+                account_id: account.id,
+              };
+            });
 
             accountOrders.push(...orders);
             
