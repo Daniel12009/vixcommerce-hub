@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
             // Step 2: Get order details
             const detailData = await shopeeFetch(account, '/api/v2/order/get_order_detail', {
               order_sn_list: orderSns.join(','),
-              response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount',
+              response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,create_time',
             });
 
             const orders = (detailData.response?.order_list || []).map((o: any) => ({
