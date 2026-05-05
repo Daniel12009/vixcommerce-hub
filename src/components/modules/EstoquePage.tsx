@@ -206,9 +206,10 @@ export function EstoquePage() {
 
     (estoqueTinyItems || []).forEach((item: any) => {
       const sku = item.sku?.trim().toUpperCase();
-      if (!sku) return;
+      if (!sku || sku === 'SKU') return;
       const qtd = Number(item.quantidade) || Number(item.TOTAL) || Number(item.total) || 0;
-      tinyMap.set(sku, (tinyMap.get(sku) || 0) + qtd);
+      const existing = tinyMap.get(sku) || 0;
+      if (qtd > existing) tinyMap.set(sku, qtd);
     });
 
     // Full ML is the source of truth — only count SKUs that exist there.
@@ -254,9 +255,10 @@ export function EstoquePage() {
     const tinyMap = new Map<string, number>();
     (estoqueTinyItems || []).forEach((item: any) => {
       const sku = item.sku?.trim().toUpperCase();
-      if (!sku) return;
+      if (!sku || sku === 'SKU') return;
       const qtd = Number(item.quantidade) || Number(item.TOTAL) || Number(item.total) || 0;
-      tinyMap.set(sku, (tinyMap.get(sku) || 0) + qtd);
+      const existing = tinyMap.get(sku) || 0;
+      if (qtd > existing) tinyMap.set(sku, qtd);
     });
 
     // Group by SKU+Conta to avoid duplicates

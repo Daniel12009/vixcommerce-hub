@@ -83,10 +83,14 @@ export function EstoqueFullTab() {
     const cleanSku = (s: string) => s ? s.toString().trim().toUpperCase() : '';
 
     (estoqueTinyItems || [])
-      .filter(i => i.sku && i.sku.toUpperCase() !== 'SKU') // Filter out header row
-      .forEach(i => {
+      .filter(i => i.sku && i.sku.trim().toUpperCase() !== 'SKU') // Filter out header row
+      .forEach((i: any) => {
         const sku = cleanSku(i.sku);
-        if (sku) tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(i.quantidade || 0));
+        if (!sku) return;
+        const qtd = Number(i.quantidade) || Number(i.TOTAL) || Number(i.total) || 0;
+        // Usar o maior valor entre duplicatas
+        const existing = tinyMap.get(sku) || 0;
+        if (qtd > existing) tinyMap.set(sku, qtd);
       });
 
     // 1. Group existing Full data by SKU and Account

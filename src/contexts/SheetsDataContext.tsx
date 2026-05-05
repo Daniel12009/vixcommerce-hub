@@ -137,12 +137,17 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setEstoqueTinyFromSheet = useCallback((rows: Record<string, string>[]) => {
-    const items: EstoqueTinyItem[] = rows
-      .filter(r => r.sku && r.sku.toUpperCase() !== 'SKU')
-      .map(r => ({
-        sku: r.sku || '',
-        quantidade: num(r.quantidade) || num(r.TOTAL) || num(r.total) || 0,
-      }));
+    const tinyMap = new Map<string, number>();
+    rows
+      .filter(r => r.sku && r.sku.trim().toUpperCase() !== 'SKU' && r.sku.trim() !== '')
+      .forEach(r => {
+        const sku = r.sku.trim().toUpperCase();
+        const qty = num(r.quantidade) || num(r.TOTAL) || num(r.total) || 0;
+        // Usar o maior valor entre duplicatas
+        const existing = tinyMap.get(sku) || 0;
+        if (qty > existing) tinyMap.set(sku, qty);
+      });
+    const items: EstoqueTinyItem[] = Array.from(tinyMap.entries()).map(([sku, quantidade]) => ({ sku, quantidade }));
     setEstoqueTinyItems(items);
   }, []);
 

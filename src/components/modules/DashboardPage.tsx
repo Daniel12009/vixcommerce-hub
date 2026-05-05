@@ -676,11 +676,13 @@ export function DashboardPage() {
     const tinyBySku = new Map<string, number>();
     (estoqueTinyItems || []).forEach((i: any) => {
       const sku = canonicalSku(i.sku);
-      if (!sku) return;
+      if (!sku || sku === 'SKU') return;
       // Tiny não tem campo `conta` confiável, então não filtra por conta aqui.
       // Resiliência extra: checa quantidade, TOTAL e total
       const qtd = Number(i.quantidade) || Number(i.TOTAL) || Number(i.total) || 0;
-      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + qtd);
+      // Usar o maior valor entre duplicatas (não somar)
+      const existing = tinyBySku.get(sku) || 0;
+      if (qtd > existing) tinyBySku.set(sku, qtd);
     });
 
     // VMD: SOMENTE do SQL (vendas reais dos últimos 15 dias, respeitando filtro de conta).
