@@ -138,10 +138,10 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
 
   const setEstoqueTinyFromSheet = useCallback((rows: Record<string, string>[]) => {
     const items: EstoqueTinyItem[] = rows
-      .filter(r => r.sku)
+      .filter(r => r.sku && r.sku.toUpperCase() !== 'SKU')
       .map(r => ({
         sku: r.sku || '',
-        quantidade: num(r.quantidade),
+        quantidade: num(r.quantidade) || num(r.TOTAL) || num(r.total) || 0,
       }));
     setEstoqueTinyItems(items);
   }, []);
@@ -587,7 +587,11 @@ export function SheetsDataProvider({ children }: { children: ReactNode }) {
             totalImported += parsed.length;
             const mod = config.moduloDestino;
             if (mod === 'estoque') { setEstoqueFromSheet(parsed); saveToCloud('estoque_data', parsed); }
-            else if (mod === 'estoque-full') { setEstoqueFullFromSheet(parsed); saveToCloud('estoque_full_data', parsed); }
+            else if (mod === 'estoque-full') { 
+              setEstoqueFullFromSheet(parsed); 
+              saveToCloud('estoque_full_data', parsed); 
+              localStorage.setItem('vix_estoque_full_last_sync', new Date().toLocaleString('pt-BR'));
+            }
             else if (mod === 'estoque-tiny') { setEstoqueTinyFromSheet(parsed); saveToCloud('estoque_tiny_data', parsed); }
             else if (mod === 'financeiro') { setFinanceiroFromSheet(parsed); saveToCloud('financeiro_data', parsed); }
             else if (mod === 'vendas') { setVendasFromSheet(parsed); syncVendasIncremental(parsed).catch(console.warn); }

@@ -180,7 +180,18 @@ export function EstoqueFullTab() {
       semEnvio: mergedData.filter(i => i.status === 'SEM ENVIO FULL').length,
       inativos: mergedData.filter(i => i.status === 'INATIVO').length,
       totalFull: mergedData.reduce((acc, i) => acc + Math.max(0, i.fullML), 0),
-      lastUpdate: localStorage.getItem('vix_estoque_full_data_time') || '---'
+      lastUpdate: (() => {
+        const dedicated = localStorage.getItem('vix_estoque_full_last_sync');
+        if (dedicated) return dedicated;
+        try {
+          const configs = JSON.parse(localStorage.getItem('vix_sheet_configs') || '[]');
+          const fullConfigs = configs.filter((c: any) => c.moduloDestino === 'estoque-full');
+          const last = fullConfigs.map((c: any) => c.ultimaSync).filter(Boolean).sort().pop();
+          return last || '---';
+        } catch {
+          return '---';
+        }
+      })()
     };
   }, [mergedData]);
 

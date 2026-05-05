@@ -132,7 +132,7 @@ export const CAMPOS_POR_MODULO: Record<ModuloDestino, { key: string; label: stri
   ],
   'estoque-tiny': [
     { key: 'sku', label: 'SKU', obrigatorio: true },
-    { key: 'quantidade', label: 'Quantidade (UND)', obrigatorio: true },
+    { key: 'quantidade', label: 'TOTAL', obrigatorio: true },
   ],
   devolucao: [
     { key: 'dataPlanilha', label: 'DATA DA PLANILHA' },

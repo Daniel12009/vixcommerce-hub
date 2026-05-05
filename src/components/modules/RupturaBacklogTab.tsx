@@ -94,8 +94,9 @@ export function RupturaBacklogTab() {
     // 1. Ineficiência operacional (Local > 0 e Full = 0)
     const ineficiencia = (estoqueFullItems || []).filter(full => {
       const sku = full.sku.trim().toUpperCase();
-      const local = (estoqueTinyItems || []).find(t => t.sku.trim().toUpperCase() === sku);
-      return Number(full.aptasParaVenda) <= 0 && Number(local?.quantidade) > 0;
+      const local: any = (estoqueTinyItems || []).find(t => t.sku.trim().toUpperCase() === sku);
+      const localQtd = Number(local?.quantidade) || Number(local?.TOTAL) || Number(local?.total) || 0;
+      return Number(full.aptasParaVenda) <= 0 && localQtd > 0;
     });
 
     // 2. Snapshot mais recente -> perda do dia
@@ -289,8 +290,11 @@ export function RupturaBacklogTab() {
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-semibold text-[hsl(var(--vix-danger))]">Full: 0</p>
-                  <p className="text-[10px] text-[hsl(var(--vix-success))]">
-                    Local: {estoqueTinyItems?.find(t => t.sku === item.sku)?.quantidade || '?'}
+                  <p className={`px-2.5 py-1 rounded-full text-[10px] font-semibold bg-[hsl(var(--vix-success)/0.15)] text-[hsl(var(--vix-success))]`}>
+                    Local: {(() => {
+                      const t: any = estoqueTinyItems?.find(t => t.sku.trim().toUpperCase() === item.sku.trim().toUpperCase());
+                      return Number(t?.quantidade) || Number(t?.TOTAL) || Number(t?.total) || 0;
+                    })()}
                   </p>
                 </div>
               </div>

@@ -28,12 +28,15 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      // Today in São Paulo (UTC-3)
+      // Início do dia em Brasília (UTC-3) = 03:00 UTC
       const now = new Date();
-      const spOffset = -3 * 60;
-      const localNow = new Date(now.getTime() + (spOffset + now.getTimezoneOffset()) * 60000);
-      const todayStart = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate(), 0, 0, 0);
-      const timeFrom = Math.floor((todayStart.getTime() - (spOffset + now.getTimezoneOffset()) * 60000) / 1000);
+      const brtDate = new Date(now.getTime() - 3 * 3600000);
+      const timeFrom = Math.floor(Date.UTC(
+        brtDate.getUTCFullYear(), 
+        brtDate.getUTCMonth(), 
+        brtDate.getUTCDate(), 
+        3, 0, 0
+      ) / 1000);
       const timeTo = Math.floor(now.getTime() / 1000);
 
       const accountPromises = accounts.map(async (account: any) => {
@@ -42,6 +45,7 @@ Deno.serve(async (req: Request) => {
           // Step 1: Get order list (with pagination)
           let cursor = '';
           let hasMore = true;
+          const listOrderMap = new Map<string, number>();
 
           while (hasMore) {
             const params: Record<string, string> = {
@@ -133,6 +137,7 @@ Deno.serve(async (req: Request) => {
         try {
           let cursor = '';
           let hasMore = true;
+          const listOrderMap = new Map<string, number>();
 
           while (hasMore) {
             const params: Record<string, string> = {
@@ -145,6 +150,7 @@ Deno.serve(async (req: Request) => {
             if (cursor) params.cursor = cursor;
 
             const listData = await shopeeFetch(account, '/api/v2/order/get_order_list', params);
+            (listData.response?.order_list || []).forEach((o: any) => listOrderMap.set(o.order_sn, o.create_time));
             const orderSns = (listData.response?.order_list || []).map((o: any) => o.order_sn);
 
             if (orderSns.length === 0) {
@@ -155,7 +161,7 @@ Deno.serve(async (req: Request) => {
             // Get order details including shipping_carrier
             const detailData = await shopeeFetch(account, '/api/v2/order/get_order_detail', {
               order_sn_list: orderSns.join(','),
-              response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,shipping_carrier',
+              response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,shipping_carrier,create_time',
             });
 
             const orders = (detailData.response?.order_list || [])
@@ -169,7 +175,7 @@ Deno.serve(async (req: Request) => {
                 status: mapShopeeStatus(o.order_status),
                 shippingStatus: o.order_status,
                 logisticType: o.shipping_carrier || 'Standard',
-                dateCreated: new Date(o.create_time * 1000).toISOString(),
+                dateCreated: new Date((o.create_time || listOrderMap.get(o.order_sn) || 0) * 1000).toISOString(),
                 totalAmount: o.total_amount || 0,
                 buyer: o.buyer_username || 'N/A',
                 items: (o.item_list || []).map((item: any) => ({
@@ -402,22 +408,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    
     if (action === 'sync_vendas_marketplace') {
-      const { date_from, date_to, spreadsheet_id, sheet_name } = reqBody;
+      const { date_from, date_to, spreadsheet_id, sheet_name, date_override, filterPlataforma, filterCanal, filterConta } = reqBody;
       const defaultYesterday = new Date(Date.now() - 86400000).toLocaleDateString('pt-BR');
       const dateFromStr = date_from || defaultYesterday;
       const dateToStr = date_to || defaultYesterday;
 
-      // Helper function to parse DD/MM/YYYY into Unix timestamp
-      const parseDateToUnix = (dateStr, endOfDay = false) => {
+      // Helper function to parse DD/MM/YYYY into Unix timestamp (Brasília time)
+      const parseDateToUnix = (dateStr: string, endOfDay = false) => {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
-          const d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          const y = parseInt(parts[2]);
+          const m = parseInt(parts[1]) - 1;
+          const d = parseInt(parts[0]);
           if (endOfDay) {
-            d.setHours(23, 59, 59, 999);
+            // Fim do dia em Brasília (23:59:59 BRT) = 02:59:59 UTC do dia seguinte
+            const dt = new Date(Date.UTC(y, m, d + 1, 2, 59, 59, 999));
+            return Math.floor(dt.getTime() / 1000);
           }
-          return Math.floor(d.getTime() / 1000);
+          // Início do dia em Brasília (00:00:00 BRT) = 03:00:00 UTC
+          const dt = new Date(Date.UTC(y, m, d, 3, 0, 0));
+          return Math.floor(dt.getTime() / 1000);
         }
         return Math.floor(Date.now() / 1000);
       };
@@ -448,7 +459,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const allRows = [];
-      const allDbRows = [];
+      const allFetched: any[] = [];
       const debugInfo = { contas: accounts.length, pedidos_listados: 0, pedidos_detalhados: 0, date_from: dateFromStr, date_to: dateToStr };
 
       for (const account of accounts) {
@@ -456,7 +467,7 @@ Deno.serve(async (req: Request) => {
         try {
           let cursor = '';
           let hasMore = true;
-          const orderSns = [];
+          const listOrderMap = new Map<string, number>();
 
           // 1. Get all Order SNs in the date range
           while (hasMore) {
@@ -472,13 +483,14 @@ Deno.serve(async (req: Request) => {
             const list = listData?.response?.order_list || [];
             
             for (const o of list) {
-              orderSns.push(o.order_sn);
+              listOrderMap.set(o.order_sn, o.create_time);
             }
             
             hasMore = listData?.response?.more || false;
             cursor = listData?.response?.next_cursor || '';
           }
 
+          const orderSns = Array.from(listOrderMap.keys());
           debugInfo.pedidos_listados += orderSns.length;
 
           if (orderSns.length === 0) continue;
@@ -490,7 +502,7 @@ Deno.serve(async (req: Request) => {
             
             const detailData = await shopeeFetch(account, '/api/v2/order/get_order_detail', {
               order_sn_list: chunk.join(','),
-              response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,recipient_address,estimated_shipping_fee,actual_shipping_fee',
+              response_optional_fields: 'buyer_user_id,buyer_username,item_list,order_status,total_amount,recipient_address,estimated_shipping_fee,actual_shipping_fee,create_time',
             });
 
             const orders = detailData?.response?.order_list || [];
@@ -518,7 +530,8 @@ Deno.serve(async (req: Request) => {
               const shopeeTaxaTransacao = escrowIncome ? Math.abs(parseFloat(escrowIncome.seller_transaction_fee || 0)) : 0;
               const shopeeFrete = escrowIncome ? Math.abs(parseFloat(escrowIncome.actual_shipping_fee || 0)) - Math.abs(parseFloat(escrowIncome.shopee_shipping_rebate || 0)) : 0;
 
-              const dtCriacao = new Date(o.create_time * 1000).toISOString();
+              const createTime = o.create_time || listOrderMap.get(o.order_sn) || 0;
+              const dtCriacao = new Date(createTime * 1000).toISOString();
               const dateBr = `${dtCriacao.substring(8,10)}/${dtCriacao.substring(5,7)}/${dtCriacao.substring(0,4)}`;
               const numPed = `'${o.order_sn}`;
               const plataformaCapitalized = 'Shopee';
@@ -568,6 +581,7 @@ Deno.serve(async (req: Request) => {
                   state // S (Estado/UF direto da Shopee)
                 ]);
 
+                allFetched.push({ sku, qtd, totalItem, numPed, dtCriacao });
                 isFirstItem = false;
               }
             }
@@ -576,6 +590,17 @@ Deno.serve(async (req: Request) => {
           console.error(`Erro conta ${account.nome}:`, err);
         }
       }
+
+      // Salva no cache do Dashboard (leitura instantânea)
+      const supabase = (globalThis as any).supabase;
+      const cacheKey = `today_${filterPlataforma}_${filterCanal}_${filterConta}`;
+      Promise.resolve(
+        supabase.from('dashboard_cache').upsert({
+          cache_key: cacheKey,
+          data: allFetched,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'cache_key' })
+      ).catch((err: any) => console.warn('Erro ao gravar cache:', err));
 
       const sheetTab = sheet_name || 'Shopee_Vendas';
       const sheetId = spreadsheet_id || '1ynblqNNpHSAsFo7dIsOzQgK9ltv52d7sIufl3wpZZ0w';

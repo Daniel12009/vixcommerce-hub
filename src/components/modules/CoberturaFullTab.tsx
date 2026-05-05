@@ -241,10 +241,12 @@ export function CoberturaFullTab() {
 
     // Estoque Tiny por SKU
     const tinyBySku = new Map<string, number>();
-    (estoqueTinyItems || []).forEach(i => {
+    (estoqueTinyItems || []).forEach((i: any) => {
       const sku = (i.sku || '').trim().toUpperCase();
       if (!sku) return;
-      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + Number(i.quantidade || 0));
+      // Resiliência extra: checa quantidade, TOTAL e total
+      const qtd = Number(i.quantidade) || Number(i.TOTAL) || Number(i.total) || 0;
+      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + qtd);
     });
 
     const allSkus = new Set<string>([...fullBySku.keys(), ...tinyBySku.keys(), ...sqlVmdBySku.keys()]);

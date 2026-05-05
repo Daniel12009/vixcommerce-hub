@@ -41,6 +41,8 @@ export function EstoqueFullUpload() {
 
       if (data.sucesso) {
         toast.success(data.mensagem);
+        // Save last update timestamp for the dashboard
+        localStorage.setItem('vix_estoque_full_last_sync', new Date().toLocaleString('pt-BR'));
         setFile(null);
         const input = document.getElementById('estoque-file-input') as HTMLInputElement;
         if (input) input.value = '';

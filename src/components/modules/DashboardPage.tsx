@@ -678,7 +678,9 @@ export function DashboardPage() {
       const sku = canonicalSku(i.sku);
       if (!sku) return;
       // Tiny não tem campo `conta` confiável, então não filtra por conta aqui.
-      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + (Number(i.quantidade) || 0));
+      // Resiliência extra: checa quantidade, TOTAL e total
+      const qtd = Number(i.quantidade) || Number(i.TOTAL) || Number(i.total) || 0;
+      tinyBySku.set(sku, (tinyBySku.get(sku) || 0) + qtd);
     });
 
     // VMD: SOMENTE do SQL (vendas reais dos últimos 15 dias, respeitando filtro de conta).

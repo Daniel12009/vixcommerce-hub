@@ -204,10 +204,11 @@ export function EstoquePage() {
       fullMap.set(sku, current);
     });
 
-    (estoqueTinyItems || []).forEach(item => {
+    (estoqueTinyItems || []).forEach((item: any) => {
       const sku = item.sku?.trim().toUpperCase();
       if (!sku) return;
-      tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
+      const qtd = Number(item.quantidade) || Number(item.TOTAL) || Number(item.total) || 0;
+      tinyMap.set(sku, (tinyMap.get(sku) || 0) + qtd);
     });
 
     // Full ML is the source of truth — only count SKUs that exist there.
@@ -251,10 +252,11 @@ export function EstoquePage() {
   // Per-account rows for the table — one row per (SKU × conta)
   const perAccountData = useMemo<MergedStockRow[]>(() => {
     const tinyMap = new Map<string, number>();
-    (estoqueTinyItems || []).forEach(item => {
+    (estoqueTinyItems || []).forEach((item: any) => {
       const sku = item.sku?.trim().toUpperCase();
       if (!sku) return;
-      tinyMap.set(sku, (tinyMap.get(sku) || 0) + Number(item.quantidade || 0));
+      const qtd = Number(item.quantidade) || Number(item.TOTAL) || Number(item.total) || 0;
+      tinyMap.set(sku, (tinyMap.get(sku) || 0) + qtd);
     });
 
     // Group by SKU+Conta to avoid duplicates

@@ -27,10 +27,11 @@ export function EstoqueLocalTab() {
     
     // Group by SKU to avoid duplicates if any, though Tiny array usually is unique by SKU
     const map = new Map<string, number>();
-    estoqueTinyItems.forEach(item => {
+    estoqueTinyItems.forEach((item: any) => {
       if (!item.sku) return;
       const sku = item.sku.trim().toUpperCase();
-      map.set(sku, (map.get(sku) || 0) + Number(item.quantidade || 0));
+      const qtd = Number(item.quantidade) || Number(item.TOTAL) || Number(item.total) || 0;
+      map.set(sku, (map.get(sku) || 0) + qtd);
     });
 
     const term = searchTerm.trim().toUpperCase();
