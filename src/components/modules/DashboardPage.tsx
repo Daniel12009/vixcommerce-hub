@@ -197,11 +197,19 @@ export function DashboardPage() {
 
       // Salva no cache do Dashboard (leitura instantânea)
       const cacheKey = `today_${filterPlataforma}_${filterCanal}_${filterConta}`;
-      (supabase as any).from('dashboard_cache').upsert({
-        cache_key: cacheKey,
-        data: allFetched,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'cache_key' }).catch((err: any) => console.warn('Erro ao gravar cache:', err));
+      try {
+        Promise.resolve(
+          (supabase as any).from('dashboard_cache').upsert({
+            cache_key: cacheKey,
+            data: allFetched,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'cache_key' })
+        ).then((res: any) => {
+          if (res?.error) console.warn('Erro ao gravar cache:', res.error);
+        }).catch((err: any) => console.warn('Erro ao gravar cache:', err));
+      } catch (err) {
+        console.warn('Erro ao gravar cache:', err);
+      }
       
       // Fetch yesterday's snapshot (or build from vendas_items as fallback)
       // Calcula "ontem" em BRT (não UTC) para evitar pular dia na madrugada
